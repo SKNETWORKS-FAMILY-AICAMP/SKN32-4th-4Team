@@ -1,0 +1,6 @@
+# 후방 호환 전체 설치. 역할별 최소 환경은 requirements/README.md를 본다.
+-r requirements/runtime.txt
+-r requirements/preprocess.txt
+-r requirements/index.txt
+-r requirements/local-ml-optional.txt
+-r requirements/dev.txt

@@ -1,0 +1,97 @@
+{
+  "registry_version": "1",
+  "policy_id": "preprocess-d4-prospective-v1",
+  "registered_at": "2026-08-24T12:32:08+09:00",
+  "scope": {
+    "mode": "prospective_only",
+    "effective_manifest_built_at_not_before": "2026-08-24T12:32:08+09:00",
+    "historical_generations": [
+      {
+        "generation_id": "s7_hybrid-table-v1",
+        "manifest_schema": "s7",
+        "status": "not_eligible_retroactively",
+        "reason": "S7 결과가 생성되기 전에 D4 기준과 지문이 등록되지 않았다. 사후 비교 결과는 사전등록 자격을 만들지 않는다."
+      }
+    ]
+  },
+  "machine_gates": {
+    "document_count": {
+      "operator": "eq",
+      "value": 1367
+    },
+    "manifest_mismatch_count": {
+      "operator": "eq",
+      "value": 0
+    },
+    "reference_confirmed_violation_count": {
+      "operator": "eq",
+      "value": 0
+    },
+    "candidate_serving_leak_count": {
+      "operator": "eq",
+      "value": 0
+    },
+    "candidate_citation_leak_count": {
+      "operator": "eq",
+      "value": 0
+    },
+    "d6_mutation": {
+      "operator": "all_required_ids_killed",
+      "required_ids": [
+        "missing-prose-veto",
+        "missing-method-gate",
+        "discarded-rejection-reason"
+      ]
+    }
+  },
+  "external_gates": {
+    "d5_human_table_quality": {
+      "status": "required_external",
+      "artifact_type": "stratified_human_label_evaluation",
+      "required_provenance": [
+        "sample_frame",
+        "seed",
+        "strata_weights",
+        "double_review_subset",
+        "adjudication",
+        "precision_recall_f1_ci95"
+      ],
+      "per_stratum": {
+        "precision": {
+          "operator": "gte",
+          "value": 0.9
+        },
+        "recall": {
+          "operator": "gte",
+          "value": 0.9
+        }
+      },
+      "unsure_policy": "exclude_from_positive_and_negative_counts"
+    },
+    "quality_threshold_binding": {
+      "status": "required_external",
+      "must_be_hashed_before_target_manifest": true,
+      "required_metrics": {
+        "word_coverage": {
+          "operator": "gte",
+          "value": null
+        },
+        "cell_mislink_rate": {
+          "operator": "lte",
+          "value": null
+        },
+        "sentence_cut_rate": {
+          "operator": "lte",
+          "value": null
+        }
+      },
+      "note": "합의된 수치가 아직 없다. 다음 generation 결과를 보기 전에 별도 binding artifact에 값을 기록하고 SHA-256으로 동결해야 한다."
+    }
+  },
+  "decision": {
+    "all_gates_required": true,
+    "missing_or_unknown_evidence": "fail_closed",
+    "human_release_approval_required": true,
+    "serving_pointer_change_by_this_registry": false
+  }
+}

@@ -1,0 +1,6 @@
+# 현행 임베딩·리랭커 평가와 인덱스 적재
+sentence-transformers==5.6.0
+langchain-huggingface==1.2.2
+langchain-text-splitters==1.1.2
+transformers==5.13.0
+torch==2.12.0

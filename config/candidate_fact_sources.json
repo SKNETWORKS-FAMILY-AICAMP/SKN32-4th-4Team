@@ -1,0 +1,31 @@
+{
+  "schema_version": "candidate-fact-sources-v1",
+  "release_policy": "shadow_only_until_human_approval",
+  "sources": [
+    {
+      "source_id": "b8_disability_payment_rates",
+      "fact_type": "disability_payment_rate",
+      "path": "data/candidates/s7_disability_rates/candidates_shard00-of-01.jsonl",
+      "summary_path": "data/candidates/s7_disability_rates/summary_shard00-of-01.json",
+      "sha256": "c5ad8c7e6101f6f3fcf3b7f26bbe09de2feb2cd7c0fe29987d09f0773e72cfe3",
+      "rows": 1297,
+      "facts": 8586,
+      "unique_patterns": 26,
+      "approval_status": "candidate",
+      "serving_eligible": false,
+      "citation_eligible": false
+    },
+    {
+      "source_id": "f4_delayed_payment_interest",
+      "fact_type": "delayed_payment_interest",
+      "path": "data/candidates/s7_delayed_payment_interest/candidates.jsonl",
+      "summary_path": "data/candidates/s7_delayed_payment_interest/summary.json",
+      "sha256": "a49f304cbcce0bfab89d9279a59b685e9ff50fbee4e0f44b4bc8c97be998bc3b",
+      "rows": 9,
+      "facts": 36,
+      "approval_status": "candidate",
+      "serving_eligible": false,
+      "citation_eligible": false
+    }
+  ]
+}

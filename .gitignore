@@ -1,0 +1,51 @@
+# Hidden paths are private/local by default.  The ignore rule itself is the only exception.
+.*
+!.gitignore
+
+# Local secrets and environments
+.env
+.env.*
+.venv/
+venv/
+
+# Python/test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime databases, logs, models and generated artifacts
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+*.onnx
+*.pt
+*.pth
+*.bin
+*.gguf
+artifacts/
+backups/
+legacy/
+
+# Internal documents and copyrighted/private/large data
+docs/
+data/*
+!data/raw/
+data/raw/*
+!data/raw/manifests/
+!data/raw/manifests/*.jsonl
+
+# Temporary files and archives
+*.bak
+*.backup
+*.tmp
+*.zip
+*~

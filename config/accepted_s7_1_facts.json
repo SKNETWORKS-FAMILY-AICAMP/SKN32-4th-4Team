@@ -1,0 +1,46 @@
+{
+  "schema_version": "accepted-s7.1-approved-ocr-facts-v1",
+  "release_state": "accepted",
+  "serving_eligible": true,
+  "citation_eligible": true,
+  "accepted_at": "2026-08-04",
+  "accepted_by": "사용자 29패턴 원문 검수 + Codex 검증",
+  "index_generation": "s6",
+  "embed_model_key": "dragonkue/snowflake-arctic-embed-l-v2.0-ko|-|d1024|L8192|c448|o80",
+  "approval": {
+    "reviewed_patterns": 29,
+    "approved_patterns": 24,
+    "approved_facts": 850,
+    "quarantined_patterns": 5,
+    "quarantined_facts": 216
+  },
+  "materialized": {
+    "contents": 75,
+    "occurrences": 850,
+    "documents": 179
+  },
+  "database_verification": {
+    "loaded_chunks": 75,
+    "loaded_occurrences": 850,
+    "loaded_documents": 179,
+    "rank1_same_vector_probe": true,
+    "api_ready": true
+  },
+  "reranker_validation": {
+    "model": "Qwen/Qwen3-Reranker-4B",
+    "queries": 417,
+    "pairs": 8285,
+    "approved_fact_pairs": 23,
+    "queries_with_approved_facts": 6,
+    "regression_tests_passed": 85
+  },
+  "provenance": {
+    "fact_manifest": "data/work/s7_1_approved_facts/manifest.json",
+    "fact_manifest_sha256": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de",
+    "reranker_release": "data/eval/rerank_results/s7_1_qwen3_reranker_4b_release.json",
+    "reranker_release_file_sha256": "ca4e8c236d768aef442c2cefd55a0c63e084185f8d73ee7b32bbb32789a103dd",
+    "reranker_release_payload_sha256": "6dd373ef05f262b0b36fc59bffa97a751ea3a363572e617eb3fd34e60de57011",
+    "human_labels": "data/eval/s7_fact_signature_labels_20260804.jsonl"
+  },
+  "quarantine_rule": "label != approve 인 signature와 해당 candidate_id는 인덱스·serving·citation에 포함하지 않는다"
+}

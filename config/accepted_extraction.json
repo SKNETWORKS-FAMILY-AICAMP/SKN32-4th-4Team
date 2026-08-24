@@ -1,0 +1,133 @@
+{
+ "release_id": "r2026-08-04-clause-s7.1-arctic-ko-ocr-approved",
+ "supplemental_facts": "config/accepted_s7_1_facts.json",
+ "candidate_fact_registry": "config/candidate_fact_sources.json",
+ "_release_id_주의": "★페이지 스키마도 s5 로 올라 `s5_pymupdf-1.28.0` 이 두 층에 다 있다. 이름만으로 구분되지 않아 release_id 를 둔다.",
+ "page_tag": "s4_pymupdf-1.28.0",
+ "clause_tag": "s6_pymupdf-1.28.0",
+ "tag": "s5_pymupdf-1.28.0",
+ "_tag_주의": "★옛 이름. `clause_tag` 의 별칭으로 남긴다 — 다른 세션이 아직 읽고 있을 수 있다.",
+ "document_count": 1367,
+ "embed_profile": {
+  "_주의": "★arctic-ko 로 s6 전량 재임베딩한 프로필(2026-08-03). 브리핑 §3-3 의 **잠정 1순위**이지 배포 확정이 아니다 — s6 코퍼스 재평가·구어체 질의·holdout 이 남아 있다.",
+  "model": "dragonkue/snowflake-arctic-embed-l-v2.0-ko",
+  "revision": "55ec6e9358a56d56af759bc8372e970caf8c305f",
+  "dim": 1024,
+  "max_seq_length": 8192,
+  "chunk_budget": 448,
+  "overlap": 80,
+  "query_prefix": "query: ",
+  "doc_prefix": "",
+  "normalized": true,
+  "_출처": "data/work/s7_arctic_embed5/manifest.json 에서 scripts/index/sync_embed_profile.py 로 검증해 채웠다. 손으로 고치지 않는다."
+ },
+ "_주의": [
+  "★판정에 쓸 추출 버전을 여기서 못박는다. 코드가 '가장 최신'을 자동으로 고르지 않는다.",
+  "바꾸면 같은 질문에 다른 답이 나온다. 반드시 근거를 함께 적고 팀에 알린다.",
+  "DB 적재 후에는 문서별 document_extraction.approval='accepted' 로 옮긴다(ERD §①)."
+ ],
+ "accepted_at": "2026-08-04",
+ "accepted_by": "사용자 29패턴 원문 검수 + Codex 검증",
+ "reason": [
+  "S7.1: 사람 검수 approve 24패턴·850 OCR facts만 Arctic-ko 인덱스에 증분 적재했다.",
+  "S7.1: fix 5패턴·216 facts는 격리했고 serving/citation에 포함하지 않았다.",
+  "S7.1: 75개 고유 청크·850 occurrence·179문서, 리랭크 8,285쌍, 회귀 85건을 검증했다.",
+  "v4 가 법령 인용이 조밀한 본문을 목차로 오판해 본문 24,511쪽을 버리고 있었다.",
+  "실측 피해: NH농협생명 176쪽 문서의 「보상하지 않는 사항」이 목차상 3개인데",
+  "산출물엔 1개뿐이었고 그 1개도 p39·40·41·44 가 빠진 채 조립됐다 —",
+  "면책 조항이 없는 것처럼 보인다. 이건 되돌릴 수 없는 손실이다.",
+  "v5 는 목차 판정을 비율에서 구조로 바꿔 그 24,511쪽을 되찾았다."
+ ],
+ "tradeoff": [
+  "★v5 가 모든 면에서 낫지는 않다. 정직하게 적는다.",
+  "parse_status ok 1,240 → 1,108 (suspect 108 → 250).",
+  "목차를 덜 배제하다 보니 일부 문서에 목차가 섞였고, 사후 검증이 잡아 suspect 로 내렸다.",
+  "조항 최대 길이도 119,108 → 147,390자로 나빠졌다(경계를 못 찾은 구간).",
+  "그래도 v5 를 고른 이유: 잃은 것은 되찾을 수 없지만 섞인 것은 걸러낼 수 있다."
+ ],
+ "measured": {
+  "compared_on": "2026-08-02",
+  "documents": 1367,
+  "s4": {
+   "toc_pages_excluded": 29221,
+   "clauses": 129525,
+   "parse_ok": 1240,
+   "parse_suspect": 108,
+   "clause_length_p95": 3476,
+   "clause_id_collisions": 8
+  },
+  "s5": {
+   "toc_pages_excluded": 4710,
+   "clauses": 211131,
+   "parse_ok": 1108,
+   "parse_suspect": 250,
+   "clause_length_p95": 2851,
+   "clause_id_collisions": 28
+  }
+ },
+ "suspect_breakdown_s5": {
+  "_주의": "suspect 250문서를 사유별로 나눈 것. 전부가 결함은 아니다.",
+  "초대형 조항(경계 실패)": 115,
+  "별표 법령조문(정상 데이터)": 88,
+  "목차 잔여": 44,
+  "둘 다": 3
+ },
+ "structure_audit_2026_08_02": {
+  "_주의": [
+   "★`parse_status` 와 **다른 축**이다. parse_status 는 길이·희박·목차오인을 보고,",
+   "이건 조 경계가 서로 모순되는지를 본다. 둘 다 통과해도 인용이 틀릴 수 있다.",
+   "코드: scripts/eval/struct_audit.py · 리포트: docs/reports/2026-08-02_1600_*.md"
+  ],
+  "대상": "s5 전량 1,367문서 / 조 블록 211,131",
+  "확정신호_citation_eligible을_끈다": {
+   "S1_aba_reentry": {
+    "건": 4721,
+    "문서": 885,
+    "문서율": "64.7%",
+    "뜻": "제4→제5→제4 재진입. 부모 오귀속"
+   },
+   "S3_embedded_header": {
+    "건": 575,
+    "문서": 144,
+    "문서율": "10.5%",
+    "뜻": "조 블록 안에 다른 조 머리가 매몰. 경계 누락"
+   },
+   "S4_annex_absorption": {
+    "건": 4789,
+    "문서": 1177,
+    "문서율": "86.1%",
+    "뜻": "붙임·별표·질병분류표가 조항 안으로. ★KCD 오인용 위험"
+   }
+  },
+  "검수우선순위_자동실패_아님": {
+   "S2_number_gap": 31536,
+   "C1_dup_citation": 26102
+  },
+  "T1_원문재현율_중앙": 0.9332,
+  "★citation_eligible_false": {
+   "문서": 1197,
+   "비율": "87.6%"
+  },
+  "이_수치를_어떻게_읽어야_하나": [
+   "★87.6% 가 전부 실제 결함이라는 뜻이 **아니다.**",
+   "정답셋이 없어 신호의 precision/recall 을 주장할 수 없다(코덱스 지적).",
+   "실제로 부록 흡수 신호는 같은 날 과탐이 드러나 11,478 → 4,789 로 줄었다",
+   "(문장 안 인용 `제9조([별표1] 비급여대상)에 의한…` 을 잡고 있었다).",
+   "그래도 **모른다는 사실을 적어 두는 것**과 안 적는 것은 다르다.",
+   "판정은 parse_status 만 보지 말고 이 축도 봐야 한다."
+  ],
+  "미반영": [
+   "to_clauses.py 가 아직 이 신호를 parse_status 에 넣지 않는다.",
+   "즉 지금 s5 산출물에는 citation_eligible 필드가 **없다.**",
+   "적용 전까지는 scripts/eval/struct_audit.py 를 따로 돌려야 한다.",
+   "적용 계획: docs/plans/2026-08-02_1620_미적용_개선항목_대장.md P0"
+  ]
+ },
+ "known_gaps": [
+  "★suspect 250 중 88건은 별표에 실린 법령 조문이다 — 정상 데이터인데 경고가 뜬다.",
+  "  예: 조세특례제한법 시행령·형법 조문을 별표에 그대로 실은 문서.",
+  "  '한 쪽에 조항 20개 이상' 규칙이 이걸 오탐한다. 규칙에 별표 예외가 필요하다.",
+  "★목차 잔여 44건은 쪽번호 없는 목차다. v5 의 구조 규칙이 쪽번호를 전제한다.",
+  "  예: '제1 관 일반사항' / '제1 조(보장종목)' — 점선도 쪽번호도 없다."
+ ]
+}

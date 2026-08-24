@@ -1,0 +1,24 @@
+[project]
+name = "insurance-precheck-agent"
+version = "0.3.0"
+description = "올바른 보험비서 — 실손보험 보장 사전판정 에이전트"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+#: ★마커 제외 필터를 여기 addopts 에 넣지 말 것(2026-08-04 시도했다가 되돌림).
+#:   `test_requirements_matrix.py` 가 `pytest --collect-only` 를 **서브프로세스로** 띄우는데,
+#:   addopts 는 그 서브프로세스에도 상속된다 → 제외된 node 가 collect 결과에서 사라져
+#:   "요구사항에 매핑된 테스트가 수집 불가"라는 **거짓 실패** 11건이 난다.
+#:   필터는 CI 명령줄에만 둔다(.github/workflows/ci.yml).
+addopts = "-q"
+markers = [
+    "llm: 실제 LLM 호출이 필요한 테스트 (기본 CI에서 제외)",
+    "ml: 무거운 로컬 ML 모델 로드가 필요한 테스트 (KoELECTRA/임베딩, 기본 CI에서 제외)",
+    #: ★2026-08-04: `app/mcp` 를 보험 도구 3종으로 재구축했고 parity 테스트에서
+    #:   이 마커를 **뗐다**(in-process 라 CI 에서 그냥 돈다).
+    #:   이 마커는 이제 **stdio 서브프로세스 왕복**이 필요한 테스트에만 쓴다.
+    "mcp: MCP stdio 서브프로세스 왕복이 필요한 테스트 (기본 CI에서 제외)",
+    "pg: 실 PostgreSQL+pgvector 연결이 필요한 테스트 (기본 CI에서 제외)",
+    "legacy_data: 레거시(v3 커머스) 데이터셋이 있어야 도는 테스트 (압축 격리됨, 기본 CI에서 제외)",
+]
