@@ -1,0 +1,1139 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>미확정 107건 검토 목록</title>
+</head>
+<body>
+<style>
+  :root{
+    --ink:#161a20; --ink-soft:#4b5361; --ink-faint:#7b838d;
+    --paper:#eceeea; --paper-raised:#f6f7f4; --line:#d7d9d2;
+    --stamp:#0e6e63; --stamp-soft:#0e6e6314;
+    --info:#4a5f7a; --info-soft:#4a5f7a14;
+    --caution:#a86a0d; --caution-soft:#a86a0d16;
+    --shadow:0 1px 2px rgba(22,26,32,.06), 0 8px 24px -16px rgba(22,26,32,.22);
+  }
+  :root[data-theme="dark"]{
+    --ink:#e9ebe6; --ink-soft:#a9afb8; --ink-faint:#858d96;
+    --paper:#14171a; --paper-raised:#1b1f23; --line:#2b3036;
+    --stamp:#3fc9b8; --stamp-soft:#3fc9b81c;
+    --info:#8fa8c9; --info-soft:#8fa8c920;
+    --caution:#e0a53e; --caution-soft:#e0a53e22;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.6);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e9ebe6; --ink-soft:#a9afb8; --ink-faint:#858d96;
+      --paper:#14171a; --paper-raised:#1b1f23; --line:#2b3036;
+      --stamp:#3fc9b8; --stamp-soft:#3fc9b81c;
+      --info:#8fa8c9; --info-soft:#8fa8c920;
+      --caution:#e0a53e; --caution-soft:#e0a53e22;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.6);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,"Apple SD Gothic Neo","Segoe UI","Malgun Gothic",sans-serif;
+    line-height:1.6; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px; margin:0 auto; padding:44px 24px 96px}
+  .kicker{font-size:12.5px; font-weight:700; letter-spacing:.09em; color:var(--stamp);
+    text-transform:uppercase; margin:0 0 10px}
+  h1{font-size:clamp(23px,3.2vw,30px); font-weight:800; margin:0 0 8px; letter-spacing:-.01em; text-wrap:balance}
+  .sub{color:var(--ink-soft); font-size:14.5px; margin:0 0 26px; max-width:66ch}
+  .sub b{color:var(--ink)}
+
+  .toc{display:flex; gap:10px; flex-wrap:wrap; margin:0 0 34px}
+  .toc a{display:inline-flex; align-items:baseline; gap:7px; text-decoration:none;
+    border:1px solid var(--line); background:var(--paper-raised); border-radius:999px;
+    padding:7px 15px; color:var(--ink); font-size:13px; box-shadow:var(--shadow)}
+  .toc a:hover{border-color:var(--stamp)}
+  .toc a b{font-family:ui-monospace,"SF Mono",Consolas,monospace; font-variant-numeric:tabular-nums; color:var(--stamp)}
+
+  h2{font-size:19px; font-weight:800; margin:46px 0 4px; letter-spacing:-.005em; scroll-margin-top:20px}
+  .h2sub{color:var(--ink-soft); font-size:13.5px; margin:0 0 20px; max-width:74ch}
+  .h2sub b{color:var(--ink)}
+
+  .grp{border:1px solid var(--line); border-radius:13px; background:var(--paper-raised);
+    box-shadow:var(--shadow); margin-bottom:16px; overflow:hidden}
+  .grp.moho{border-left:3px solid var(--caution)}
+  .grp:not(.moho){border-left:3px solid var(--info)}
+  .ghead{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;
+    padding:15px 18px 12px}
+  .gcount{font-family:ui-monospace,"SF Mono",Consolas,monospace; font-variant-numeric:tabular-nums;
+    font-size:21px; font-weight:800; margin-right:11px; color:var(--ink)}
+  .gkey{font-size:14px; font-weight:700}
+  .gkey code{font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:13px;
+    background:var(--paper); border:1px solid var(--line); border-radius:6px; padding:2px 7px}
+  .gins{font-size:12.5px; color:var(--ink-faint)}
+  .ghint{margin:0 18px 14px; font-size:12.5px; color:var(--ink-soft); line-height:1.7; max-width:88ch}
+  .ghint b{color:var(--ink)}
+
+  .rivals{margin:0 18px 14px; font-size:12.5px}
+  .rvl{display:block; color:var(--ink-faint); margin-bottom:5px; font-size:11.5px;
+    text-transform:uppercase; letter-spacing:.05em; font-weight:700}
+  .rivals ul{margin:0; padding-left:18px; color:var(--caution)}
+  .rivals li{margin-bottom:2px}
+
+  .tw{overflow-x:auto; border-top:1px solid var(--line)}
+  table{width:100%; border-collapse:collapse; min-width:860px}
+  thead th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-faint); font-weight:700; padding:9px 14px; background:var(--paper);
+    border-bottom:1px solid var(--line); white-space:nowrap}
+  tbody td{padding:10px 14px; border-bottom:1px solid var(--line); font-size:12.5px; vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--stamp-soft)}
+  .pn{font-weight:600; min-width:22ch}
+  .mono{font-family:ui-monospace,"SF Mono","D2Coding",Consolas,monospace; font-variant-numeric:tabular-nums}
+  .sha{color:var(--ink-faint); font-size:11.5px}
+  .dt{color:var(--ink-soft); font-size:11.5px; white-space:nowrap}
+  .lnk a{color:var(--stamp); text-decoration:none; font-weight:600; white-space:nowrap}
+  .lnk a:hover{text-decoration:underline}
+  .nolink{color:var(--ink-faint); font-size:11.5px}
+  .path{color:var(--ink-faint); font-size:11px; max-width:34ch; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap}
+  a:focus-visible, .toc a:focus-visible{outline:2px solid var(--stamp); outline-offset:2px}
+
+  footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line);
+    font-size:12px; color:var(--ink-soft); line-height:1.8}
+  footer code{font-family:ui-monospace,"SF Mono",Consolas,monospace; font-size:11.5px;
+    background:var(--paper-raised); border:1px solid var(--line); border-radius:5px; padding:1px 5px}
+</style>
+
+<div class="wrap">
+  <p class="kicker">올바른 보험비서 · 사람 검토 대기</p>
+  <h1>미확정 107건 검토 목록</h1>
+  <p class="sub">기계가 <b>일부러 확정하지 않은</b> 문서들이다. 자동 규칙으로 더 밀면 오확정 위험이 커져 멈춘 지점 —
+  각 건마다 <b>무엇이 걸렸는지</b>와 <b>원본 PDF 링크</b>를 붙였다.
+  같은 원인끼리 묶었으니 <b>묶음 단위로 한 번에 판단</b>하면 된다.</p>
+
+  <div class="toc">
+    <a href="#name"><b>56</b> 이름불일치</a>
+    <a href="#moho"><b>51</b> 모호(진짜 경쟁)</a>
+  </div>
+<h2 id="name">이름불일치 · 56건</h2>
+<p class="h2sub">전체 상품명이 표지에 <b>한 덩어리로</b> 나오지 않는다. <b>빠진 토큰이 같으면 원인도 같다</b> — 묶어서 한 번에 판단하면 된다.</p>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">16</span><span class="gkey">빠진 토큰 · <code>보통상해</code></span></div>
+    <span class="gins">삼성화재</span>
+  </div>
+  <p class="ghint">표지에 「보통상해」가 없다. 삼성화재 구판 종합보험의 <b>담보 구분</b>일 가능성 — 약관집 안에서 「보통상해」가 부(部) 제목이나 목차에만 있는지 확인하면 결론이 난다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">0b93fcb829aa</td>
+      <td class="mono dt">20130101~20130331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20130101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/0b93fcb829aa_50908_0_20130101_file1.pdf">samsungfire/0b93fcb829aa_50908_0_20130101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">cf2e068b0514</td>
+      <td class="mono dt">20130401~20140331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20130401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/cf2e068b0514_50908_0_20130401_file1.pdf">samsungfire/cf2e068b0514_50908_0_20130401_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">849873098f4b</td>
+      <td class="mono dt">20140401~20140714</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20140401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/849873098f4b_50908_0_20140401_file1.pdf">samsungfire/849873098f4b_50908_0_20140401_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">ee79e417dc2b</td>
+      <td class="mono dt">20140715~20141231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20140715_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/ee79e417dc2b_50908_0_20140715_file1.pdf">samsungfire/ee79e417dc2b_50908_0_20140715_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">531e46998655</td>
+      <td class="mono dt">20150101~20150831</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20150101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/531e46998655_50908_0_20150101_file1.pdf">samsungfire/531e46998655_50908_0_20150101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">907806fc82d8</td>
+      <td class="mono dt">20150901~20151231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20150901_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/907806fc82d8_50908_0_20150901_file1.pdf">samsungfire/907806fc82d8_50908_0_20150901_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">d28c8b88fa96</td>
+      <td class="mono dt">20160101~20161231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20160101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/d28c8b88fa96_50908_0_20160101_file1.pdf">samsungfire/d28c8b88fa96_50908_0_20160101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">dcae2b0d919e</td>
+      <td class="mono dt">20170101~20170331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20170101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/dcae2b0d919e_50908_0_20170101_file1.pdf">samsungfire/dcae2b0d919e_50908_0_20170101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">cfd82c5b5379</td>
+      <td class="mono dt">20170401~20171231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20170401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/cfd82c5b5379_50908_0_20170401_file1.pdf">samsungfire/cfd82c5b5379_50908_0_20170401_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">58388ae72cf3</td>
+      <td class="mono dt">20180101~20180331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20180101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/58388ae72cf3_50908_0_20180101_file1.pdf">samsungfire/58388ae72cf3_50908_0_20180101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">a2f3cd0a33ee</td>
+      <td class="mono dt">20180401~20180930</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20180401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/a2f3cd0a33ee_50908_0_20180401_file1.pdf">samsungfire/a2f3cd0a33ee_50908_0_20180401_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">16ce04dd7573</td>
+      <td class="mono dt">20181001~20181231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/50908_0_20181001_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/16ce04dd7573_50908_0_20181001_file1.pdf">samsungfire/16ce04dd7573_50908_0_20181001_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">48fa5dece134</td>
+      <td class="mono dt">20190101~20200331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/KR1337P_0_20190101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/48fa5dece134_KR1337P_0_20190101_file1.pdf">samsungfire/48fa5dece134_KR1337P_0_20190101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">a5b7f6807005</td>
+      <td class="mono dt">20200401~20201231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/KR1337P_0_20200401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/a5b7f6807005_KR1337P_0_20200401_file1.pdf">samsungfire/a5b7f6807005_KR1337P_0_20200401_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">2af2fefc75ad</td>
+      <td class="mono dt">20210101~20210324</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/KR1337P_0_20210101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/2af2fefc75ad_KR1337P_0_20210101_file1.pdf">samsungfire/2af2fefc75ad_KR1337P_0_20210101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">보통상해 실손의료보험</td>
+      <td class="mono sha">1e22237f1f06</td>
+      <td class="mono dt">20210325~20210630</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/KR1337P_0_20210325_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/1e22237f1f06_KR1337P_0_20210325_file1.pdf">samsungfire/1e22237f1f06_KR1337P_0_20210325_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">11</span><span class="gkey">빠진 토큰 · <code>토큰은 다 있으나 흩어져 있음</code></span></div>
+    <span class="gins">삼성화재, 현대해상, 흥국화재</span>
+  </div>
+  <p class="ghint">낱말은 다 있는데 <b>한 줄로 이어지지 않는다</b>. 표지 조판이 세로쓰기·다단이거나 제목이 상자로 쪼개진 경우다. 표지를 눈으로 보고 제목이 맞으면 확정 가능.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 실손의료비(기본납입형_1509) 특별약관</td>
+      <td class="mono sha">b14ee86b305b</td>
+      <td class="mono dt">20150901</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1441602410117962.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/b14ee86b305b_2015-09-01_무배당 실손의료비(기본납입형_1509) 특별약관.pdf">heungkukfire/b14ee86b305b_2015-09-01_무배당 실손의료비(기본납입형_1509) 특별약관.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 실손의료비(기본납입형_1501) 특별약관</td>
+      <td class="mono sha">2362f50bcfc1</td>
+      <td class="mono dt">20150101</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1422699609186591.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/2362f50bcfc1_2015-01-01_무배당 실손의료비(기본납입형_1501) 특별약관.pdf">heungkukfire/2362f50bcfc1_2015-01-01_무배당 실손의료비(기본납입형_1501) 특별약관.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 실손의료비(기본납입형_1404) 특별약관</td>
+      <td class="mono sha">3460c529fc1d</td>
+      <td class="mono dt">20140401</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1397445483843785.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/3460c529fc1d_2014-04-01_무배당 실손의료비(기본납입형_1404) 특별약관.pdf">heungkukfire/3460c529fc1d_2014-04-01_무배당 실손의료비(기본납입형_1404) 특별약관.pdf</td>
+    </tr><tr>
+      <td class="pn">실손의료비보장 안정화 할인 특약</td>
+      <td class="mono sha">4961b989606f</td>
+      <td class="mono dt">20220101~20220331</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202201/%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5_%EB%B3%B4%ED%97%98%EB%A3%8C_%EC%95%88%EC%A0%95%ED%99%94_%ED%95%A0%EC%9D%B8_%ED%8A%B9%EB%B3%84%EC%95%BD%EA%B4%80_%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/4961b989606f_20220101_실손의료비보장 안정화 할인 특약.pdf">hyundaimarine/4961b989606f_20220101_실손의료비보장 안정화 할인 특약.pdf</td>
+    </tr><tr>
+      <td class="pn">실손의료비보장 안정화 할인 특약</td>
+      <td class="mono sha">4aae67b09b7b</td>
+      <td class="mono dt">20210701~20211231</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202107/%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84_%EC%95%88%EC%A0%95%ED%99%94_%ED%95%A0%EC%9D%B8_%ED%8A%B9%EB%B3%84%EC%95%BD%EA%B4%80_%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/4aae67b09b7b_20210701_실손의료비보장 안정화 할인 특약.pdf">hyundaimarine/4aae67b09b7b_20210701_실손의료비보장 안정화 할인 특약.pdf</td>
+    </tr><tr>
+      <td class="pn">실손의료비보장 안정화 할인 특약</td>
+      <td class="mono sha">d8efece54b15</td>
+      <td class="mono dt">20210101~20210630</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202101/%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84_%EC%95%88%EC%A0%95%ED%99%94_%ED%95%A0%EC%9D%B8_%ED%8A%B9%EB%B3%84%EC%95%BD%EA%B4%80_%EC%95%BD%EA%B4%80_.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/d8efece54b15_20210101_실손의료비보장 안정화 할인 특약.pdf">hyundaimarine/d8efece54b15_20210101_실손의료비보장 안정화 할인 특약.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당실손의료비보장보험(계약전환용)(갱신형)(Hi1904)1종(계약전환용)</td>
+      <td class="mono sha">6c3bdb1ff319</td>
+      <td class="mono dt">20190401~20190819</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201904/%28%EB%AC%B4%29%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%29%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi1904%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/6c3bdb1ff319_20190401_무배당실손의료비보장보험(계약전환용)(갱신형)(Hi1904)1종(계약전환용).pdf">hyundaimarine/6c3bdb1ff319_20190401_무배당실손의료비보장보험(계약전환용)(갱신형)(Hi1904)1종(계약전환용).pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 실손의료비보장보험(계약전환용)(갱신형)(Hi1901)1종(계약전환용)</td>
+      <td class="mono sha">6b376cf7f122</td>
+      <td class="mono dt">20190102~20190401</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201901/%28%EB%AC%B4%29%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%29%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi1901%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/6b376cf7f122_20190102_무배당 실손의료비보장보험(계약전환용)(갱신형)(Hi1901)1종(계약전환용).pdf">hyundaimarine/6b376cf7f122_20190102_무배당 실손의료비보장보험(계약전환용)(갱신형)(Hi1901)1종(계약전환용).pdf</td>
+    </tr><tr>
+      <td class="pn">무배당실손의료비보장보험(계약전환용)(갱신형)(Hi1812)1종(계약전환용)</td>
+      <td class="mono sha">84bf019e5675</td>
+      <td class="mono dt">20181203~20190102</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201812/%28%EB%AC%B4%29%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%29%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi1812%29_1%EC%A2%85%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/84bf019e5675_20181203_무배당실손의료비보장보험(계약전환용)(갱신형)(Hi1812)1종(계약전환용).pdf">hyundaimarine/84bf019e5675_20181203_무배당실손의료비보장보험(계약전환용)(갱신형)(Hi1812)1종(계약전환용).pdf</td>
+    </tr><tr>
+      <td class="pn">실손의료비보장 중지 및 재개 제도 특약</td>
+      <td class="mono sha">abc322bf90c4</td>
+      <td class="mono dt">20181203~20190401</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201901/%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5_%EC%A4%91%EC%A7%80_%EB%B0%8F_%EC%9E%AC%EA%B0%9C_%EC%A0%9C%EB%8F%84_%ED%8A%B9%EB%B3%84%EC%95%BD%EA%B4%80_%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/abc322bf90c4_20181203_실손의료비보장 중지 및 재개 제도 특약.pdf">hyundaimarine/abc322bf90c4_20181203_실손의료비보장 중지 및 재개 제도 특약.pdf</td>
+    </tr><tr>
+      <td class="pn">[갱신형] 무배당 노후실손의료비 특별약관</td>
+      <td class="mono sha">331fd066493c</td>
+      <td class="mono dt">20150101~20150331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/95892_0_20150101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/331fd066493c_95892_0_20150101_file1.pdf">samsungfire/331fd066493c_95892_0_20150101_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">6</span><span class="gkey">빠진 토큰 · <code>1~2종</code></span></div>
+    <span class="gins">흥국화재</span>
+  </div>
+  <p class="ghint">「1~2종」은 <b>종별 묶음 표기</b>다. 한 PDF에 1종·2종이 같이 실려 있으면 맞는 것이고, 그러면 이름을 문서 실물에 맞게 고치는 게 맞다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(범용_1708)_1~2종</td>
+      <td class="mono sha">5b32824c0d33</td>
+      <td class="mono dt">20170801</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1502774668620616.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/5b32824c0d33_2017-08-01_무배당 흥국화재 실손의료보험(범용_1708)_1~2종.pdf">heungkukfire/5b32824c0d33_2017-08-01_무배당 흥국화재 실손의료보험(범용_1708)_1~2종.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(범용_1704)_1~2종</td>
+      <td class="mono sha">1d6f64e92642</td>
+      <td class="mono dt">20170401</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1493342301462429.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/1d6f64e92642_2017-04-01_무배당 흥국화재 실손의료보험(범용_1704)_1~2종.pdf">heungkukfire/1d6f64e92642_2017-04-01_무배당 흥국화재 실손의료보험(범용_1704)_1~2종.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(범용_1701)_1~2종</td>
+      <td class="mono sha">254649396e48</td>
+      <td class="mono dt">20170101</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1484298271896841.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/254649396e48_2017-01-01_무배당 흥국화재 실손의료보험(범용_1701)_1~2종.pdf">heungkukfire/254649396e48_2017-01-01_무배당 흥국화재 실손의료보험(범용_1701)_1~2종.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(범용_1604)_1~2종</td>
+      <td class="mono sha">590751680bbe</td>
+      <td class="mono dt">20160401</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1460359583926142.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/590751680bbe_2016-04-01_무배당 흥국화재 실손의료보험(범용_1604)_1~2종.pdf">heungkukfire/590751680bbe_2016-04-01_무배당 흥국화재 실손의료보험(범용_1604)_1~2종.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(범용_1501)_1~2종</td>
+      <td class="mono sha">341f4bbb43b5</td>
+      <td class="mono dt">20150101</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1425461193225787.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/341f4bbb43b5_2015-01-01_무배당 흥국화재 실손의료보험(범용_1501)_1~2종.pdf">heungkukfire/341f4bbb43b5_2015-01-01_무배당 흥국화재 실손의료보험(범용_1501)_1~2종.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(범용_1304)_1~2종</td>
+      <td class="mono sha">32c465591352</td>
+      <td class="mono dt">20130401</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/136600493732476.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/32c465591352_2013-04-01_무배당 흥국화재 실손의료보험(범용_1304)_1~2종.pdf">heungkukfire/32c465591352_2013-04-01_무배당 흥국화재 실손의료보험(범용_1304)_1~2종.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">4</span><span class="gkey">빠진 토큰 · <code>KB개인실손의료비보험</code></span></div>
+    <span class="gins">KB손해보험</span>
+  </div>
+  <p class="ghint">상품명 전체가 표지에 없다. 표지 제목이 아예 다른 이름(예: 「무배당 KB…」)인지, 아니면 표지 추출이 실패했는지부터 가른다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">KB개인실손의료비보험</td>
+      <td class="mono sha">c877ac8379d2</td>
+      <td class="mono dt">20130101~20130331</td>
+      <td class="lnk"><a href="https://www.kbinsure.co.kr/CG802030003.ec?fileNm=20130101_15125_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/kbinsure/c877ac8379d2_20130101_15125_1_KB개인실손의료비보험.pdf">kbinsure/c877ac8379d2_20130101_15125_1_KB개인실손의료비보험.pdf</td>
+    </tr><tr>
+      <td class="pn">KB개인실손의료비보험</td>
+      <td class="mono sha">7733ba08c5a0</td>
+      <td class="mono dt">20130401~20140331</td>
+      <td class="lnk"><a href="https://www.kbinsure.co.kr/CG802030003.ec?fileNm=20130401_15125_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/kbinsure/7733ba08c5a0_20130401_15125_1_KB개인실손의료비보험.pdf">kbinsure/7733ba08c5a0_20130401_15125_1_KB개인실손의료비보험.pdf</td>
+    </tr><tr>
+      <td class="pn">KB개인실손의료비보험</td>
+      <td class="mono sha">64d323572758</td>
+      <td class="mono dt">20140401~20140714</td>
+      <td class="lnk"><a href="https://www.kbinsure.co.kr/CG802030003.ec?fileNm=20140401_15125_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/kbinsure/64d323572758_20140401_15125_1_KB개인실손의료비보험.pdf">kbinsure/64d323572758_20140401_15125_1_KB개인실손의료비보험.pdf</td>
+    </tr><tr>
+      <td class="pn">KB개인실손의료비보험</td>
+      <td class="mono sha">3b8f46b78174</td>
+      <td class="mono dt">20140715~20141231</td>
+      <td class="lnk"><a href="https://www.kbinsure.co.kr/CG802030003.ec?fileNm=20140715_15125_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/kbinsure/3b8f46b78174_20140715_15125_1_KB개인실손의료비보험.pdf">kbinsure/3b8f46b78174_20140715_15125_1_KB개인실손의료비보험.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">빠진 토큰 · <code>1~3종</code></span></div>
+    <span class="gins">흥국화재</span>
+  </div>
+  <p class="ghint">위와 같다. 1~3종이 한 권에 묶였는지 목차로 확인.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(계약전환용)(1701)(갱신형)_1~3종</td>
+      <td class="mono sha">a79e94d68ed6</td>
+      <td class="mono dt">20170113</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1484298803122932.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/a79e94d68ed6_2017-01-13_무배당 흥국화재 실손의료보험(계약전환용)(1701)(갱신형)_1~3종.pdf">heungkukfire/a79e94d68ed6_2017-01-13_무배당 흥국화재 실손의료보험(계약전환용)(1701)(갱신형)_1~3종.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥국화재 실손의료보험(계약전환용)(갱신형)_1~3종</td>
+      <td class="mono sha">2c5581b508d7</td>
+      <td class="mono dt">20160426</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1461833661827613.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/2c5581b508d7_2016-04-26_무배당 흥국화재 실손의료보험(계약전환용)(갱신형)_1~3종.pdf">heungkukfire/2c5581b508d7_2016-04-26_무배당 흥국화재 실손의료보험(계약전환용)(갱신형)_1~3종.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">빠진 토큰 · <code>계약전환용</code></span></div>
+    <span class="gins">DB손해보험</span>
+  </div>
+  <p class="ghint">정체성 부기가 표지에 없다. 원천 URL 파일명에 「계약전환용」이 있으면 그것으로 확정 가능 — 다만 이 2건은 URL에도 없어 막혔다. 공시 사이트 상품 상세를 봐야 한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 프로미라이프 다이렉트 실손의료비보험(계약전환용)2404(CM)</td>
+      <td class="mono sha">02aaee47b190</td>
+      <td class="mono dt">20241001</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_31035%2802%29_%EB%8B%A4%EC%9D%B4%EB%A0%89%ED%8A%B8%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%ED%97%98%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%292404%28CM%29_20241001.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/02aaee47b190_약관_31035(02)_다이렉트실손의료비보험(계약전환용)2404(CM)_20241001.pdf">dbins/02aaee47b190_약관_31035(02)_다이렉트실손의료비보험(계약전환용)2404(CM)_20241001.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 프로미라이프 다이렉트 실손의료비보험(계약전환용)2604(CM)</td>
+      <td class="mono sha">882a7cb620a4</td>
+      <td class="mono dt">20260401</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_31035%2807%29_20260401.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/882a7cb620a4_약관_31035(07)_20260401.pdf">dbins/882a7cb620a4_약관_31035(07)_20260401.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">빠진 토큰 · <code>만기재가입</code></span></div>
+    <span class="gins">DB손해보험</span>
+  </div>
+  <p class="ghint">「만기재가입」은 판매 구분이지 제목이 아닐 수 있다. 공시 목록의 상품명과 대조.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 프로미라이프 실손의료비보험2605(만기재가입)(TM)</td>
+      <td class="mono sha">652df189e8c8</td>
+      <td class="mono dt">20260506</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_31226%2800%29_20260506.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/652df189e8c8_약관_31226(00)_20260506.pdf">dbins/652df189e8c8_약관_31226(00)_20260506.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 프로미라이프 실손의료비보험2605(만기재가입)(TM)</td>
+      <td class="mono sha">499da48d1765</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_31226%2800%29_20260701.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/499da48d1765_약관_31226(00)_20260701.pdf">dbins/499da48d1765_약관_31226(00)_20260701.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">빠진 토큰 · <code>실손의료비보장무사고자할인특약</code></span></div>
+    <span class="gins">현대해상</span>
+  </div>
+  <p class="ghint">특약명이 표지가 아니라 <b>본문 조항 제목</b>으로만 있을 수 있다. 특약은 표지가 없는 경우가 많다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">실손의료비보장무사고자할인특약(적립대체형)</td>
+      <td class="mono sha">84e611ed8ae1</td>
+      <td class="mono dt">20111001~20140331</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/goods/discount_replace_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/84e611ed8ae1_20111001_실손의료비보장무사고자할인특약(적립대체형).pdf">hyundaimarine/84e611ed8ae1_20111001_실손의료비보장무사고자할인특약(적립대체형).pdf</td>
+    </tr><tr>
+      <td class="pn">실손의료비보장무사고자할인특약(추가납입형)</td>
+      <td class="mono sha">ad50f39cbfa1</td>
+      <td class="mono dt">20111001~20140331</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/goods/discount_add_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/ad50f39cbfa1_20111001_실손의료비보장무사고자할인특약(추가납입형).pdf">hyundaimarine/ad50f39cbfa1_20111001_실손의료비보장무사고자할인특약(추가납입형).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">빠진 토큰 · <code>실손의료비보험2604 + 만기재가입</code></span></div>
+    <span class="gins">DB손해보험</span>
+  </div>
+  <p class="ghint">판본과 구분자가 둘 다 안 잡혔다. 표지 판본을 먼저 확인.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 프로미라이프 다이렉트 실손의료비보험2604(CM)(만기재가입)</td>
+      <td class="mono sha">db24ea2e2dbf</td>
+      <td class="mono dt">20260506</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_31228%2800%29_20260506.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/db24ea2e2dbf_약관_31228(00)_20260506.pdf">dbins/db24ea2e2dbf_약관_31228(00)_20260506.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 프로미라이프 다이렉트 실손의료비보험2604(CM)(만기재가입)</td>
+      <td class="mono sha">48c5f155a618</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_31228%2800%29_20260701.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/48c5f155a618_약관_31228(00)_20260701.pdf">dbins/48c5f155a618_약관_31228(00)_20260701.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>1종단체전환용</code></span></div>
+    <span class="gins">NH농협손해보험</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">(무) 헤아림실손의료비보험[1종단체전환용]2605</td>
+      <td class="mono sha">7076f61b4b67</td>
+      <td class="mono dt">20260501</td>
+      <td class="lnk"><span class="nolink">URL 없음</span></td>
+      <td class="mono path" title="data/raw/insurance_terms/nhfire/7076f61b4b67_(무) 헤아림실손의료비보험[1종단체전환용]2605.pdf">nhfire/7076f61b4b67_(무) 헤아림실손의료비보험[1종단체전환용]2605.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>2종중지재개용</code></span></div>
+    <span class="gins">NH농협손해보험</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">(무) 헤아림실손의료비보험[2종중지재개용]2605</td>
+      <td class="mono sha">5d90ef310271</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><span class="nolink">URL 없음</span></td>
+      <td class="mono path" title="data/raw/insurance_terms/nhfire/5d90ef310271_(무) 헤아림실손의료비보험[2종중지재개용]2605.pdf">nhfire/5d90ef310271_(무) 헤아림실손의료비보험[2종중지재개용]2605.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>Hi1701</code></span></div>
+    <span class="gins">현대해상</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 노후실손의료비보장보험(갱신형)(Hi1701)</td>
+      <td class="mono sha">d3a70c7693fd</td>
+      <td class="mono dt">20170102~20180102</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201701/NOHUsilson%20yak.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/d3a70c7693fd_20170102_무배당 노후실손의료비보장보험(갱신형)(Hi1701).pdf">hyundaimarine/d3a70c7693fd_20170102_무배당 노후실손의료비보장보험(갱신형)(Hi1701).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>갱신형 + 다이렉트</code></span></div>
+    <span class="gins">삼성화재</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">[갱신형] 무배당 다이렉트 실손의료비 특별약관</td>
+      <td class="mono sha">d4ee3f9dcaee</td>
+      <td class="mono dt">20140401~20141231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/95898_0_20140401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/d4ee3f9dcaee_95898_0_20140401_file1.pdf">samsungfire/d4ee3f9dcaee_95898_0_20140401_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>갱신형 + 무배당 + 실손의료비</code></span></div>
+    <span class="gins">삼성화재</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">[갱신형] 무배당 실손의료비 특별약관</td>
+      <td class="mono sha">25159e5df3f4</td>
+      <td class="mono dt">20140401~20141231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/95899_0_20140401_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/25159e5df3f4_95899_0_20140401_file1.pdf">samsungfire/25159e5df3f4_95899_0_20140401_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>삼성화재 + 실손의료비보험 + 1301.1</code></span></div>
+    <span class="gins">삼성화재</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 삼성화재 실손의료비보험(1301.1)</td>
+      <td class="mono sha">1c77c535daf8</td>
+      <td class="mono dt">20130101~20130331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/95683_0_20130101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/1c77c535daf8_95683_0_20130101_file1.pdf">samsungfire/1c77c535daf8_95683_0_20130101_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>실손입원의료비</code></span></div>
+    <span class="gins">삼성화재</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 임신질환 실손입원의료비(통상분만 제외) 특별약관</td>
+      <td class="mono sha">16b227ff95b8</td>
+      <td class="mono dt">20150518~20150804</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/96896_0_20150518_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/16b227ff95b8_96896_0_20150518_file1.pdf">samsungfire/16b227ff95b8_96896_0_20150518_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>임신출산질환실손입원의료비 + 통상분만일수제외</code></span></div>
+    <span class="gins">현대해상</span>
+  </div>
+  <p class="ghint">표지 원문과 매니페스트 이름을 나란히 놓고 어느 쪽이 맞는지 판단한다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 임신출산질환실손입원의료비(통상분만일수제외)보장 특별약관</td>
+      <td class="mono sha">5fc609ca058f</td>
+      <td class="mono dt">20250901</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202509/bb67bda345b9366cf03b4f4065c56d0d.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/5fc609ca058f_20250901_무배당 임신출산질환실손입원의료비(통상분만일수제외)보장 특별약관.pdf">hyundaimarine/5fc609ca058f_20250901_무배당 임신출산질환실손입원의료비(통상분만일수제외)보장 특별약관.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">빠진 토큰 · <code>제도</code></span></div>
+    <span class="gins">현대해상</span>
+  </div>
+  <p class="ghint">「제도」 한 글자 차이다. 표지가 「…안정화 할인 특별약관」이면 매니페스트 이름 쪽 오기일 수 있다.</p>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">표준화 실손의료비보장 안정화 할인 제도 특별약관</td>
+      <td class="mono sha">d27373cc3a54</td>
+      <td class="mono dt">20150101~20151231</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201511/silsonangung1501_1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/d27373cc3a54_20150101_표준화 실손의료비보장 안정화 할인 제도 특별약관.pdf">hyundaimarine/d27373cc3a54_20150101_표준화 실손의료비보장 안정화 할인 제도 특별약관.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<h2 id="moho">모호 · 51건</h2>
+<p class="h2sub">같은 문서에 <b>다른 본약관</b>도 통째로 실려 있다. 판단 기준은 하나 — <b>이 PDF의 표지가 누구 것인가</b>. 상대가 부록·비교표로 실린 것이면 내 것이 맞다.</p>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">6</span><span class="gkey">삼성생명 · 경쟁 10건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성인터넷급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">7d9697455040</td>
+      <td class="mono dt">20230701~20231231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2023/0701/LP0657003/301/1689065808855.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/7d9697455040_삼성인터넷급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당).pdf">samsunglife/7d9697455040_삼성인터넷급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성인터넷급여실손의료비보장보험(2301)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">ebbde42cb7e3</td>
+      <td class="mono dt">20230101~20230630</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2023/0101/LP0657002/301/1673588771013.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/ebbde42cb7e3_삼성인터넷급여실손의료비보장보험(2301)[계약전환용](갱신형,무배당).pdf">samsunglife/ebbde42cb7e3_삼성인터넷급여실손의료비보장보험(2301)[계약전환용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성인터넷급여실손의료비보장보험(2209)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">9b33c4abcc8b</td>
+      <td class="mono dt">20220923~20221231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2022/0923/LP0657001/301/1665128570794.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/9b33c4abcc8b_삼성인터넷급여실손의료비보장보험(2209)[계약전환용](갱신형,무배당).pdf">samsunglife/9b33c4abcc8b_삼성인터넷급여실손의료비보장보험(2209)[계약전환용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2301)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">c0b77df22d4e</td>
+      <td class="mono dt">20230101~20230630</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2023/0101/LP0643004/301/1673591721900.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/c0b77df22d4e_삼성급여실손의료비보장보험(2301)[계약전환용](갱신형,무배당).pdf">samsunglife/c0b77df22d4e_삼성급여실손의료비보장보험(2301)[계약전환용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2207)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">430c42eaaa65</td>
+      <td class="mono dt">20220923</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2022/0923/LP0643003/301/1681287440842.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/430c42eaaa65_삼성급여실손의료비보장보험(2207)[계약전환용](갱신형,무배당).pdf">samsunglife/430c42eaaa65_삼성급여실손의료비보장보험(2207)[계약전환용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2207)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">368d70c1a3c0</td>
+      <td class="mono dt">20220701</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2022/0701/LP0643003/301/1657686190646.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/368d70c1a3c0_삼성급여실손의료비보장보험(2207)[계약전환용](갱신형,무배당).pdf">samsunglife/368d70c1a3c0_삼성급여실손의료비보장보험(2207)[계약전환용](갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">5</span><span class="gkey">삼성생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성노후실손의료비보장보험(2301)(갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2601)(갱신형,무배당)</td>
+      <td class="mono sha">abb8aa56d228</td>
+      <td class="mono dt">20260101</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2026/0101/LP0816002/301/1768350889894.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/abb8aa56d228_삼성노후실손의료비보장보험(2601)(갱신형,무배당).pdf">samsunglife/abb8aa56d228_삼성노후실손의료비보장보험(2601)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2501)(갱신형,무배당)</td>
+      <td class="mono sha">af51b89e29ed</td>
+      <td class="mono dt">20250101~20250331</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2025/0101/LP0397015/301/1736914435199.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/af51b89e29ed_삼성노후실손의료비보장보험(2501)(갱신형,무배당).pdf">samsunglife/af51b89e29ed_삼성노후실손의료비보장보험(2501)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2401)(갱신형,무배당)</td>
+      <td class="mono sha">b988e08282ff</td>
+      <td class="mono dt">20240923</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2024/0923/LP0397014/301/1735611415016.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/b988e08282ff_삼성노후실손의료비보장보험(2401)(갱신형,무배당).pdf">samsunglife/b988e08282ff_삼성노후실손의료비보장보험(2401)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2401)(갱신형,무배당)</td>
+      <td class="mono sha">730cc0e196c0</td>
+      <td class="mono dt">20240401</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2024/0401/LP0397014/301/1722505530022.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/730cc0e196c0_삼성노후실손의료비보장보험(2401)(갱신형,무배당).pdf">samsunglife/730cc0e196c0_삼성노후실손의료비보장보험(2401)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2401)(갱신형,무배당)</td>
+      <td class="mono sha">e3e21b22f608</td>
+      <td class="mono dt">20240101</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2024/0101/LP0397014/301/1705057588942.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/e3e21b22f608_삼성노후실손의료비보장보험(2401)(갱신형,무배당).pdf">samsunglife/e3e21b22f608_삼성노후실손의료비보장보험(2401)(갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">4</span><span class="gkey">현대해상 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 유병력자실손의료비보장보험(갱신형)(Hi1901)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당유병력자실손의료비보장보험(갱신형)(Hi2108)</td>
+      <td class="mono sha">0c1de65b196b</td>
+      <td class="mono dt">20210801~20210924</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202108/%28%EB%AC%B4%29%EC%9C%A0%EB%B3%91%EB%A0%A5%EC%9E%90%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi2108%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/0c1de65b196b_20210801_무배당유병력자실손의료비보장보험(갱신형)(Hi2108).pdf">hyundaimarine/0c1de65b196b_20210801_무배당유병력자실손의료비보장보험(갱신형)(Hi2108).pdf</td>
+    </tr><tr>
+      <td class="pn">무배당유병력자실손의료비보장보험(갱신형)(Hi2104)</td>
+      <td class="mono sha">2d063c6dae72</td>
+      <td class="mono dt">20210601~20210630</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202106/%28%EB%AC%B4%29%EC%9C%A0%EB%B3%91%EB%A0%A5%EC%9E%90%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi2104%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/2d063c6dae72_20210401_무배당유병력자실손의료비보장보험(갱신형)(Hi2104).pdf">hyundaimarine/2d063c6dae72_20210401_무배당유병력자실손의료비보장보험(갱신형)(Hi2104).pdf</td>
+    </tr><tr>
+      <td class="pn">무배당유병력자실손의료비보장보험(갱신형)(Hi2101)</td>
+      <td class="mono sha">0210841a2522</td>
+      <td class="mono dt">20210101~20210430</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/202101/%28%EB%AC%B4%29%EC%9C%A0%EB%B3%91%EB%A0%A5%EC%9E%90%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi2101%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80_.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/0210841a2522_20210101_무배당유병력자실손의료비보장보험(갱신형)(Hi2101).pdf">hyundaimarine/0210841a2522_20210101_무배당유병력자실손의료비보장보험(갱신형)(Hi2101).pdf</td>
+    </tr><tr>
+      <td class="pn">무배당유병력자실손의료비보장보험(갱신형)(Hi1904)</td>
+      <td class="mono sha">9354291bf485</td>
+      <td class="mono dt">20190502~20200331</td>
+      <td class="lnk"><a href="https://www.hi.co.kr/FileActionServlet/download/0/data/201905/%28%EB%AC%B4%29%EC%9C%A0%EB%B3%91%EB%A0%A5%EC%9E%90%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%EB%B3%B4%ED%97%98%28%EA%B0%B1%EC%8B%A0%ED%98%95%29%28Hi1904%29_%EC%9D%B8%EC%87%84%EC%9A%A9%EC%95%BD%EA%B4%80_184p.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/hyundaimarine/9354291bf485_20190401_무배당유병력자실손의료비보장보험(갱신형)(Hi1904).pdf">hyundaimarine/9354291bf485_20190401_무배당유병력자실손의료비보장보험(갱신형)(Hi1904).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">4</span><span class="gkey">흥국화재 · 경쟁 2건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 흥Good 실손의료보험(26.05)</li><li>무배당 흥Good 실손의료보험(26.05)_20260701이후</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥Good 다이렉트 실손의료보험(계약전환용_26.05)(갱신형)_20260701이후</td>
+      <td class="mono sha">91fe3ff14f4b</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1783056469687827.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/91fe3ff14f4b_2026-07-01_무배당 흥Good 다이렉트 실손의료보험(계약전환용_26.05)(갱신형)_20260701이후.pdf">heungkukfire/91fe3ff14f4b_2026-07-01_무배당 흥Good 다이렉트 실손의료보험(계약전환용_26.05)(갱신형)_20260701이후.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥Good 다이렉트 실손의료보험(26.05)_20260701이후</td>
+      <td class="mono sha">ec9deec2ba16</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1783057174412659.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/ec9deec2ba16_2026-07-01_무배당 흥Good 다이렉트 실손의료보험(26.05)_20260701이후.pdf">heungkukfire/ec9deec2ba16_2026-07-01_무배당 흥Good 다이렉트 실손의료보험(26.05)_20260701이후.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥Good 다이렉트 실손의료보험(계약전환용_26.05)(갱신형)</td>
+      <td class="mono sha">8c2a57f4834d</td>
+      <td class="mono dt">20260506</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/177909707888423.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/8c2a57f4834d_2026-05-06_무배당 흥Good 다이렉트 실손의료보험(계약전환용_26.05)(갱신형).pdf">heungkukfire/8c2a57f4834d_2026-05-06_무배당 흥Good 다이렉트 실손의료보험(계약전환용_26.05)(갱신형).pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥Good 다이렉트 실손의료보험(26.05)</td>
+      <td class="mono sha">bb67ee1a4707</td>
+      <td class="mono dt">20260506</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1779097111406918.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/bb67ee1a4707_2026-05-06_무배당 흥Good 다이렉트 실손의료보험(26.05).pdf">heungkukfire/bb67ee1a4707_2026-05-06_무배당 흥Good 다이렉트 실손의료보험(26.05).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">3</span><span class="gkey">삼성생명 · 경쟁 4건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>노후실손의료비보장보험(갱신형,무배당)</li><li>실손의료비보장보험(갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2607)[계약재개용](갱신형,무배당)</td>
+      <td class="mono sha">7f46168fa6c9</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2026/0701/LP0856001/301/1784076944848.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/7f46168fa6c9_삼성노후실손의료비보장보험(2607)[계약재개용](갱신형,무배당).pdf">samsunglife/7f46168fa6c9_삼성노후실손의료비보장보험(2607)[계약재개용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2601)(갱신형,무배당)</td>
+      <td class="mono sha">8f7c1112d911</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2026/0701/LP0816002/301/1784075914075.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/8f7c1112d911_삼성노후실손의료비보장보험(2601)(갱신형,무배당).pdf">samsunglife/8f7c1112d911_삼성노후실손의료비보장보험(2601)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2601)(갱신형,무배당)</td>
+      <td class="mono sha">0cfd7daa7c38</td>
+      <td class="mono dt">20260506</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2026/0506/LP0816002/301/1779258632885.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/0cfd7daa7c38_삼성노후실손의료비보장보험(2601)(갱신형,무배당).pdf">samsunglife/0cfd7daa7c38_삼성노후실손의료비보장보험(2601)(갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">3</span><span class="gkey">삼성생명 · 경쟁 2건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성노후실손의료비보장보험(2301)(갱신형,무배당)</li><li>삼성노후실손의료비보장보험(2501)(갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2504)(갱신형,무배당)</td>
+      <td class="mono sha">ccea407549ec</td>
+      <td class="mono dt">20250901</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2025/0901/LP0816001/301/1767597403074.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/ccea407549ec_삼성노후실손의료비보장보험(2504)(갱신형,무배당).pdf">samsunglife/ccea407549ec_삼성노후실손의료비보장보험(2504)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2504)(갱신형,무배당)</td>
+      <td class="mono sha">5b4f4f272828</td>
+      <td class="mono dt">20250630</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2025/0630/LP0816001/301/1751246998868.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/5b4f4f272828_삼성노후실손의료비보장보험(2504)(갱신형,무배당).pdf">samsunglife/5b4f4f272828_삼성노후실손의료비보장보험(2504)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성노후실손의료비보장보험(2504)(갱신형,무배당)</td>
+      <td class="mono sha">c7a08c02635d</td>
+      <td class="mono dt">20250401</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2025/0401/LP0816001/301/1744695063633.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/c7a08c02635d_삼성노후실손의료비보장보험(2504)(갱신형,무배당).pdf">samsunglife/c7a08c02635d_삼성노후실손의료비보장보험(2504)(갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">3</span><span class="gkey">삼성생명 · 경쟁 4건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성인터넷급여실손의료비보장보험(2401)(갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2401)(갱신형,무배당)</td>
+      <td class="mono sha">d13c9b6b5890</td>
+      <td class="mono dt">20240923</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2024/0923/LP0639005/301/1733894570065.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/d13c9b6b5890_삼성급여실손의료비보장보험(2401)(갱신형,무배당).pdf">samsunglife/d13c9b6b5890_삼성급여실손의료비보장보험(2401)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2401)(갱신형,무배당)</td>
+      <td class="mono sha">3ae246506d89</td>
+      <td class="mono dt">20240701</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2024/0701/LP0639005/301/1733894655155.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/3ae246506d89_삼성급여실손의료비보장보험(2401)(갱신형,무배당).pdf">samsunglife/3ae246506d89_삼성급여실손의료비보장보험(2401)(갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2401)(갱신형,무배당)</td>
+      <td class="mono sha">071325814ad9</td>
+      <td class="mono dt">20240401</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2024/0401/LP0639005/301/1722505574413.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/071325814ad9_삼성급여실손의료비보장보험(2401)(갱신형,무배당).pdf">samsunglife/071325814ad9_삼성급여실손의료비보장보험(2401)(갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">DB손해보험 · 경쟁 2건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 프로미라이프 실손의료비보험2101</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 프로미라이프 실손의료비보험(계약전환용)2101</td>
+      <td class="mono sha">feaa0ebcaf81</td>
+      <td class="mono dt">20210101</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_30997%2809%29_%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%ED%97%98%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%292101_20210101.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/feaa0ebcaf81_약관_30997(09)_실손의료비보험(계약전환용)2101_20210101.pdf">dbins/feaa0ebcaf81_약관_30997(09)_실손의료비보험(계약전환용)2101_20210101.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 프로미라이프 실손의료비보험(계약전환용)2101</td>
+      <td class="mono sha">6f0ce465a455</td>
+      <td class="mono dt">20210401</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/%EC%95%BD%EA%B4%80_30997%2809%29_%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%ED%97%98%28%EA%B3%84%EC%95%BD%EC%A0%84%ED%99%98%EC%9A%A9%292101_20210401.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/6f0ce465a455_약관_30997(09)_실손의료비보험(계약전환용)2101_20210401.pdf">dbins/6f0ce465a455_약관_30997(09)_실손의료비보험(계약전환용)2101_20210401.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">삼성생명 · 경쟁 2건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성급여실손의료비보장보험[계약전환용](갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">57a63de08f48</td>
+      <td class="mono dt">20220401</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2022/0401/LP0643002/301/1656895843207.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/57a63de08f48_삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당).pdf">samsunglife/57a63de08f48_삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당).pdf</td>
+    </tr><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">a385ee43314c</td>
+      <td class="mono dt">20220101</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2022/0101/LP0643002/301/1650246775694.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/a385ee43314c_삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당).pdf">samsunglife/a385ee43314c_삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">삼성화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 삼성화재 실손의료비보험(1603.1) [계약전환용]</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 삼성화재 실손의료비보험(1611.2) [계약전환용]</td>
+      <td class="mono sha">7fb838f41063</td>
+      <td class="mono dt">20161101~20161231</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/96179_0_20161101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/7fb838f41063_96179_0_20161101_file1.pdf">samsungfire/7fb838f41063_96179_0_20161101_file1.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 삼성화재 실손의료비보험 (1611.2)[계약전환용]</td>
+      <td class="mono sha">be2060faa956</td>
+      <td class="mono dt">20170101~20170331</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/96179_0_20170101_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/be2060faa956_96179_0_20170101_file1.pdf">samsungfire/be2060faa956_96179_0_20170101_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">2</span><span class="gkey">흥국화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 흥Good 실손의료보험(단체전환용_26.01)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥Good 실손의료보험(단체전환용_26.05)_20260701이후</td>
+      <td class="mono sha">c61d54fa80a8</td>
+      <td class="mono dt">20260701</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1783055571095299.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/c61d54fa80a8_2026-07-01_무배당 흥Good 실손의료보험(단체전환용_26.05)_20260701이후.pdf">heungkukfire/c61d54fa80a8_2026-07-01_무배당 흥Good 실손의료보험(단체전환용_26.05)_20260701이후.pdf</td>
+    </tr><tr>
+      <td class="pn">무배당 흥Good 실손의료보험(단체전환용_26.05)</td>
+      <td class="mono sha">3e5c2e979c08</td>
+      <td class="mono dt">20260506</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1779097013844584.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/3e5c2e979c08_2026-05-06_무배당 흥Good 실손의료보험(단체전환용_26.05).pdf">heungkukfire/3e5c2e979c08_2026-05-06_무배당 흥Good 실손의료보험(단체전환용_26.05).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">DB손해보험 · 경쟁 3건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 동부화재 다이렉트 실손의료비보험1701</li><li>무배당 프로미라이프 실손의료비보험(계약전환용)1701</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">실손의료비보장 안정화 할인 특별약관1701</td>
+      <td class="mono sha">687ae52519c3</td>
+      <td class="mono dt">20170101</td>
+      <td class="lnk"><a href="https://www.idbins.com/cYakgwanDown.do?FilePath=InsProduct/AAH_20170101_%EC%95%BD%EA%B4%80_%EC%8B%A4%EC%86%90%EC%9D%98%EB%A3%8C%EB%B9%84%EB%B3%B4%EC%9E%A5%20%EC%95%88%EC%A0%95%ED%99%94%20%ED%95%A0%EC%9D%B8%20%ED%8A%B9%EB%B3%84%EC%95%BD%EA%B4%801701%280%29.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/dbins/687ae52519c3_AAH_20170101_약관_실손의료비보장 안정화 할인 특별약관1701(0).pdf">dbins/687ae52519c3_AAH_20170101_약관_실손의료비보장 안정화 할인 특별약관1701(0).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">NH농협생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>실속만점NH실손의료비보험(갱신형,무배당)_1501</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">실속만점NH실손의료비보험(갱신형,무배당)_1504</td>
+      <td class="mono sha">a0a6fc49e762</td>
+      <td class="mono dt">20150401</td>
+      <td class="lnk"><a href="https://www.nhlife.co.kr/pdfViewer.nhl?apdFlid=FILE_000000000007423&amp;fileSeqn=2" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/nhlife/a0a6fc49e762_실속만점NH실손의료비보험(갱신형,무배당)_1504.pdf">nhlife/a0a6fc49e762_실속만점NH실손의료비보험(갱신형,무배당)_1504.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">동양생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당수호천사평생의료비든든보험(종신갱신형)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당수호천사꿈나무의료비든든보험</td>
+      <td class="mono sha">30d4e2e96b98</td>
+      <td class="mono dt">20090801~20090930</td>
+      <td class="lnk"><a href="https://pbano.myangel.co.kr/process/CO_ComDownload?_biz_op_code=FDL&amp;FILE_GRP_ID=DwkgWwLKUrDCv82/FvTfcepgvpaYhm5z" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/myangel/30d4e2e96b98_무배당수호천사꿈나무의료비든든보험.pdf">myangel/30d4e2e96b98_무배당수호천사꿈나무의료비든든보험.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성급여실손의료비보장보험(2301)(갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성인터넷급여실손의료비보장보험(2301)(갱신형,무배당)</td>
+      <td class="mono sha">c4e731660211</td>
+      <td class="mono dt">20230101</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2023/0101/LP0645004/301/1693295958762.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/c4e731660211_삼성인터넷급여실손의료비보장보험(2301)(갱신형,무배당).pdf">samsunglife/c4e731660211_삼성인터넷급여실손의료비보장보험(2301)(갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 3건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성생명실손의료비보장보험1.0(기본형,갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성생명인터넷실손의료비보장보험1.0(기본형,갱신형,무배당)</td>
+      <td class="mono sha">f21dab22d47b</td>
+      <td class="mono dt">20181201</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2018/1201/LP0525002AD01/301/1543565701962.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/f21dab22d47b_삼성생명인터넷실손의료비보장보험1.0(기본형,갱신형,무배당).pdf">samsunglife/f21dab22d47b_삼성생명인터넷실손의료비보장보험1.0(기본형,갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[계약재개용]</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[단체전환용]</td>
+      <td class="mono sha">74dee959726d</td>
+      <td class="mono dt">20190304~20191231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2019/0304/LP0566003AD01K01/301/1552893903303.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/74dee959726d_삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[단체전환용].pdf">samsunglife/74dee959726d_삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[단체전환용].pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[단체전환용]</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[계약재개용]</td>
+      <td class="mono sha">484d424f9db9</td>
+      <td class="mono dt">20190304~20191231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2019/0304/LP0564003AD01K01/301/1552894033633.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/484d424f9db9_삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[계약재개용].pdf">samsunglife/484d424f9db9_삼성생명실손의료비보장보험2.0(기본형,갱신형,무배당)[계약재개용].pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성생명실손의료비보장보험(기본형,갱신형,무배당)[계약재개용]</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성생명실손의료비보장보험(기본형,갱신형,무배당)[단체전환용]</td>
+      <td class="mono sha">ce635378736d</td>
+      <td class="mono dt">20181201~20181231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2018/1201/LP0566001AD01K01/301/1543567424724.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/ce635378736d_삼성생명실손의료비보장보험(기본형,갱신형,무배당)[단체전환용].pdf">samsunglife/ce635378736d_삼성생명실손의료비보장보험(기본형,갱신형,무배당)[단체전환용].pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성생명실손의료비보장보험(기본형,갱신형,무배당)[단체전환용]</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성생명실손의료비보장보험(기본형,갱신형,무배당)[계약재개용]</td>
+      <td class="mono sha">5697d3d90280</td>
+      <td class="mono dt">20181201~20181231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2018/1201/LP0564001AD01K01/301/1543566188571.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/5697d3d90280_삼성생명실손의료비보장보험(기본형,갱신형,무배당)[계약재개용].pdf">samsunglife/5697d3d90280_삼성생명실손의료비보장보험(기본형,갱신형,무배당)[계약재개용].pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성생명 · 경쟁 10건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>삼성급여실손의료비보장보험(2201)[계약전환용](갱신형,무배당)</li><li>삼성인터넷급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">삼성급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당)</td>
+      <td class="mono sha">547768301c09</td>
+      <td class="mono dt">20230701~20231231</td>
+      <td class="lnk"><a href="https://pcms.samsunglife.com/uploadDir/doc/2023/0701/LP0643005/301/1702863152408.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsunglife/547768301c09_삼성급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당).pdf">samsunglife/547768301c09_삼성급여실손의료비보장보험(2307)[계약전환용](갱신형,무배당).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">삼성화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 삼성화재 실손의료비보험(1812.1) [전환재개용]</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">단체실손의료비보험 개인전환 특별약관</td>
+      <td class="mono sha">45276c2d75ea</td>
+      <td class="mono dt">20181201~20190930</td>
+      <td class="lnk"><a href="https://www.samsungfire.com/publication/pdf/99983_0_20181201_file1.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/samsungfire/45276c2d75ea_99983_0_20181201_file1.pdf">samsungfire/45276c2d75ea_99983_0_20181201_file1.pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">흥국화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 흥국화재 유병력자 실손의료보험</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥Good 유병력자 실손의료보험(26.01)</td>
+      <td class="mono sha">509f2d369fc4</td>
+      <td class="mono dt">20260101</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1768355983161131.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/509f2d369fc4_2026-01-01_무배당 흥Good 유병력자 실손의료보험(26.01).pdf">heungkukfire/509f2d369fc4_2026-01-01_무배당 흥Good 유병력자 실손의료보험(26.01).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">흥국화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 흥국화재 다이렉트 실손의료보험(계약전환용_23.01)(갱신형)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥국화재 다이렉트 실손의료보험(계약전환용_23.03)(갱신형)</td>
+      <td class="mono sha">add10fd55746</td>
+      <td class="mono dt">20230301</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1680137057329157.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/add10fd55746_2023-03-01_무배당 흥국화재 다이렉트 실손의료보험(계약전환용_23.03)(갱신형).pdf">heungkukfire/add10fd55746_2023-03-01_무배당 흥국화재 다이렉트 실손의료보험(계약전환용_23.03)(갱신형).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">흥국화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 흥국화재 다이렉트 실손의료보험(23.01)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥국화재 다이렉트 실손의료보험(23.03)</td>
+      <td class="mono sha">0e5af513f7d6</td>
+      <td class="mono dt">20230301</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1680137027154822.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/0e5af513f7d6_2023-03-01_무배당 흥국화재 다이렉트 실손의료보험(23.03).pdf">heungkukfire/0e5af513f7d6_2023-03-01_무배당 흥국화재 다이렉트 실손의료보험(23.03).pdf</td>
+    </tr></tbody></table></div>
+</section>
+<section class="grp moho">
+  <div class="ghead">
+    <div><span class="gcount">1</span><span class="gkey">흥국화재 · 경쟁 1건</span></div>
+  </div>
+  <div class="rivals"><span class="rvl">문서에서 함께 확인된 다른 본약관</span><ul><li>무배당 흥국화재 실손의료보험(계약전환용_22.04)(갱신형)</li></ul></div>
+  <div class="tw"><table><thead><tr><th>매니페스트 상품명</th><th>sha12</th><th>판매기간</th><th>원본</th><th>로컬 경로</th></tr></thead>
+  <tbody><tr>
+      <td class="pn">무배당 흥국화재 다이렉트 실손의료보험(계약전환용_22.08)(갱신형)</td>
+      <td class="mono sha">296f6f87d70c</td>
+      <td class="mono dt">20220801</td>
+      <td class="lnk"><a href="https://www.heungkukfire.co.kr/common/download.do?FILE_NAME=/Upload/gongsi/goods/1660196669909391.pdf" target="_blank" rel="noopener">공시 PDF ↗</a></td>
+      <td class="mono path" title="data/raw/insurance_terms/heungkukfire/296f6f87d70c_2022-08-01_무배당 흥국화재 다이렉트 실손의료보험(계약전환용_22.08)(갱신형).pdf">heungkukfire/296f6f87d70c_2022-08-01_무배당 흥국화재 다이렉트 실손의료보험(계약전환용_22.08)(갱신형).pdf</td>
+    </tr></tbody></table></div>
+</section>
+  <footer>
+    실측 2026-08-14 · <code>python -m scripts.confirm.identify_documents --report</code> 의 NG 항목에서 뽑았다.
+    「판본 충돌」 1건과 「삼켜짐」 1건은 성격이 달라 이 목록에서 뺐다(총 미확정 109건).<br>
+    <b>로컬 경로</b>는 <code>data/raw/insurance_terms/</code> 이하를 줄여 적었다 — 저장소 루트 기준으로 붙여 열면 된다.
+    원본 약관은 저작물이라 <code>data/raw/</code> 에만 두고 커밋하지 않는다.
+  </footer>
+</div>
+</body>
+</html>

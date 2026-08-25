@@ -1,0 +1,544 @@
+<meta charset="utf-8">
+<title>올바른 보험비서 — DB·스키마 브리핑 (2026-08-02 개정)</title>
+<style>
+  :root{--fg:#1a1a1a;--mut:#666;--bd:#e2e2e2;--bg:#fff;--acc:#0b5fa5;--warn:#a54b0b;--dang:#a51b1b;--ok:#0b7a3b;--card:#fafafa}
+  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--mut:#a0a0a0;--bd:#333;--bg:#161616;--acc:#6fb3ec;--warn:#e8a05a;--dang:#e88;--ok:#6cc48f;--card:#1e1e1e}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;font:15px/1.75 -apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:var(--fg);background:var(--bg)}
+  main{max-width:940px;margin:0 auto}
+  h1{font-size:1.7rem;font-weight:600;margin:0 0 .3rem}
+  h2{font-size:1.25rem;font-weight:600;margin:2.8rem 0 .8rem;padding-bottom:.4rem;border-bottom:2px solid var(--bd)}
+  h3{font-size:1.02rem;font-weight:600;margin:1.8rem 0 .5rem}
+  .sub{color:var(--mut);margin:0 0 2rem}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  code{background:var(--card);padding:.1rem .35rem;border-radius:3px;font:13px ui-monospace,Consolas,monospace}
+  pre{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:.9rem 1rem;overflow-x:auto;font:12.5px/1.6 ui-monospace,Consolas,monospace}
+  .box{border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:0 6px 6px 0;padding:.85rem 1.1rem;margin:1.1rem 0;background:var(--card)}
+  .box.w{border-left-color:var(--warn)} .box.d{border-left-color:var(--dang)} .box.k{border-left-color:var(--ok)}
+  .box b{display:block;margin-bottom:.3rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.7rem;margin:1rem 0}
+  .stat{border:1px solid var(--bd);border-radius:6px;padding:.75rem .9rem;background:var(--card)}
+  .stat .v{font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums}
+  .stat .l{color:var(--mut);font-size:.8rem}
+  .stat.bad .v{color:var(--dang)}
+  .scroll{overflow-x:auto}
+  .tag{display:inline-block;padding:.05rem .45rem;border-radius:3px;font-size:.78rem;border:1px solid var(--bd);background:var(--card);color:var(--mut)}
+  .tag.new{border-color:var(--ok);color:var(--ok)}
+  .tag.p0{border-color:var(--dang);color:var(--dang)}
+  ul{padding-left:1.2rem} li{margin:.25rem 0}
+  .del{color:var(--mut);text-decoration:line-through}
+</style>
+
+<main>
+
+<h1>올바른 보험비서 — DB · 스키마 브리핑</h1>
+<p class="sub">팀 비서단 · <b>2026-08-02 전면 개정</b> · v4 전량 실측(1,367문서) · 코덱스 3라운드 교차검증</p>
+
+<div class="box d">
+  <b>제1원칙 — 모르면 모른다고 한다</b>
+  "보장됩니다"라고 잘못 말하면 사용자가 청구했다가 거절당하거나, 받을 걸 포기한다.
+  그래서 <b style="display:inline">정확도보다 정직성이 앞선다.</b>
+  근거 조항을 못 대면 <code>verdict="unknown"</code>으로 답하고, 이건 정상 결과다(HTTP 200).
+</div>
+
+<div class="box w">
+  <b>이 문서는 이전 판을 폐기하고 다시 썼다</b>
+  이전 브리핑의 15테이블(<code class="del">canonical_clause</code> · <code class="del">clause_occurrence</code> ·
+  <code class="del">artifact</code> · <code class="del">precheck_run</code> …)은 현행 설계와
+  <b style="display:inline">이름이 하나도 겹치지 않았다.</b> 팀이 두 설계를 동시에 읽고 있었다.
+  근거와 실측은 <code>docs/reports/2026-08-02_ERD_핸드오프_교차검증_리포트.md</code>.
+</div>
+
+<h2>0. 먼저 — 지금 적재하면 0행이다</h2>
+
+<div class="grid">
+  <div class="stat"><div class="v">1,703</div><div class="l">수집 문서</div></div>
+  <div class="stat"><div class="v">1,367</div><div class="l">전처리 완료</div></div>
+  <div class="stat"><div class="v">1,240</div><div class="l">parse ok</div></div>
+  <div class="stat bad"><div class="v">0</div><div class="l">★확정(confirmed) 문서</div></div>
+  <div class="stat bad"><div class="v">34%</div><div class="l">확정 매니페스트 커버리지</div></div>
+  <div class="stat"><div class="v">12</div><div class="l">보험사</div></div>
+</div>
+
+<p><code>policy_version.confirmed_document_id</code>가 <b>NOT NULL FK</b>다.
+확정 문서가 없으면 약관 버전 행을 만들 수 없고, 따라서 조항도 0행이다.</p>
+
+<div class="box k">
+  <b>이건 버그가 아니라 FK가 의도대로 작동하는 것이다</b>
+  "확인 안 된 약관으로 판정하지 않는다"를 규칙이 아니라 <b style="display:inline">구조</b>로 만든 지점이다.
+  적재 선행조건: <code>세대 규칙셋 확정 → 매니페스트 1,367건 확장 → 사람이 확정(identified_by) → 적재</code>.
+  ★<b style="display:inline">확정 절차를 우회하는 임시 경로를 만들지 않는다.</b>
+</div>
+
+<div class="box d">
+  <b>⚠ 그런데 현재 판정 코드는 그 절차를 우회한다</b>
+  <code>app/adapters/manifest_policy_resolver.py</code>가 읽는 곳은 <code>data/raw/manifests/</code>(2,121행)이고
+  <code>data/catalog/</code>의 확정 매니페스트가 아니다. <code>identification_status</code>를 <b style="display:inline">보지 않는다.</b>
+  확정 0건인데 <code>load_versions()</code>는 <b style="display:inline">1,361건</b>을 돌려준다. → P0 차단(§7)
+</div>
+
+<h3>격리한 336건 — 왜 뺐나</h3>
+<table>
+<tr><th>사유</th><th class="n">건수</th><th>이유</th></tr>
+<tr><td>비의료실손</td><td class="n">159</td><td>주택 풍수해보험·아파트화재보험(실손형) 등. 여기서 <code>실손</code>은 "실제 손해를 보상한다"는 <b>방식</b>이지 의료비가 아니다</td></tr>
+<tr><td>여행실손</td><td class="n">158</td><td>세대 구분 대상이 아니고 코호트 성격이 다르다</td></tr>
+<tr><td>사업방법서</td><td class="n">19</td><td>약관이 아니라 <b>회사 내부 업무 기준</b>. "약관 제○조"라고 인용하면 틀린 근거가 된다</td></tr>
+</table>
+
+<h2>1. ★가장 중요 — 인용 검증기가 87% 문서에서 무력하다</h2>
+
+<div class="box d">
+  <b>문서 문제가 아니라 런타임 결함이다</b>
+  <code>citation_guard</code>는 이 서비스에서 <b style="display:inline">제1원칙을 강제하는 장치</b>다.
+  LLM이 근거에 없는 조항을 인용하면 그 답을 폐기한다. 그게 작동하지 않고 있다.
+</div>
+
+<pre>def _clause_key(qualified_no: str) -> str:
+    """`보통약관/제 9 조` → `제9조`. 부 이름은 떼고 번호만 본다."""</pre>
+
+<p>주석은 이 완화를 <b>의도적으로</b> 설명한다 — <i>"LLM이 부 이름까지 정확히 쓰길 기대할 수 없다.
+부까지 맞추길 요구하면 정답인데 폐기하는 일이 생긴다."</i>
+의도는 타당하다. <b>결과가 뒤집혔다.</b></p>
+
+<div class="grid">
+  <div class="stat bad"><div class="v">71,707</div><div class="l">키 충돌 건수</div></div>
+  <div class="stat bad"><div class="v">1,191</div><div class="l">영향 문서 (87%)</div></div>
+  <div class="stat bad"><div class="v">96</div><div class="l">한 키에 뭉친 조항 최대</div></div>
+</div>
+
+<p>특별약관마다 조 번호가 1부터 다시 시작하므로 한 문서 안에서 서로 다른 조항 96개가
+<code>"제1조"</code> 하나로 뭉친다. 그리고</p>
+
+<pre>by_key = {_clause_key(e.qualified_no): e for e in evidence}   # ← dict comprehension</pre>
+
+<p>이라 <b>95개가 마지막 것에 덮인다.</b></p>
+
+<table>
+<tr><th>결과</th><th>무슨 일이 벌어지나</th></tr>
+<tr><td>검증 우회</td><td>LLM이 <b>어느 특약의 제1조를 인용하든</b> 허용 목록을 통과한다</td></tr>
+<tr><td>엉뚱한 대조</td><td>인용문 원문 대조가 <b>다른 조항 본문</b>과 이뤄진다 → 틀린 근거가 "검증됨"으로 나온다</td></tr>
+</table>
+
+<h3>같은 충돌이 두 곳에 더 있다</h3>
+<table>
+<tr><th>위치</th><th>내용</th></tr>
+<tr><td><code>ports/precheck.py:90</code></td><td><code>clause_id = sha12/qualified_no</code> — 31,085건 충돌 후보</td></tr>
+<tr><td><code>usecases/precheck.py:279</code></td><td>그 ID로 dedup → <b>서로 다른 조항이 조용히 사라진다</b></td></tr>
+</table>
+
+<div class="box k">
+  <b>고치는 방향 (코덱스 합의)</b>
+  ① LLM에 근거별 <code>clause_id</code>를 주고 <code>clause_id</code>로 인용하게 한다 →
+  ② 정확 ID 매칭 우선 → ③ 번호만 왔으면 <b style="display:inline">후보가 정확히 1개일 때만</b> 해소 →
+  ④ 0개면 <code>unknown</code>, <b style="display:inline">2개 이상이면 <code>ambiguous</code>로 기권</b>.
+  느슨하게 통과시키지도, 빡빡하게 폐기하지도 않고 <b style="display:inline">모른다고 한다.</b>
+</div>
+
+<h2>2. 설계의 뼈대 넷</h2>
+
+<h3>① 확정과 추출을 나눈다</h3>
+<table>
+<tr><th>테이블</th><th>역할</th></tr>
+<tr><td><code>confirmed_policy_document</code></td><td>원본 파일이 무엇이고 <b>누가 확정했나</b> (<code>sha256</code> · <code>source_url</code> · <code>identified_by</code>)</td></tr>
+<tr><td><code>document_extraction</code> <span class="tag new">신설</span></td><td>그 파일을 <b>어느 추출기·스키마로</b> 돌렸나 (<code>s4_pymupdf-1.28.0</code> · <code>parse_status</code>)</td></tr>
+</table>
+<p>v3→v4 재실행 때 산출물이 <b>공존해야 했다.</b> DB도 같아야 한다.
+★<b>"가장 큰 <code>sN</code> 폴더를 자동 선택"하지 않는다</b> — 문서별로 <code>accepted</code> 하나를 지정한다.</p>
+
+<h3>② 내용과 수록을 나눈다</h3>
+<table>
+<tr><th>테이블</th><th>역할</th></tr>
+<tr><td><code>clause_content</code> <span class="tag new">신설</span></td><td>내용이 정체성(<code>content_hash</code> PK). 본문·<b>임베딩·KCD 범위를 한 번만</b></td></tr>
+<tr><td><code>policy_clause</code></td><td>어느 extraction 어느 쪽에 실렸나. <b>인용은 반드시 이쪽</b></td></tr>
+</table>
+
+<div class="scroll">
+<table>
+<tr><th>해시 정의</th><th class="n">고유</th><th class="n">중복률</th></tr>
+<tr><td>현행 구현 <code>section+title+body</code></td><td class="n">51,740</td><td class="n">59.9%</td></tr>
+<tr><td><code>title+body</code> (section 제거)</td><td class="n">46,998</td><td class="n">63.6%</td></tr>
+<tr><td>★확정 <code>title+content</code> (조 머리까지 제거)</td><td class="n"><b>46,022</b></td><td class="n"><b>64.3%</b></td></tr>
+</table>
+</div>
+<p>분모 129,086(<code>page_fallback</code> 439 제외). 한 조항 최대 <b>172개 문서</b>에 재사용.</p>
+
+<div class="box w">
+  <b>★현행 구현의 59.9%는 과소집계다</b>
+  <code>to_clauses.py:242</code>가 <code>sha256(section ‖ title ‖ body)</code>로 해시를 만드는데,
+  <code>section</code>(수록 문맥)과 본문 선두의 <code>제N조【제목】</code>(번호)이 내용 해시에 섞여 있다.
+  <b style="display:inline">번호가 바뀌면 같은 조항이 다른 해시가 된다</b> — 코드 주석의 약속과 구현이 다르다.
+  <br>※ 이전 브리핑의 <span class="del">12,534 / 4,860 / 75% / 73문서</span>는 <b style="display:inline">v3·표본 400문서</b> 값이었다.
+</div>
+
+<h3>③ ★식별키는 <code>ordinal</code>이다. <code>qualified_no</code>가 아니다</h3>
+<pre>UNIQUE (document_extraction_id, ordinal)     ← 유일성
+policy_clause_id (uuid)                      ← 인용이 가리키는 것
+qualified_no                                 ← 표시·검색 전용. 유일하지 않다</pre>
+
+<table>
+<tr><th>실측</th><th class="n">충돌</th><th class="n">문서</th></tr>
+<tr><td>문서 내 <code>qualified_no</code> 중복</td><td class="n">31,085</td><td class="n">1,181 (86%)</td></tr>
+<tr><td>번호만 남긴 키 (<code>citation_guard</code>)</td><td class="n">71,707</td><td class="n">1,191 (87%)</td></tr>
+</table>
+
+<p>원인은 조 번호 재시작이 <b>아니다.</b> 부(section) 탐지 입도가 특약보다 굵어
+서로 다른 특약 여러 개가 한 라벨 아래 뭉친다.</p>
+<pre>p.73  보험료 자동납입 특별약관/1.   "보험료 납입"               324자
+p.73  보험료 자동납입 특별약관/1.   "특별약관의 체결 및 효력"    798자
+p.73  보험료 자동납입 특별약관/2.   "보험료의 영수"              82자
+p.73  보험료 자동납입 특별약관/2.   "특별면책조건의 내용"      2,605자</pre>
+
+<div class="box w">
+  <b>그래서 <code>(policy_version_id, section_id, clause_no)</code>로는 안 된다</b>
+  v4의 <code>qualified_no</code>는 이미 <code>"{section}/{clause_no}"</code>이고 section 라벨은 문서 내 유일하다
+  (표본 400문서 중복 0). 그 키는 <code>(문서, qualified_no)</code>와 <b style="display:inline">동치</b>다 —
+  31,085건이 그대로 남는다. 계획서 §4의 해법을 실측이 반증했다.
+</div>
+<p>★<code>ordinal</code>은 <b>extraction 안에서만</b> 유효하다. 재추출하면 바뀐다.
+추출 버전을 넘나드는 영속 식별자는 <code>content_hash</code>의 몫이다.</p>
+
+<h3>④ 외부에서 온 것은 급을 나눈다</h3>
+<div class="box w">
+  <b>남의 에이전트가 "이 건 지급됐어요"라고 한 것을 근거로 "보장됩니다"라고 말하면 안 된다.</b>
+  약관 조항은 회사가 공시한 계약 내용이고, 외부 보고는 주장이다.
+  → <code>ops.interaction_log</code>에는 <b style="display:inline"><code>core</code>로 가는 FK가 없다.</b>
+  판정 근거가 될 수 없는 <b style="display:inline">구조</b>다.
+</div>
+
+<h2>3. 테이블 27개 + 뷰 1 · 스키마 3 · DB 2</h2>
+
+<div class="scroll">
+<pre>┌──────────── insurance_real ────────────┐   ┌──────────── insurance_demo ────────────┐
+│  core.*   약관 코퍼스 (복제본)          │   │  core.*   약관 코퍼스 (복제본)          │
+│  app.*    실제 케이스·증빙  ★PII 있음   │   │  app.*    합성 케이스  ★PII 없음        │
+│  ops.*    운영·거버넌스                 │   │  ops.*    운영·거버넌스                 │
+└────────────────────────────────────────┘   └────────────────────────────────────────┘
+      /v1/cohorts  (n=0 → 미공개)                  /v1/demo/cohorts  (SYNTHETIC 표시)
+
+  ✗ 두 DB를 UNION 하는 뷰·쿼리·롤을 만들지 않는다      ✗ postgres_fdw · dblink 미설치
+  ✗ is_synthetic boolean 컬럼으로 대체하지 않는다  ← 그게 사고의 원인</pre>
+</div>
+
+<table>
+<tr><th>스키마</th><th class="n">수</th><th>테이블</th></tr>
+<tr><td><code>core</code></td><td class="n">12</td><td><code>insurer</code> · <b><code>confirmed_policy_document</code></b> · <b><code>document_extraction</code></b> <span class="tag new">신설</span> · <code>product</code> · <code>policy_version</code> · <b><code>clause_content</code></b> <span class="tag new">신설</span> · <code>policy_clause</code> · <code>clause_chunk</code> · <b><code>clause_code_rule</code></b> <span class="tag new">신설</span> · <b><code>clause_reference</code></b> <span class="tag new">복원</span> · <code>kcd_version</code> · <code>kcd_code</code></td></tr>
+<tr><td><code>app</code></td><td class="n">10+뷰1</td><td><code>subject</code> · <code>policy_holding</code> · <code>case</code> · <code>case_diagnosis</code> · <code>assessment</code> · <code>assessment_clause_citation</code> · <code>claim</code> · <code>outcome</code> · <code>evidence</code> · <b><code>evidence_verification</code></b> + <code>cohort_stats</code>(VIEW)</td></tr>
+<tr><td><code>ops</code></td><td class="n">5</td><td><code>agent_client</code> · <code>interaction_log</code> · <code>consent</code> · <code>admin_user</code> · <code>audit_log</code></td></tr>
+</table>
+
+<p>세 스키마를 두 DB에 모두 두므로 <b>물리 54테이블 + 뷰 2</b>.
+(이전 판의 "물리 32개"는 <code>app</code>만 복제한 계산인데 그림은 전부 복제였다 — 산술 오류였다.)</p>
+
+<div class="scroll">
+<pre>INSURER ──&lt; PRODUCT ──&lt; POLICY_VERSION &gt;── CONFIRMED_POLICY_DOCUMENT
+                                                     │  ★NOT NULL FK
+                                                     └──&lt; DOCUMENT_EXTRACTION
+                                                                │
+                                              POLICY_CLAUSE &lt;───┘
+                                               │  │  │
+                     CLAUSE_CONTENT ───────────┘  │  └──&lt; CLAUSE_REFERENCE (준용)
+                       │        │                 │
+                CLAUSE_CHUNK  CLAUSE_CODE_RULE     └── ASSESSMENT_CLAUSE_CITATION
+                 (임베딩)       (KCD 범위)               ★citeable=true 만 참조 가능
+
+SUBJECT ──&lt; POLICY_HOLDING ──&lt; CASE ──&lt; ASSESSMENT ──&lt; ASSESSMENT_CLAUSE_CITATION
+                                 └──&lt; CLAIM ──&lt; OUTCOME ──&lt; EVIDENCE ──&lt; EVIDENCE_VERIFICATION
+                                                                              ★검증 게이트
+AGENT_CLIENT ──&lt; INTERACTION_LOG      CONSENT ──&gt; SUBJECT      AUDIT_LOG (append-only)
+                 ✗ core FK 없음</pre>
+</div>
+
+<h3>★규모 실측 — 적재하면 몇 행인가</h3>
+<div class="scroll">
+<table>
+<tr><th>테이블</th><th class="n">예상 행수</th><th>근거</th></tr>
+<tr><td><code>insurer</code></td><td class="n">13</td><td>★12개사인데 13으로 세진다(아래)</td></tr>
+<tr><td><code>confirmed_policy_document</code></td><td class="n">1,703</td><td>고유 sha256. 매니페스트 행은 2,121 — <b>418행이 중복</b></td></tr>
+<tr><td><code>document_extraction</code></td><td class="n">1,367</td><td>s4 산출물</td></tr>
+<tr><td><code>product</code></td><td class="n">~1,179</td><td>(보험사, 상품명) distinct</td></tr>
+<tr><td><code>policy_version</code></td><td class="n">≥1,703</td><td>1파일:N버전이 있다(아래)</td></tr>
+<tr><td><code>policy_clause</code></td><td class="n"><b>129,086</b></td><td><code>page_fallback</code> 439 별도</td></tr>
+<tr><td><code>clause_content</code></td><td class="n"><b>46,022</b></td><td>중복률 64.3%</td></tr>
+<tr><td><code>clause_chunk</code></td><td class="n"><b>122,512</b></td><td>800자 기준. ★occurrence 단위였다면 <b>343,630</b> (2.8배)</td></tr>
+<tr><td><code>clause_code_rule</code></td><td class="n"><b>74,503</b></td><td>canonical 단위</td></tr>
+<tr><td><code>clause_reference</code></td><td class="n"><b>185,061</b></td><td>조 머리 제외</td></tr>
+<tr><td><code>kcd_version</code>/<code>kcd_code</code></td><td class="n"><b>0</b></td><td>★<b>적재원이 저장소에 없다</b></td></tr>
+<tr><td><code>app.*</code> / <code>ops.*</code></td><td class="n"><b>0</b></td><td><code>insurance_real</code>은 아직 비어 있다</td></tr>
+</table>
+</div>
+<div class="box k">
+  <b><code>clause_content</code> 분리의 값이 여기서 보인다</b>
+  임베딩 대상이 <b style="display:inline">343,630 → 122,512</b>로 줄고,
+  KCD 파싱이 129,086번이 아니라 <b style="display:inline">46,022번</b>만 돈다.
+</div>
+
+<h3>이전 판(22개)에서 달라진 것</h3>
+<table>
+<tr><th>변경</th><th>근거</th></tr>
+<tr><td><code>insurer</code> 부활</td><td>★<b>가설이 아니라 실측이다.</b> 매니페스트 <code>insurer</code> distinct가 <b>13</b>인데 그중 하나가 <code>samsunglife</code>(slug) 4행이고 <code>삼성생명</code>(표시명) 217행과 <b>별개로 세어진다</b></td></tr>
+<tr><td><code>document_extraction</code> 신설</td><td>추출기 버전이 바뀌면 조항이 통째로 달라진다. v3→v4가 그랬다</td></tr>
+<tr><td><code>clause_content</code> 신설</td><td>64.3% 중복. 임베딩·KCD 범위를 129,086번이 아니라 <b>46,022번</b>만 계산한다</td></tr>
+<tr><td><code>clause_code_rule</code> 신설</td><td>약관이 KCD 코드를 직접 쓴다(§5). <b>담을 자리가 없었다</b></td></tr>
+<tr><td><code>clause_reference</code> 복원</td><td>준용 순회를 핵심 기능으로 약속했는데 <b>엣지 테이블이 없었다</b></td></tr>
+<tr><td><code>generation</code>을 <code>product</code>→<code>policy_version</code></td><td>같은 상품의 개정 버전이 세대 경계를 넘는다</td></tr>
+<tr><td><code>case.policy_holding_id</code> 직접 연결</td><td>기존은 <code>case→subject→policy_holding</code> 조인이라 한 subject가 계약을 여럿 가지면 <b>한 outcome이 여러 상품 그룹에</b> 들어갔다</td></tr>
+<tr><td><code>cohort_stats</code>에 <code>policy_version_id</code> 그룹키</td><td>기존 뷰는 <code>product, generation</code>으로만 묶어 <b>스스로 "버전 roll-up 금지"를 위반</b>했다</td></tr>
+<tr><td><code>policy_version.confirmed_document_id</code>에 <b>UNIQUE를 걸지 않는다</b></td><td>실측 <b>1파일:N상품 156건</b>(최대 4상품) · <b>1파일:N판매구간 102건</b>. UNIQUE를 걸면 156건이 적재 자체가 안 된다</td></tr>
+</table>
+
+<h2>4. v4가 남긴 감사 신호 — 담을 자리를 만들었다</h2>
+
+<div class="box">
+  v4는 <b style="display:inline">"지우지 않고 세어 남긴다"</b>를 지켰다.
+  그런데 이전 ERD로 적재하면 아래가 <b style="display:inline">전부 사라졌다.</b>
+</div>
+
+<div class="scroll">
+<table>
+<tr><th>v4 필드</th><th>실측</th><th>새 자리</th></tr>
+<tr><td><code>parse_status = suspect</code></td><td><b>108건</b></td><td><code>document_extraction.parse_status</code> <b>3값</b> (ok/suspect/failed)</td></tr>
+<tr><td><code>parse_warnings</code></td><td>길이초과 108 · 조항부족 3</td><td><code>parse_warnings jsonb</code> <code>[{code, detail}]</code></td></tr>
+<tr><td><code>numbering</code></td><td>article 1,073 · numbered 275 · none 19</td><td><code>numbering</code> 컬럼</td></tr>
+<tr><td><code>unmapped_glyphs</code></td><td>187문서 · 23종 · 5,749회</td><td><code>unmapped_glyph_count</code>(컬럼) + <code>unmapped_glyphs</code>(jsonb)</td></tr>
+<tr><td><code>control_removed</code>·<code>pua_removed</code></td><td>전 문서</td><td>각각 컬럼</td></tr>
+<tr><td><code>toc_pages</code></td><td>전 문서</td><td><code>toc_pages int[]</code> + <code>toc_page_count</code></td></tr>
+<tr><td><code>tables_on_pages</code></td><td>조항별</td><td><code>policy_clause.tables_on_pages jsonb</code></td></tr>
+<tr><td><code>chunk_type='page_fallback'</code></td><td>439청크 / 10문서</td><td><code>policy_clause.citeable = false</code></td></tr>
+</table>
+</div>
+
+<div class="box w">
+  <b>왜 스칼라를 컬럼으로 빼나 — 세어서 보고할 수 있어야 하기 때문이다</b>
+  jsonb 한 덩어리에 넣으면 "감사 신호를 남겼다"는 말은 되지만 <b style="display:inline">집계 쿼리가 안 걸린다.</b>
+  <code>numbering</code> 오판이 v3 산출물 <b style="display:inline">35% 손상</b>의 원인이었다.
+  그 판정 결과를 저장하지 않으면 같은 사고를 다시 진단할 수 없다.
+</div>
+
+<div class="box d">
+  <b>⚠ 두 가지가 아직 코드에서 막혀 있다</b>
+  <ul>
+    <li><code>to_clauses.py</code>가 <code>unmapped_glyphs</code>·<code>control_removed</code>·<code>pua_removed</code>를
+        <b style="display:inline">다음 단계로 전달하지 않는다.</b> <code>data/extracted/</code>에만 있고 <code>clauses.json</code>에는 없다</li>
+    <li><code>file_clause_store.py:108,164</code>가 <code>parse_status</code> 기본값을 <code>"ok"</code>로 둔다 —
+        <b style="display:inline">fail-open</b>이다. <code>suspect</code>가 담길 자리가 없던 것과 같은 방향의 사고다</li>
+  </ul>
+</div>
+
+<h2>5. ★약관이 KCD 코드를 직접 쓴다 — v4 전량 재측정</h2>
+<div class="box k">
+  <b>이 프로젝트의 핵심 자산 — 외부 KCD 표 없이 면책 판정이 된다</b>
+  이제 <code>core.clause_code_rule</code>에 자리가 있다. <code>content_hash</code>에 붙으므로
+  <b style="display:inline">같은 조항이 172개 문서에 실려도 한 번만 파싱</b>한다.
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="v">86.8%</div><div class="l">코드를 가진 문서 (1,187/1,367)</div></div>
+  <div class="stat"><div class="v">74,503</div><div class="l">clause_code_rule 행</div></div>
+  <div class="stat"><div class="v">7.1%</div><div class="l">코드를 가진 canonical 조항</div></div>
+  <div class="stat bad"><div class="v">39%</div><div class="l">★kind=mention (성격 불명)</div></div>
+</div>
+
+<p>이전 브리핑의 <span class="del">표본 300문서 중 239개(80%)</span>를 <b>전량 재측정으로 대체</b>한다.
+표본값보다 높았다. <code>kind</code> 분포: <code>exclude</code> 38,922 · <code>mention</code> 29,289 · <code>exception</code> 6,292.</p>
+
+<div class="box d">
+  <b>★<code>mention</code> 29,289건은 판정 근거로 쓰지 않는다</b>
+  문맥 창 안에 면책 문구도 예외 문구도 없어 <b style="display:inline">성격을 단정하지 못한 것</b>이다.
+  이걸 <code>exclude</code>로 뭉개면 <b style="display:inline">"보장 안 된다"고 잘못 말하게 된다.</b>
+  코드가 나왔다는 사실만 남긴다.
+  <br>조항의 7.1%만 코드를 가지므로 인덱스는 부분 인덱스가 맞다 —
+  <code>WHERE kind &lt;&gt; 'mention'</code>.
+</div>
+
+<div class="box w">
+  <b>⚠ KCD 분류표 데이터가 저장소에 한 건도 없다</b>
+  <code>data/</code>·<code>config/</code> 어디에도 없다. <code>kcd_version</code>·<code>kcd_code</code>는
+  <b style="display:inline">적재원이 없는 테이블</b>이고, <code>app.case_diagnosis.kcd_code_id FK</code>도 채울 수 없다.
+  <br>다행히 <b style="display:inline">판정 자체는 막히지 않는다</b> — 면책 판정은 <code>clause_code_rule</code>로 하고
+  <code>kcd_code</code>는 코드명 표시·입력 검증에 쓴다. 없으면 사용자가 친 코드가 실재하는지 확인할 수 없다는 뜻이다.
+  → <b style="display:inline">P0-d로 올렸다.</b>
+</div>
+<pre>② 회사는 '한국표준질병사인분류'에 따른 다음의 의료비에 대해서는 보상하지 않습니다.
+   ① 정신 및 행동장애(F04∼F99). 다만, F04∼F09, F20∼F29, F30∼F39, F40∼F48,
+      F51, F90∼F98과 관련한 치료에서 발생한 …요양급여에 해당하는 의료비는 보상합니다.
+   ③ 피보험자가 임신, 출산으로 입원한 경우(O00∼O99)
+   ⑤ 비만(E66)   ⑥ 요실금(N39.3, N39.4, R32)</pre>
+
+<table>
+<tr><th>코드</th><th>판정</th><th>근거</th></tr>
+<tr><td><code>F32</code> 우울증</td><td><span class="tag">조건부</span></td><td>F04∼F99 면책이나 F30∼F39 예외에 든다</td></tr>
+<tr><td><code>E66</code> 비만</td><td><span class="tag">면책</span></td><td>단일 코드로 명시</td></tr>
+<tr><td><code>N39.3</code> 요실금</td><td><span class="tag">면책</span></td><td>세분류 지정</td></tr>
+<tr><td><code>N39.0</code></td><td><span class="tag">목록 없음</span></td><td>N39.3만 면책이다. 세분류가 다르면 안 든다</td></tr>
+<tr><td><code>S72</code> 대퇴골 골절</td><td><span class="tag">목록 없음</span></td><td><b>보장된다는 뜻이 아니다</b></td></tr>
+</table>
+
+<div class="box w">
+  <b>⚠ <code>표본 300문서 중 239개(80%)</code>는 v3·표본 기준이다</b>
+  v4 전량으로 재측정하지 않았다. <b style="display:inline">용량·인덱스·우선순위 결정에 이 값을 쓰지 않는다.</b>
+  지우지 않는 이유는 지우면 정보가 사라지고, 출처 없이 두면 v4 값으로 오독되기 때문이다.
+</div>
+
+<h2>6. 판정 근거는 구조로 막는다</h2>
+
+<pre>CREATE TABLE app.assessment_clause_citation (
+  assessment_id     uuid REFERENCES app.assessment(id),
+  policy_clause_id  uuid,
+  citeable          bool NOT NULL DEFAULT true CHECK (citeable),
+  -- ★복합 FK: citeable=false 인 조항은 참조 자체가 불가능하다
+  FOREIGN KEY (policy_clause_id, citeable)
+      REFERENCES core.policy_clause (id, citeable),
+  role         text     NOT NULL CHECK (role IN ('ground','exclusion')),
+  content_hash char(64) NOT NULL,   -- 감사 재현용 스냅샷
+  quote        text     NOT NULL,
+  locator      jsonb    NOT NULL,
+  PRIMARY KEY (assessment_id, policy_clause_id)
+);</pre>
+
+<div class="box k">
+  <b>"그러지 말자"는 규칙이 아니라 넣을 수 없는 구조다</b>
+  상호작용 로그·FAQ·다른 사용자의 답변을 근거로 넣으려면 <b style="display:inline">FK가 없어서 못 넣는다.</b>
+  <code>page_fallback</code> 조항(439청크/10문서)도 <b style="display:inline">복합 FK로 차단</b>된다 —
+  문장으로 "쓰지 말자"고 두지 않는다.
+  <br>승격 경로: 지식갭 → 사람 검수 → 문서화 → <code>core</code> 등재 → <b style="display:inline">그때부터 인용 가능</b>.
+</div>
+
+<h3>★준용 — 절반 이상이 대상을 특정할 수 없다</h3>
+<div class="grid">
+  <div class="stat"><div class="v">185,061</div><div class="l">상호참조 (v4 전량)</div></div>
+  <div class="stat"><div class="v">37.6%</div><div class="l">유일하게 해소 가능</div></div>
+  <div class="stat bad"><div class="v">52.6%</div><div class="l">★번호가 여럿 — 모호</div></div>
+  <div class="stat"><div class="v">9.9%</div><div class="l">문서 밖</div></div>
+</div>
+
+<pre>제1조(자기부담금) 회사는 보통약관에서 정한 손해가 발생하는 경우 손해액에서
+1사고당 (     )을 빼고 <b>보통약관 제9조(지급보험금의 계산)</b>에 따라 보상합니다.</pre>
+<p>이 특약만 읽으면 <b>자기부담금을 알 수 없다.</b> 괄호가 비어 있다.
+그런데 이렇게 <b>"보통약관"이라는 수식어가 붙은 참조는 4,372건(2.4%)뿐</b>이다.
+나머지 97.6%는 그냥 <code>"제9조"</code>라고만 쓴다 — 같은 문서에 <code>제9조</code>가 여러 부에 있으면
+<b>본문만으로는 어느 것인지 알 수 없다.</b></p>
+
+<div class="box d">
+  <b>설계 귀결</b>
+  <ul>
+    <li><code>target_clause_id</code>는 <b style="display:inline">NULL이 다수</b>다. NOT NULL로 두면 절반 이상을 못 넣는다</li>
+    <li><code>resolution_status</code>: <code>resolved</code> / <b style="display:inline"><code>ambiguous</code></b> / <code>external</code> / <code>unresolved</code> — ★<code>ambiguous</code>가 최대 구간</li>
+    <li>아래 재귀 CTE는 <b style="display:inline">엣지의 37.6%만 걸을 수 있다.</b>
+        "준용을 따라간다"를 말할 때 <b style="display:inline">이 분모를 함께 말한다.</b> 모호한 것은 따라가지 않고 기권한다</li>
+  </ul>
+  ⚠ 이전 판의 <span class="del">72,099개 · 2/3이 문서 밖</span>은 v3·표본 400문서이고 측정 정의도 달랐다.
+</div>
+
+<h3>준용 순회 — 반드시 버전 안에 가둔다</h3>
+<pre>WITH RECURSIVE walk(clause_id, depth) AS (
+    SELECT id, 0 FROM core.policy_clause WHERE id = $1
+  UNION ALL
+    SELECT r.target_clause_id, w.depth + 1
+    FROM walk w
+    JOIN core.clause_reference r ON r.src_clause_id = w.clause_id
+    JOIN core.policy_clause   pc ON pc.id = r.target_clause_id
+    WHERE w.depth &lt; 3
+      AND pc.policy_version_id = $2   -- ★같은 약관 버전 안에서만
+)</pre>
+<p><code>policy_version_id</code>로 묶지 않으면 2019년 약관을 보다가 2024년 조항으로 넘어간다.
+<br>그리고 <code>resolution_status='resolved'</code>인 엣지만 순회한다 — <b>모호한 것은 따라가지 않는다.</b></p>
+
+<h3>왜 별도 그래프DB를 쓰지 않나</h3>
+<table>
+<tr><th>조건</th><th>해당?</th></tr>
+<tr><td>깊이를 모르는 순회</td><td>✅ 준용 사슬이 몇 단인지 모른다</td></tr>
+<tr><td>경로 자체가 답</td><td>✅ "왜 면책인가"를 조항 경로로 설명한다</td></tr>
+<tr><td>스키마가 자주 바뀜</td><td>❌ 약관 구조는 안정적이다</td></tr>
+<tr><td>수억 엣지</td><td>❌ 약 30만이다</td></tr>
+</table>
+<p>앞의 둘은 <b>Postgres 재귀 CTE로 된다.</b> 그리고 <code>pgvector</code>와 갈라지면
+"유사 조항 + 그 조항이 준용하는 조항"을 <b>한 번에 조인할 수 없다.</b></p>
+
+<h2>7. ★P0 차단 — 문서만 고쳐서는 안 되는 것</h2>
+
+<div class="box d">
+  <b>아래는 런타임이 이미 틀린 것이다. 스키마를 만들기 전에 고친다.</b>
+  회귀 테스트 없이 고치지 않는다 — 같은 번호 2개면 <code>ambiguous</code>,
+  quote 불일치면 실패, 미확정 문서면 abstain.
+</div>
+
+<div class="scroll">
+<table>
+<tr><th>위치</th><th>무엇을</th></tr>
+<tr><td><span class="tag p0">P0</span> <code>citation_guard.py:55,113</code></td><td>ID 우선 해소 · 번호별 후보 <b>목록</b> 유지 · 복수면 <code>ambiguous</code> 기권 — set/dict 덮어쓰기 제거</td></tr>
+<tr><td><span class="tag p0">P0</span> <code>citation_guard.py:128-141</code></td><td>quote 불일치를 경고 → <b>폐기 사유</b>로. 인용문이 원문에 없다는 것은 근거를 못 댄 것이다</td></tr>
+<tr><td><span class="tag p0">P0</span> <code>manifest_policy_resolver.py:34-78</code></td><td><code>data/raw/manifests</code> → <b>confirmed catalog</b>. 확정 절차 우회 중</td></tr>
+<tr><td><code>ports/precheck.py:74-91</code></td><td><code>clause_id = sha12/qualified_no</code> → extraction/ordinal 기반 ID</td></tr>
+<tr><td><code>usecases/precheck.py:279</code></td><td>그 ID로 dedup → <b>서로 다른 조항이 조용히 사라진다</b></td></tr>
+<tr><td><code>file_clause_store.py:108,164</code></td><td><code>parse_status</code> 기본값 <code>"ok"</code> → 실패/미상 (fail-open)</td></tr>
+<tr><td><code>file_clause_store.py:45-75</code></td><td>전역 최신 <code>sN</code> 자동선택 → 문서별 <code>accepted</code> extraction. 부분 재실행 시 정상 문서가 통째로 사라진다</td></tr>
+<tr><td><code>manifest_policy_resolver.py:117-185</code></td><td>라인이 하나여도 상품이 복수면 기권 (실측 3건)</td></tr>
+<tr><td><code>to_clauses.py:242</code> 외</td><td>해시에서 section·조 번호 제거 + <code>ordinal</code> 출력 + <code>normalized.*</code> 전달</td></tr>
+</table>
+</div>
+
+<h2>8. API 계약</h2>
+<table>
+<tr><th>엔드포인트</th><th>역할</th></tr>
+<tr><td><code>POST /v1/prechecks</code></td><td>보장 사전판정</td></tr>
+<tr><td><code>GET /v1/support-manifest</code></td><td>무엇을 지원하는지</td></tr>
+<tr><td><code>POST /v1/observations</code></td><td>외부 에이전트의 청구 결과 보고</td></tr>
+</table>
+
+<div class="box d">
+  <b>HTTP 상태 코드 — 이 구분이 무너지면 안 된다</b>
+  <ul>
+    <li><b>200</b> — 판정했다. <code>verdict="unknown"</code>이어도 200이다</li>
+    <li><b>422</b> — 입력이 잘못됐다(가입일 형식 등)</li>
+    <li><b>503</b> — 검색·DB 장애. <b>이때만 우리 잘못이다</b></li>
+  </ul>
+  기권을 503으로 내보내면 클라이언트가 "근거 없음"과 "서버 장애"를 못 가린다.
+</div>
+
+<h2>9. 만드는 순서</h2>
+<table>
+<tr><th>단계</th><th>내용</th></tr>
+<tr><td><b>P0-a</b></td><td>§7 코드 수정 + 회귀 테스트</td></tr>
+<tr><td><b>P0-b</b></td><td>DB 2개 + 롤 분리 · <code>core.*</code> 12개 · <code>ops.admin_user</code>/<code>audit_log</code>/<code>consent</code></td></tr>
+<tr><td><b>P0-c</b></td><td>세대 규칙셋 → 매니페스트 확장 → <b>사람 확정</b> → 코퍼스 적재. <code>insurer</code> 정규화(<code>samsunglife</code>) 선행</td></tr>
+<tr><td><b>P0-d</b></td><td>★<b>KCD 분류표 확보·적재</b> — 지금 저장소에 없다. 없으면 코드 입력 검증도 코드명 표시도 못 한다</td></tr>
+<tr><td>★<b>P1 수직슬라이스</b></td><td><code>case</code>·<code>claim</code>·<code>outcome</code>·<code>evidence</code>·<b><code>evidence_verification</code></b>·<code>cohort_stats</code></td></tr>
+<tr><td><b>P2</b></td><td><code>subject</code>·<code>policy_holding</code>·<code>assessment</code>·<code>assessment_clause_citation</code>·<code>case_diagnosis</code></td></tr>
+<tr><td><b>P3</b></td><td><code>agent_client</code>·<code>interaction_log</code></td></tr>
+</table>
+<p><b>P1이 먼저인 이유</b>: 전형적 실패가 "크롤링·RAG부터 만들고 수직 슬라이스를 미루는 것"이다.
+첫 통합 대상은 <b>증빙 1건이 검수되어 집계를 바꾸는 흐름</b>이어야 한다.</p>
+
+<div class="box w">
+  <b><code>app</code>·<code>ops</code>는 "P1 계약 초안"이다 — 실행 가능한 DDL이 아니다</b>
+  <code>insurance_real</code>은 아직 <b style="display:inline">0행</b>이고 실제 지급결과를 합법적으로 받을 경로가 없다.
+  구현은 P1이지만 <b style="display:inline">알려진 결함은 지금 고쳐서 넘긴다</b> — 행이 0개인 지금이 가장 싸다.
+</div>
+
+<h2>10. 알려진 한계</h2>
+<table>
+<tr><th>항목</th><th>상태</th></tr>
+<tr><td><b>확정 문서 0건</b></td><td><code>core</code> 전체가 0행. §0</td></tr>
+<tr><td><code>suspect</code> 108건</td><td>판정 제외. 임계값 30,000자가 p95(31,017자)에 근접 — 표본 검수 후 조정</td></tr>
+<tr><td>section 탐지 입도</td><td>특약보다 굵다. 원인은 특정했으나 <b>안 고쳤다</b></td></tr>
+<tr><td>항 번호 <code>①②③</code></td><td>187문서에서 보조 PUA로 깨져 <b>"제N항"을 특정할 수 없다</b></td></tr>
+<tr><td>표 의미 부착</td><td>셀만 뽑았다. <b>보장 한도·자기부담금이 표에 있다</b></td></tr>
+<tr><td><b>준용 52.6%가 모호</b></td><td>수식어가 붙은 참조는 2.4%뿐. 따라갈 수 있는 건 <b>37.6%</b></td></tr>
+<tr><td><b>KCD 분류표 데이터 없음</b></td><td><code>kcd_version</code>·<code>kcd_code</code> 적재원 부재. <code>case_diagnosis.kcd_code_id</code>도 못 채운다</td></tr>
+<tr><td><b><code>clause_code_rule</code>의 39%가 <code>mention</code></b></td><td>면책인지 예외인지 단정 못 함. <b>판정 근거로 안 쓴다</b></td></tr>
+<tr><td><b><code>policy_version.variant</code> 출처 없음</b></td><td>매니페스트에 필드가 없다(<code>doc_type</code>·<code>identification</code>·<code>filename_kind_hint</code>뿐). 파생 규칙 미정 → <b>NULL로 둔다</b></td></tr>
+<tr><td><code>insurer</code> 정규화</td><td><code>samsunglife</code> 4행이 <code>삼성생명</code>과 별개로 세어진다. 적재 전 정규화 필요</td></tr>
+<tr><td><code>product.line</code> enum</td><td>실제 값은 <code>standard</code> 1,413 · <code>simplified_issue</code> 286 · <code>senior</code> 187 · <code>unknown</code> 184 · <code>travel</code> 51. 이전 판의 <span class="del">medical_indemnity</span>는 <b>데이터에 없는 값</b>이었다. <code>unknown</code>을 enum 멤버로 둔다</td></tr>
+<tr><td>준용 해소</td><td>아직 따라가지 않는다</td></tr>
+<tr><td>임베딩 검색</td><td>없다. 낱말 포함 검색만 한다</td></tr>
+<tr><td>질병명→코드</td><td>없다. 코드 입력만 받는다</td></tr>
+<tr><td><code>clause_chunk.embedding</code> 차원</td><td>모델 미확정. 바꾸면 인덱스 전량 재구축 + 거리 임계값 재보정</td></tr>
+<tr><td>층화 표본 검수</td><td>안 했다 (코덱스 권고 30~50건)</td></tr>
+<tr><td>v3 표본 수치</td><td><code>72,099 상호참조</code> · <code>KCD 80%</code> → <b>둘 다 v4 전량으로 재측정 완료</b> (185,061 · 86.8%)</td></tr>
+<tr><td><code>policy_application</code></td><td>P2로 미뤘다. 갱신형·중도 특약변경이 들어오면 <b>한 계약에 본약관·특약 버전이 달라지는데 표현할 수 없다</b></td></tr>
+</table>
+
+</main>

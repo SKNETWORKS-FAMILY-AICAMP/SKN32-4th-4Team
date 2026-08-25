@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>담당자별 코드 범위 및 구현 현황 — 올바른 보험비서</title>
+  <style>
+    :root {
+      --ink: #111827;
+      --muted: #4b5563;
+      --line: #cbd5e1;
+      --line-strong: #94a3b8;
+      --surface: #ffffff;
+      --surface-soft: #f8fafc;
+      --page: #eef2f7;
+      --navy: #172554;
+      --blue: #1d4ed8;
+      --blue-soft: #eff6ff;
+      --green: #166534;
+      --green-soft: #f0fdf4;
+      --amber: #92400e;
+      --amber-soft: #fffbeb;
+      --red: #991b1b;
+      --red-soft: #fef2f2;
+      --violet: #5b21b6;
+      --violet-soft: #f5f3ff;
+      --shadow: 0 10px 30px rgba(15, 23, 42, .08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      font: 15px/1.62 -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard,
+        "Noto Sans KR", "Malgun Gothic", sans-serif;
+      letter-spacing: -.012em;
+    }
+    a { color: #1746a2; text-underline-offset: 3px; }
+    a:hover { color: #0f2f76; }
+    a:focus-visible, button:focus-visible, select:focus-visible {
+      outline: 3px solid #f59e0b;
+      outline-offset: 3px;
+    }
+    code {
+      color: #172554;
+      background: #eef2ff;
+      border: 1px solid #dbeafe;
+      border-radius: 5px;
+      padding: .05rem .28rem;
+      font: .9em/1.5 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+      overflow-wrap: anywhere;
+    }
+    pre {
+      margin: .8rem 0 0;
+      padding: 1rem;
+      color: #e5e7eb;
+      background: #111827;
+      border-radius: 12px;
+      overflow: auto;
+      white-space: pre-wrap;
+      font: .83rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+    }
+    pre code { color: inherit; background: transparent; border: 0; padding: 0; }
+    h1, h2, h3, h4 { line-height: 1.28; letter-spacing: -.035em; }
+    h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.8rem); }
+    h2 { margin: 0 0 1rem; font-size: clamp(1.55rem, 3vw, 2.15rem); }
+    h3 { margin: 0; font-size: 1.28rem; }
+    h4 { margin: 1.15rem 0 .45rem; font-size: 1rem; }
+    p { margin: .55rem 0; }
+    ul { margin: .55rem 0; padding-left: 1.25rem; }
+    li + li { margin-top: .26rem; }
+    strong { font-weight: 750; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 999;
+      left: 1rem;
+      top: -5rem;
+      padding: .7rem 1rem;
+      color: #fff;
+      background: #111827;
+      border-radius: 8px;
+    }
+    .skip-link:focus { top: 1rem; }
+
+    .hero {
+      color: #fff;
+      background:
+        radial-gradient(circle at 88% 10%, rgba(96, 165, 250, .28), transparent 32%),
+        linear-gradient(125deg, #0f172a 0%, #172554 58%, #1e3a8a 100%);
+      padding: 3.5rem max(1.25rem, calc((100vw - 1180px) / 2));
+    }
+    .hero .eyebrow { color: #bfdbfe; font-weight: 750; letter-spacing: .08em; }
+    .hero .lead { max-width: 880px; margin-top: 1rem; color: #e2e8f0; font-size: 1.05rem; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1.4rem; }
+    .hero-meta span {
+      padding: .36rem .72rem;
+      color: #f8fafc;
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: 999px;
+      font-size: .86rem;
+    }
+
+    .topnav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(255,255,255,.96);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+    }
+    .topnav-inner {
+      max-width: 1180px;
+      margin: auto;
+      padding: .7rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .topnav a {
+      padding: .35rem .62rem;
+      color: #334155;
+      text-decoration: none;
+      border-radius: 7px;
+      font-size: .88rem;
+      font-weight: 650;
+    }
+    .topnav a:hover { color: #172554; background: #e2e8f0; }
+
+    main { max-width: 1180px; margin: 0 auto; padding: 1.4rem 1.25rem 5rem; }
+    section { scroll-margin-top: 5rem; margin-top: 2rem; }
+    .panel, .role-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .panel { padding: clamp(1rem, 3vw, 1.7rem); }
+    .notice {
+      padding: 1rem 1.15rem;
+      border-left: 5px solid var(--amber);
+      background: var(--amber-soft);
+      border-radius: 12px;
+    }
+    .notice strong { color: #78350f; }
+    .notice-danger { border-left-color: var(--red); background: var(--red-soft); }
+    .notice-info { border-left-color: var(--blue); background: var(--blue-soft); }
+
+    .plain-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .85rem;
+      margin-top: 1rem;
+    }
+    .plain-card {
+      padding: 1rem;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-top: 5px solid var(--blue);
+      border-radius: 14px;
+    }
+    .plain-card h3 { color: var(--navy); font-size: 1.08rem; }
+    .plain-card .analogy {
+      display: block;
+      margin: .35rem 0 .5rem;
+      color: var(--blue);
+      font-weight: 750;
+    }
+    .plain-card p { margin-bottom: 0; }
+
+    .glossary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .75rem;
+      margin: 1rem 0 0;
+    }
+    .glossary-item {
+      margin: 0;
+      padding: .9rem 1rem;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .glossary-item dt { color: var(--navy); font-weight: 800; }
+    .glossary-item dd { margin: .28rem 0 0; color: #334155; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: .8rem;
+      margin-top: 1rem;
+    }
+    .stat {
+      min-height: 145px;
+      padding: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .stat .value { display: block; color: var(--navy); font-size: 1.72rem; font-weight: 800; }
+    .stat .label { display: block; margin-top: .2rem; font-weight: 750; }
+    .stat .detail { display: block; margin-top: .35rem; color: var(--muted); font-size: .83rem; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: .45rem; margin: .8rem 0; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .25rem;
+      padding: .22rem .55rem;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+    .done { color: var(--green); background: var(--green-soft); }
+    .partial { color: var(--amber); background: var(--amber-soft); }
+    .waiting { color: var(--violet); background: var(--violet-soft); }
+    .risk { color: var(--red); background: var(--red-soft); }
+    .shared { color: #1e40af; background: var(--blue-soft); }
+    .neutral { color: #475569; background: #f8fafc; }
+
+    .role-grid { display: grid; gap: 1.2rem; }
+    .role-card { overflow: hidden; }
+    .role-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1.15rem 1.25rem;
+      background: linear-gradient(110deg, #f8fafc, #eff6ff);
+      border-bottom: 1px solid var(--line);
+    }
+    .role-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .6rem; }
+    .person { font-size: 1.45rem; font-weight: 850; }
+    .role-name { color: #1e3a8a; font-weight: 750; }
+    .role-body { padding: 1.2rem 1.25rem 1.4rem; }
+    .contract { color: var(--muted); font-size: .88rem; }
+    .three-col {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .85rem;
+      margin-top: 1rem;
+    }
+    .mini {
+      padding: .9rem 1rem;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .mini h4 { margin-top: 0; }
+
+    .table-wrap { overflow-x: auto; margin-top: .8rem; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; background: #fff; font-size: .88rem; }
+    caption {
+      padding: .72rem .8rem;
+      text-align: left;
+      color: #334155;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--line);
+      font-weight: 750;
+    }
+    th, td { padding: .68rem .72rem; text-align: left; vertical-align: top; border-bottom: 1px solid #e2e8f0; }
+    thead th { color: #fff; background: #243b63; font-weight: 750; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    .path-cell { min-width: 230px; }
+    .flow-cell { min-width: 200px; }
+    .owner-cell { min-width: 145px; }
+
+    .track-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    .track {
+      padding: 1.1rem;
+      background: #fff;
+      border: 2px solid #f59e0b;
+      border-radius: 15px;
+      box-shadow: var(--shadow);
+    }
+    .track h3 { color: #78350f; }
+
+    .filterbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: .7rem;
+      margin: .8rem 0;
+      padding: .8rem;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .filterbar label { display: grid; gap: .25rem; font-weight: 700; }
+    select, button {
+      min-height: 38px;
+      padding: .45rem .7rem;
+      color: var(--ink);
+      background: #fff;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      font: inherit;
+    }
+    button { cursor: pointer; font-weight: 700; }
+    .fine { color: var(--muted); font-size: .82rem; }
+    .divider { height: 1px; margin: 1.1rem 0; background: var(--line); }
+    .footer { margin-top: 3rem; padding: 1.2rem; color: #475569; text-align: center; border-top: 1px solid var(--line); }
+
+    @media (max-width: 980px) {
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .three-col, .track-grid, .plain-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      body { font-size: 14px; }
+      .hero { padding-top: 2.4rem; padding-bottom: 2.4rem; }
+      main { padding-inline: .75rem; }
+      .stats { grid-template-columns: 1fr; }
+      .glossary-grid { grid-template-columns: 1fr; }
+      .stat { min-height: auto; }
+      .role-head { display: block; }
+      .role-head .legend { margin-top: .7rem; }
+      .role-body, .role-head { padding-inline: .9rem; }
+      th, td { padding: .58rem; }
+    }
+    @media print {
+      @page { size: A4 landscape; margin: 12mm; }
+      body { background: #fff; font-size: 9pt; }
+      .hero { padding: 12mm; color: #000; background: #fff; border-bottom: 2px solid #000; }
+      .hero .eyebrow, .hero .lead { color: #111; }
+      .hero-meta span { color: #111; border-color: #777; }
+      .topnav, .filterbar, .skip-link { display: none !important; }
+      main { max-width: none; padding: 0; }
+      section { margin-top: 9mm; scroll-margin-top: 0; }
+      .panel, .role-card, .track, .stat { box-shadow: none; break-inside: avoid; }
+      .role-head { background: #f3f4f6; }
+      a { color: #000; text-decoration: none; }
+      a[href]::after { content: ""; }
+      table { font-size: 7.6pt; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; }
+      pre { color: #000; background: #f3f4f6; border: 1px solid #999; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 바로가기</a>
+
+  <header class="hero">
+    <div class="eyebrow">TEAM BISEODAN · HANDOFF 19</div>
+    <h1>담당자별 코드 범위<br>및 구현 현황</h1>
+    <p class="lead">
+      이 문서는 “누가 어느 코드를 어디서 어디까지 책임지는가”를 실제 저장소 경로로 답한다.
+      주 소유와 단독 변경 권한은 같은 말이 아니다. 판정·검색·저장·표시는 서로 연결되므로,
+      경계 파일은 공동 승인자를 반드시 함께 확인한다.
+      기술을 모르는 독자는 바로 아래의 60초 요약부터 읽으면 된다.
+    </p>
+    <div class="hero-meta" aria-label="문서 메타데이터">
+      <span>기준일 2026-08-24 KST</span>
+      <span>프로젝트 올바른 보험비서</span>
+      <span>팀 비서단</span>
+      <span>계약 04~11 기반</span>
+      <span>현행 코드·릴리스 재대조</span>
+    </div>
+  </header>
+
+  <nav class="topnav" aria-label="문서 목차">
+    <div class="topnav-inner">
+      <a href="#summary">60초 요약</a>
+      <a href="#glossary">쉬운 용어사전</a>
+      <a href="#baseline">기준선</a>
+      <a href="#roles">5명 담당</a>
+      <a href="#unassigned">무담당 트랙</a>
+      <a href="#matrix">공동 승인</a>
+      <a href="#lookup">연락 조회표</a>
+      <a href="#waiting">외부·사람 대기</a>
+      <a href="#verify">검증 방법</a>
+    </div>
+  </nav>
+
+  <main id="main">
+    <div class="notice notice-info" role="status">
+      <strong>2026-08-24 로컬 정리 반영:</strong>
+      서비스 종류를 정하는 값(role)을 잘못 적으면 즉시 멈추게 했고(fail-closed),
+      고객이 접근할 수 있는 주소 목록(route snapshot)도 시험으로 고정했다.
+      서비스 시작 전 점검(readiness)은 현재 승인된 보험 데이터만 확인하도록 바꿨으며,
+      오래된 검색 자료 적재 기능(FAISS ingest)과 쇼핑몰 문서는 보관용 압축 파일로 옮겼다.
+      실제 운영 데이터베이스 접속 주소 묶음(DSN), 사람의 정답 확인, 고성능 그래픽 장치(GPU) 재측정처럼
+      저장소 밖 준비가 필요한 항목은 아래에 따로 표시한다.
+    </div>
+
+    <section id="summary" aria-labelledby="summary-title">
+      <div class="panel">
+        <h2 id="summary-title">비전공자용 60초 요약</h2>
+        <p>
+          이 프로젝트는 보험 약관을 대신 “추측”하는 챗봇이 아니다.
+          원문을 정리하고, 질문과 관련된 근거를 찾고, 정해진 규칙으로 판단한 뒤,
+          그 결과와 출처를 화면에 보여 주는 여러 단계의 협업 시스템이다.
+          어느 단계든 근거가 부족하면 자신 있게 답하는 대신 멈추거나 전문가 확인을 요청하는 것이 안전 원칙이다.
+        </p>
+        <div class="plain-grid">
+          <article class="plain-card">
+            <h3>1. 데이터 수집·전처리 <span class="badge neutral">담당 합의 필요</span></h3>
+            <span class="analogy">비유: 책을 깨끗이 펴고 쪽수와 목차를 붙이는 사서</span>
+            <p>보험사 PDF를 모아 중복을 가리고, 글·표·쪽 위치를 찾을 수 있는 자료로 바꾼다. 사용자는 출처가 불분명한 복사본이 아니라 확인된 원문을 바탕으로 답을 받게 된다.</p>
+          </article>
+          <article class="plain-card">
+            <h3>2. AI 검색 <span class="badge partial">서유현</span></h3>
+            <span class="analogy">비유: 질문을 듣고 관련 약관 책장을 찾아오는 사서</span>
+            <p>많은 약관 중 질문과 관련된 조항 후보를 찾아 원문 위치와 함께 넘긴다. “보장된다”는 결론을 내리지는 않는다. 사용자는 어떤 조항을 근거로 삼았는지 확인할 수 있다.</p>
+          </article>
+          <article class="plain-card">
+            <h3>3. AI 판정·설명 <span class="badge partial">송채영</span></h3>
+            <span class="analogy">비유: 찾아온 서류를 규정표와 대조하는 심사 담당자</span>
+            <p>검색된 근거와 가입 조건을 정해진 규칙에 맞춰 비교하고 이유를 설명한다. 근거가 부족하면 “확인 필요”라고 답한다. 사용자는 근거 없는 확답으로 인한 오해를 줄일 수 있다.</p>
+          </article>
+          <article class="plain-card">
+            <h3>4. 에이전트 <span class="badge done">정재희</span></h3>
+            <span class="analogy">비유: 담당 부서에 일을 순서대로 전달하는 교통정리 담당자</span>
+            <p>필요한 정보와 도구를 정해진 순서로 호출하고 실패하면 제한된 횟수만 다시 시도한다. 판정 결과를 마음대로 바꾸지는 않는다. 다른 AI도 프로그램 간 통로(API)를 통해 안전하게 요청할 수 있게 한다.</p>
+          </article>
+          <article class="plain-card">
+            <h3>5. 백엔드 <span class="badge done">김지혜</span></h3>
+            <span class="analogy">비유: 신분을 확인하고 기록을 보관하는 안전금고와 접수창구</span>
+            <p>로그인·권한을 확인하고, 요청과 결과를 안전하게 저장하며, 화면과 외부 프로그램에 필요한 정보를 전달한다. 누가 무엇을 했는지 기록해 문제가 생기면 원인을 추적할 수 있다.</p>
+          </article>
+          <article class="plain-card">
+            <h3>6. 프론트엔드 <span class="badge done">최연우</span></h3>
+            <span class="analogy">비유: 복잡한 심사 결과를 읽기 쉽게 보여 주는 안내판</span>
+            <p>사용자가 보험 정보를 입력하고 결과·근거·경고를 이해하도록 화면에 표시한다. 화면에서 판정을 새로 만들거나 불리한 경고를 숨기지 않는다. 사용자는 결과와 이유를 함께 볼 수 있다.</p>
+          </article>
+        </div>
+        <div class="notice" style="margin-top:1rem">
+          <strong>한 문장으로 정리:</strong>
+          데이터는 믿을 만한 재료를 만들고, 검색은 근거를 찾고, 판정은 규칙을 적용하고,
+          에이전트는 순서를 조정하고, 백엔드는 안전하게 보관·전달하며, 프론트엔드는 이를 정확히 보여 준다.
+        </div>
+      </div>
+    </section>
+
+    <section id="glossary" aria-labelledby="glossary-title">
+      <div class="panel">
+        <h2 id="glossary-title">쉬운 용어사전</h2>
+        <p>아래 영어는 개발팀의 작업표에 자주 나오지만, 뜻은 어렵지 않다.</p>
+        <dl class="glossary-grid">
+          <div class="glossary-item">
+            <dt>fail-closed — 모르면 안전하게 멈추기</dt>
+            <dd>필요한 근거나 설정이 없을 때 임의로 통과시키지 않고 요청을 중단하는 방식이다. 고장 난 출입증으로 문이 열리지 않는 것과 같다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>readiness — 영업 시작 전 점검</dt>
+            <dd>서버가 켜졌다는 사실만 보지 않고, 승인 데이터·저장소·필수 설정까지 실제 응답 준비가 됐는지 확인하는 점검표다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>manifest — 데이터 포장 명세서</dt>
+            <dd>어떤 원본과 설정으로 어떤 결과를 만들었는지 목록과 전자 지문(hash)으로 남긴 영수증이다. 누군가 파일을 바꾸면 차이를 찾을 수 있다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>rerank — 검색 결과 다시 줄 세우기</dt>
+            <dd>처음 찾은 여러 조항을 질문과 더 가까운 순서로 한 번 더 정렬하는 단계다. 사서가 후보 책을 가져온 뒤 가장 관련 있는 책을 위에 놓는 것과 같다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>DSN — 데이터베이스 접속 주소 묶음</dt>
+            <dd>서버 주소·포트·데이터베이스 이름·접속 계정 등을 한데 적은 연결 정보다. 비밀번호가 포함될 수 있어 문서나 화면에 그대로 공개하면 안 된다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>serving — 지금 실제 답변에 쓰는 버전</dt>
+            <dd>시험용 후보가 아니라, 승인되어 현재 사용자 응답에 연결된 데이터나 모델을 뜻한다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>P·R·F1 — 검색 품질을 보는 세 숫자</dt>
+            <dd>P(정밀도)는 “찾아온 것 중 정답 비율”, R(재현율)은 “찾아야 할 정답을 놓치지 않은 비율”이다. F1은 두 값을 함께 균형 있게 보는 점수다.</dd>
+          </div>
+          <div class="glossary-item">
+            <dt>mutation test — 일부러 고장 내 보는 안전시험</dt>
+            <dd>시험용 코드에 알려진 결함을 일부러 넣고 검사가 그 결함을 잡는지 확인한다. 검사가 단순히 초록불만 켜는 장식이 아닌지 검증하는 방법이다.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="baseline" aria-labelledby="baseline-title">
+      <div class="panel">
+        <h2 id="baseline-title">1. 기준선과 읽는 법</h2>
+        <p>
+          실명 역할의 정본은 <a href="11_AI_구조_지도.md">AI 구조 지도 §5</a>와
+          <a href="04_계약_AI1_검색.md">검색</a>·<a href="05_계약_AI2_판정.md">판정</a>·
+          <a href="06_계약_Agent.md">Agent</a>·<a href="07_계약_백엔드.md">백엔드</a>·
+          <a href="08_계약_프론트.md">프론트</a> 계약이다. 루트 README의 팀 역할 칸과
+          Git 작성자 정보만으로는 개인 소유를 정하지 않는다.
+        </p>
+        <div class="legend" aria-label="상태 범례">
+          <span class="badge done">✓ 구현·검증</span>
+          <span class="badge partial">△ 부분 구현</span>
+          <span class="badge waiting">⏳ 외부·사람 대기</span>
+          <span class="badge risk">! 계약·안전 위험</span>
+          <span class="badge shared">↔ 공동 승인</span>
+          <span class="badge neutral">— 담당 합의 필요</span>
+        </div>
+        <p class="fine">
+          <strong>From → To</strong>는 코드 책임의 시작 입력과 종료 산출물을 뜻한다.
+          예를 들어 AI 1은 질문을 받아 근거 후보까지 책임지고, 판정 결과(verdict)를 만드는 순간부터는 AI 2 범위다.
+          파란색 고정폭 글씨는 개발자가 실제 파일을 찾기 위한 정확한 이름이므로, 비전공자는 옆의 한국어 설명만 읽어도 된다.
+        </p>
+      </div>
+
+      <div class="stats" aria-label="현행 검증 숫자">
+        <article class="stat">
+          <span class="value">1,367</span>
+          <span class="label">S6 구조화 문서</span>
+          <span class="detail">PDF에서 글과 위치를 꺼내 정리한 문서 전량. 승인된 운영 묶음의 문서 수도 같다.</span>
+        </article>
+        <article class="stat">
+          <span class="value">204,098</span>
+          <span class="label">S6 조항 등장 위치</span>
+          <span class="detail">같은 조항이 여러 문서에 반복된 위치(occurrence)까지 각각 센 값이다. 서로 다른 조항 수는 아니다.</span>
+        </article>
+        <article class="stat">
+          <span class="value">850</span>
+          <span class="label">S7.1 승인 정보</span>
+          <span class="detail">사람이 확인한 추출 정보(facts) 850개만 실제 답변에 사용한다. 시험용·미승인 후보는 분리 보관한다.</span>
+        </article>
+        <article class="stat">
+          <span class="value">114건 / 근거 240개</span>
+          <span class="label">법률자료 원문 대조</span>
+          <span class="detail">문서 구조와 출처가 맞는지 자동 확인한 수다. 변호사 등 사람이 법률 판단을 승인한 수는 아니다.</span>
+        </article>
+        <article class="stat">
+          <span class="value">12 passed</span>
+          <span class="label">D6 + 표 계약 안전시험</span>
+          <span class="detail">정상 동작 3건, 일부러 만든 결함 3건, 공통 표 규칙 6건이 통과했다. 일부러 만든 결함은 모두 검사에 걸렸다.</span>
+        </article>
+      </div>
+
+      <div class="notice notice-info" style="margin-top:1rem">
+        <strong>현재 실제 답변에 연결된 조합(활성 포인터):</strong>
+        <code>r2026-08-04-clause-s7.1-arctic-ko-ocr-approved</code> ·
+        <code>s6_pymupdf-1.28.0</code> · Arctic-ko 1024차원.
+        다만 오래된 전처리 계획의 D4·D5 승인 조건은 아직 열려 있다. “활성 포인터가 있다”와
+        “모든 품질 계약이 끝났다”를 같은 뜻으로 쓰지 않는다.
+      </div>
+    </section>
+
+    <section id="roles" aria-labelledby="roles-title">
+      <h2 id="roles-title">2. 팀원 5명 — 주 소유, 공동 승인, 책임 종료점</h2>
+      <div class="role-grid">
+
+        <article class="role-card" id="song">
+          <header class="role-head">
+            <div>
+              <div class="role-title"><span class="person">송채영</span><span class="role-name">AI 2 · 판정·설명 · 팀장</span></div>
+              <p class="contract">근거: <a href="05_계약_AI2_판정.md">05 계약</a> · <a href="10_계약_모델_평가.md">10 모델 평가</a></p>
+            </div>
+            <div class="legend"><span class="badge partial">△ 부분 구현</span><span class="badge shared">↔ 안전 게이트 공동</span></div>
+          </header>
+          <div class="role-body">
+            <p><strong>책임 한 줄:</strong> 확정된 약관 근거를 규칙으로 판정하고, 설명이 근거를 넘지 않도록 한다. 검색 순위와 화면 색은 결정하지 않는다.</p>
+            <div class="table-wrap">
+              <table>
+                <caption>송채영 주 소유 파일과 From → To</caption>
+                <thead><tr><th scope="col">경로·파일</th><th scope="col">From</th><th scope="col">To — 여기까지 책임</th><th scope="col">공동 승인</th><th scope="col">현황</th></tr></thead>
+                <tbody>
+                  <tr><td class="path-cell"><a href="../../app/core/usecases/precheck.py"><code>app/core/usecases/precheck.py</code></a></td><td class="flow-cell"><code>PrecheckInput</code> + 확정 판본 + 조항</td><td>코드별 면책·예외와 <code>PrecheckOutcome</code></td><td>김지혜(API·저장), 정재희(그래프)</td><td><span class="badge done">✓ 규칙판정 동작</span></td></tr>
+                  <tr><td><a href="../../app/core/domain/kcd_ranges.py"><code>app/core/domain/kcd_ranges.py</code></a><br><a href="../../app/core/domain/insurance.py"><code>insurance.py</code></a> · <a href="../../app/core/domain/precheck_result.py"><code>precheck_result.py</code></a></td><td>질병분류코드(KCD) 표기·약관 문장</td><td>코드 범위 언급, 판정 결과(verdict)·사유(reason) 계약</td><td>서유현(근거 입력 형식)</td><td><span class="badge done">✓ 핵심 판정 규칙 구현</span></td></tr>
+                  <tr><td><a href="../../app/core/domain/eligibility.py"><code>app/core/domain/eligibility.py</code></a></td><td>parse·citation·source 상태</td><td>근거 사용 가능/기권 신호</td><td>서유현, 정재희</td><td><span class="badge done">✓ fail-closed gate</span></td></tr>
+                  <tr><td><a href="../../app/prompts/"><code>app/prompts/**</code></a> · <a href="../../scripts/finetune/"><code>scripts/finetune/**</code></a></td><td>검증된 판정·근거</td><td>설명 형식·모델 실험 산출물</td><td>서유현(평가), 중앙 QA</td><td><span class="badge partial">△ 실험 있음, 판정 설명 미배선</span></td></tr>
+                  <tr><td><a href="../../tests/test_precheck_verify.py"><code>tests/test_precheck_*</code></a> · <a href="../../tests/test_kcd.py"><code>test_kcd.py</code></a></td><td>도메인 계약·실패 사례</td><td>판정/기권/인용 회귀</td><td>중앙 QA 담당 합의 필요</td><td><span class="badge done">✓ 회귀 보유</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="three-col">
+              <div class="mini"><h4>구현 완료</h4><ul><li>확정 문서·판매시점·보험 세대 확인</li><li>질병분류코드(KCD) 면책·예외 규칙 판정</li><li>근거 조항·쪽·원문 인용(quote) 응답</li><li>근거가 없으면 “보장 가능”으로 올리지 않음</li></ul></div>
+              <div class="mini"><h4>부분·미구현</h4><ul><li>계약서에 적힌 <code>assess.py</code> 대신 <code>precheck.py</code>가 일부 역할을 대신함</li><li>현재 규칙만으로는 “보장 가능성이 높음(<code>likely_covered</code>)” 결과를 만들지 않음</li><li><code>verify_explanation()</code>은 그래프의 원문 대조 뒤 실제 호출됨. 다만 LLM이 새 설명문을 만드는 기능 자체는 아직 연결되지 않음</li><li>자기부담금·장해지급률 시험용 후보(shadow)가 판정에 연결되지 않음</li></ul></div>
+              <div class="mini"><h4>제외 범위</h4><ul><li>검색용 숫자 표현(벡터)·문장 나누기(청킹)는 서유현</li><li>작업 흐름 재시도·도구 연결 규격(MCP)은 정재희</li><li>데이터를 한 묶음으로 안전하게 처리하는 일(트랜잭션)·웹 응답 상태(HTTP)는 김지혜</li><li>화면 문구·색은 최연우</li></ul></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="role-card" id="kim">
+          <header class="role-head">
+            <div>
+              <div class="role-title"><span class="person">김지혜</span><span class="role-name">백엔드 · DB · API · 감사</span></div>
+              <p class="contract">근거: <a href="07_계약_백엔드.md">07 계약</a> · <a href="02_ERD_및_스키마.md">02 ERD</a> · <a href="16_DB_스키마_적재_의뢰.md">16 DB 의뢰</a></p>
+            </div>
+            <div class="legend"><span class="badge done">✓ 로컬 구현</span><span class="badge waiting">⏳ 운영 전환</span></div>
+          </header>
+          <div class="role-body">
+            <p><strong>책임 한 줄:</strong> 요청과 판정 결과를 빠짐없이 한 묶음으로 저장하고(트랜잭션), 권한을 확인해 프로그램 간 통로(API)로 전달한다. 판정의 뜻을 백엔드에서 새로 만들지는 않는다.</p>
+            <div class="notice notice-info"><strong>로컬 완료:</strong> 기본 웹 앱(ASGI)은 고객에게 필요한 최소 주소만 연다. 허용되지 않은 서비스 역할값(role)은 즉시 거절한다. 영업 전 점검(readiness)은 오래된 FAISS 검색 파일이 아니라 승인 릴리스, 현재 조항 저장소, 승인 후보 정보, 선택한 저장 방식을 확인한다.</div>
+            <div class="table-wrap">
+              <table>
+                <caption>김지혜 주 소유 파일과 From → To</caption>
+                <thead><tr><th scope="col">경로·파일</th><th scope="col">From</th><th scope="col">To — 여기까지 책임</th><th scope="col">공동 승인</th><th scope="col">현황</th></tr></thead>
+                <tbody>
+                  <tr><td class="path-cell"><a href="../../db/migrations/postgres/"><code>db/migrations/postgres/**</code></a></td><td>데이터 구조도(ERD)·보안·판정 저장 계약</td><td>여러 번 실행해도 안전한 표 변경(migration)·접근 권한·데이터 제한 규칙</td><td>해당 기능 담당자</td><td><span class="badge done">✓ 001~016 + 에이전트/데모</span></td></tr>
+                  <tr><td><a href="../../db/postgres/"><code>db/postgres/**</code></a></td><td>저장소 접속 규격·조회문 계약</td><td>운영 PostgreSQL 데이터 접근 코드(repository)</td><td>서유현(검색), 정재희(에이전트)</td><td><span class="badge done">✓ 저장·조회 코드 구현</span></td></tr>
+                  <tr><td><a href="../../app/auth/"><code>app/auth/**</code></a> · <a href="../../app/obs/"><code>app/obs/**</code></a></td><td>사용자·외부 프로그램·요청 추적표</td><td>로그인 토큰(JWT)·역할별 권한(RBAC)·감사·답변 못 한 질문·영업 전 점검</td><td>정재희(에이전트 보안)</td><td><span class="badge done">✓ 승인 자료 중심 사전점검</span></td></tr>
+                  <tr><td><a href="../../app/main.py"><code>app/main.py</code></a> · <a href="../../app/routers/"><code>app/routers/**</code></a></td><td>웹 요청(HTTP)·역할별 앱</td><td>주고받는 데이터 형식(DTO)·응답 상태·고객/관리자 주소(route)</td><td>송채영(사전판정 의미), 정재희(에이전트), 최연우(화면 계약)</td><td><span class="badge done">✓ 오타는 중단·주소 목록 고정</span></td></tr>
+                  <tr><td><a href="../../app/core/usecases/persist_precheck.py"><code>persist_precheck.py</code></a> · <a href="../../app/core/usecases/persist_outcome.py"><code>persist_outcome.py</code></a> · <a href="../../app/core/usecases/verify_evidence.py"><code>verify_evidence.py</code></a></td><td>판정·관찰 결과</td><td>전부 성공하거나 전부 취소하는 저장·검증·분석 집단(cohort) 입력</td><td>송채영(판정 의미)</td><td><span class="badge done">✓ 요청부터 저장까지 연결</span></td></tr>
+                  <tr><td><a href="../../scripts/db/"><code>scripts/db/**</code></a> · <a href="../../scripts/manage.py"><code>scripts/manage.py</code></a> · <a href="../../scripts/ops/verify_release.py"><code>verify_release.py</code></a></td><td>DB 구조 명령(DDL)·환경·현재 버전 포인터</td><td>적용·검증·준비가 안 되면 운영을 막는 신호</td><td>중앙 릴리스 담당 합의 필요</td><td><span class="badge waiting">⏳ 실제 운영 설정 대기</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="three-col">
+              <div class="mini"><h4>구현 완료</h4><ul><li>PostgreSQL 표 구조 변경 001~016</li><li>판정·결과·검증·분석 집단 저장 코드</li><li>고객·관리자·등록 에이전트 앱 분리</li><li>로그인·역할별 권한·감사·중복 요청 방지 계약</li></ul></div>
+              <div class="mini"><h4>외부·운영 대기</h4><ul><li>보험/관리자 데이터베이스 접속 주소(<code>INSURANCE_PG_DSN</code> 등)</li><li>복제본과 원본의 차이가 0인지 확인</li><li>문제 발생 시 이전 버전으로 되돌리는 운영 연습</li><li>인터넷 주소(DNS)·암호화 통신(TLS)·비밀키 전달은 저장소 밖 운영</li></ul></div>
+              <div class="mini"><h4>제외 범위</h4><ul><li>판정 결과(verdict)·사유(reason) 의미 변경 금지</li><li>검색 거리·검색 결과 재정렬 변경은 서유현 승인</li><li>화면 문구 변경은 최연우 승인</li><li>에이전트 작업 순서 변경은 정재희 승인</li></ul></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="role-card" id="seo">
+          <header class="role-head">
+            <div>
+              <div class="role-title"><span class="person">서유현</span><span class="role-name">AI 1 · 검색 · 문장을 숫자로 표현하는 임베딩</span></div>
+              <p class="contract">근거: <a href="04_계약_AI1_검색.md">04 계약</a> · <a href="12_모델팀_데이터셋_인계.md">12 데이터셋 인계</a> · <a href="13_임베딩모델_선정_브리핑.md">13 모델 브리핑</a></p>
+            </div>
+            <div class="legend"><span class="badge partial">△ 부분 구현</span><span class="badge done">✓ 현재 검색목록 사용 중</span></div>
+          </header>
+          <div class="role-body">
+            <p><strong>책임 한 줄:</strong> 확정된 약관 안에서 질문에 맞는 근거 후보를 찾고, 원문 위치(locator)와 어느 자료에서 왔는지(provenance)까지 돌려준다. 보장·면책 결론은 만들지 않는다.</p>
+            <div class="table-wrap">
+              <table>
+                <caption>서유현 주 소유 파일과 From → To</caption>
+                <thead><tr><th scope="col">경로·파일</th><th scope="col">From</th><th scope="col">To — 여기까지 책임</th><th scope="col">공동 승인</th><th scope="col">현황</th></tr></thead>
+                <tbody>
+                  <tr><td class="path-cell"><a href="../../app/core/usecases/clause_search.py"><code>app/core/usecases/clause_search.py</code></a></td><td class="flow-cell">질문 + 허용한 원본 전자지문(SHA) 범위</td><td>근거 후보·원문 위치·자료가 만들어진 경로</td><td>송채영(근거 계약), 김지혜(API)</td><td><span class="badge done">✓ 의미검색 + 선택 재정렬</span></td></tr>
+                  <tr><td><a href="../../db/postgres/pgvector_clause_index.py"><code>db/postgres/pgvector_clause_index.py</code></a></td><td>중복을 뺀 조항·승인 임베딩 설정</td><td>나눈 문장(chunk)·숫자 표현(vector)·원래 조항 위치 검색</td><td>김지혜(DB 구조)</td><td><span class="badge done">✓ S6 Arctic-ko 1,024차원</span></td></tr>
+                  <tr><td><a href="../../app/adapters/clause_query_embedder.py"><code>clause_query_embedder.py</code></a> · <a href="../../app/adapters/clause_rerank.py"><code>clause_rerank.py</code></a> · <a href="../../app/adapters/reranker.py"><code>reranker.py</code></a></td><td>질문·후보 본문</td><td>질문의 숫자 표현·후보 재정렬 순서·실패 신호</td><td>김지혜(서버 자원·503 장애 응답)</td><td><span class="badge done">✓ 실패 시 몰래 다른 모델로 바꾸지 않음</span></td></tr>
+                  <tr><td><a href="../../scripts/index/build_clause_index.py"><code>build_clause_index.py</code></a> · <a href="../../app/adapters/clause_document_embedder.py"><code>clause_document_embedder.py</code></a></td><td>승인된 약관과 승인된 숫자 변환 설정</td><td>서비스가 찾을 수 있는 보험 조항 검색목록 생성</td><td>김지혜(PostgreSQL)</td><td><span class="badge done">✓ 옛 쇼핑몰 검색 코드는 <a href="../../legacy/v16_commerce_rag_runtime.zip">압축 보관</a> 후 분리</span></td></tr>
+                  <tr><td><a href="../../scripts/index/"><code>scripts/index/**</code></a> · <a href="../../scripts/eval/bench_embedders.py"><code>scripts/eval/bench_embedders.py</code></a> 외 검색 평가</td><td>승인 S6·시험 질문</td><td>임베딩 저장·정답 순위(MRR/Hit)·응답시간 측정 근거</td><td>데이터 담당, 송채영(평가 질문)</td><td><span class="badge done">✓ 도구·21회 측정</span></td></tr>
+                  <tr><td><a href="../../tests/test_clause_search.py"><code>tests/test_clause_search*</code></a> · <a href="../../tests/test_pgvector.py"><code>test_pgvector.py</code></a> · <a href="../../tests/test_reranker_contract.py"><code>test_reranker_contract.py</code></a></td><td>검색 규칙·일부러 만든 실패</td><td>검색 범위·자료 출처·재정렬이 망가지지 않는지 재검사</td><td>중앙 QA 담당 합의 필요</td><td><span class="badge done">✓ 자동 재검사 보유</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="three-col">
+              <div class="mini"><h4>구현 완료</h4><ul><li>현재 사용 중인 S6 Arctic-ko 조항 검색목록</li><li>보험 범위 제한 없이 전체를 찾는 검색은 명시적 승인 필요</li><li>나뉜 문장을 원래 조항으로 복원하고 출처·누락 수 보고</li><li>Qwen3 결과 재정렬 모델을 실제 측정하고 선택 기능으로 연결</li></ul></div>
+              <div class="mini"><h4>부분·미구현</h4><ul><li>계약서가 정한 <code>retrieval.py</code>/<code>EvidenceBundleV1</code> 파일·형식 부재</li><li>현재 사전판정은 의미가 비슷한 문장 검색을 호출하지 않음</li><li>보험 조항 전용 단어검색 결합(RRF) 미연결</li><li>다른 조항을 따라가는 검색, 실제 말투 시험셋(holdout), 기존보다 나쁘지 않은지 검증이 남음</li></ul></div>
+              <div class="mini"><h4>제외 범위</h4><ul><li>검색 결과만 보고 판정 결과를 만들면 안 됨</li><li>서로 다른 약관 버전을 자동으로 섞으면 안 됨</li><li>DB 표 구조 변경을 혼자 결정하면 안 됨</li><li>사람이 승인하지 않은 OCR 추출 정보를 검색목록에 넣으면 안 됨</li></ul></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="role-card" id="jeong">
+          <header class="role-head">
+            <div>
+              <div class="role-title"><span class="person">정재희</span><span class="role-name">에이전트 · 작업 순서 그래프(LangGraph) · 도구 연결 규격(MCP)</span></div>
+              <p class="contract">근거: <a href="06_계약_Agent.md">06 계약 v1.1</a> · <a href="17_LangGraph_인용검증_MCP_결함수정_의뢰.md">17 결함수정 의뢰</a></p>
+            </div>
+            <div class="legend"><span class="badge done">✓ 로컬 구현</span><span class="badge waiting">⏳ 원격 배포</span></div>
+          </header>
+          <div class="role-body">
+            <p><strong>책임 한 줄:</strong> 검색과 판정을 정해진 순서로 잇고, 조건별 진행 방향·재시도·외부 호출 입구를 통제한다. 작업 순서 프로그램이 판정 결과(verdict)를 다시 해석하거나 바꾸지는 않는다.</p>
+            <div class="table-wrap">
+              <table>
+                <caption>정재희 주 소유 파일과 From → To</caption>
+                <thead><tr><th scope="col">경로·파일</th><th scope="col">From</th><th scope="col">To — 여기까지 책임</th><th scope="col">공동 승인</th><th scope="col">현황</th></tr></thead>
+                <tbody>
+                  <tr><td class="path-cell"><a href="../../app/workflow/precheck_graph.py"><code>app/workflow/precheck_graph.py</code></a></td><td class="flow-cell">검증된 실제 업무 함수</td><td>조건별 진행 방향·최대 2회 재시도·검증된 결과</td><td>송채영(판정), 서유현(검색)</td><td><span class="badge done">✓ 같은 입력은 같은 순서로 처리</span></td></tr>
+                  <tr><td><a href="../../app/core/domain/citation_guard.py"><code>app/core/domain/citation_guard.py</code></a></td><td>답변이 밝힌 인용·원문 문구·별도 저장 원문</td><td>정확히 일치/여러 후보라 모호함/실패 사유</td><td>송채영 공동 소유</td><td><span class="badge done">✓ 충돌·잘못된 경고 수정</span></td></tr>
+                  <tr><td><a href="../../app/mcp/server.py"><code>app/mcp/server.py</code></a></td><td>같은 컴퓨터 안의 MCP 도구 호출</td><td>도구 4개·자료 2개, 웹 API와 같은 업무 함수를 쓰는지 일치 확인</td><td>김지혜(저장·오류)</td><td><span class="badge done">✓ 표준 입출력(stdio) MCP</span></td></tr>
+                  <tr><td><a href="../../app/agent_main.py"><code>app/agent_main.py</code></a> · <a href="../../app/routers/agent.py"><code>app/routers/agent.py</code></a> · <a href="../../app/schemas/agent.py"><code>app/schemas/agent.py</code></a></td><td>접속 토큰을 가진 외부 프로그램·가명 사용자 식별자</td><td>인증이 필요한 웹 주소(REST endpoint)·데이터 형식·감사 기록</td><td>김지혜(API·DB)</td><td><span class="badge done">✓ 등록된 에이전트 앱</span></td></tr>
+                  <tr><td><a href="../../app/auth/agent_client.py"><code>app/auth/agent_client.py</code></a> · <a href="../../db/postgres/pg_agent_access.py"><code>db/postgres/pg_agent_access.py</code></a> · <a href="../../scripts/agent_clients.py"><code>scripts/agent_clients.py</code></a></td><td>외부 프로그램 등록·허용 범위·중복 요청 방지키</td><td>키 전자지문·호출량 제한·감사·관리용 명령</td><td>김지혜(DB·권한)</td><td><span class="badge done">✓ 기능 구현</span></td></tr>
+                  <tr><td><a href="../../tests/test_graph.py"><code>tests/test_graph.py</code></a> · <a href="../../tests/test_mcp_parity.py"><code>test_mcp_parity.py</code></a> · <a href="../../tests/test_agent_app.py"><code>test_agent_app.py</code></a></td><td>진행 방향·실패·허용 범위 규칙</td><td>작업 흐름/웹 API/MCP가 망가지지 않는지 재검사</td><td>중앙 QA 담당 합의 필요</td><td><span class="badge done">✓ 자동 재검사 보유</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="three-col">
+              <div class="mini"><h4>구현 완료</h4><ul><li>재시도는 최대 2회(<code>MAX_RETRY=2</code>)이며 끝없이 도는 상황을 이중 차단</li><li>작업 중 상태(Graph state)에는 질병기호 원문 대신 전자지문만 저장</li><li>답변 인용을 별도 저장된 원문과 다시 대조</li><li>같은 컴퓨터의 MCP와 등록 에이전트용 웹 API</li></ul></div>
+              <div class="mini"><h4>인용 안전 수정</h4><ul><li>같은 파일 경로에 후보가 여러 개면 하나로 덮어쓰지 않고 모두 유지</li><li>원문 인용 안에 나온 다른 조항 번호를 거짓 경고로 잡지 않게 범위를 좁힘</li><li>근거가 0개인데 긍정하는 답변은 안전하게 중단</li><li>조항 등장 위치 ID·쪽·인용문을 별도 원문과 대조</li></ul></div>
+              <div class="mini"><h4>외부·제외 범위</h4><ul><li>다른 서버에서 실시간으로 MCP를 호출하는 기능은 아직 없음</li><li>에이전트끼리 직접 대화하는 규격(A2A)은 필수 기능이 아니며 아직 없음</li><li>인터넷 주소(DNS)·암호화(TLS)·방화벽(WAF)·키 전달은 운영 준비 대기</li><li>작업 흐름 프로그램이 판정 결과를 변경하면 안 됨</li></ul></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="role-card" id="choi">
+          <header class="role-head">
+            <div>
+              <div class="role-title"><span class="person">최연우</span><span class="role-name">프론트엔드 · 화면 상태·근거 사슬</span></div>
+              <p class="contract">근거: <a href="08_계약_프론트.md">08 계약</a> · <a href="storyboard.html">데모 스토리보드</a></p>
+            </div>
+            <div class="legend"><span class="badge done">✓ 통합 화면</span><span class="badge done">✓ 계약 v2 경로 현행화</span></div>
+          </header>
+          <div class="role-body">
+            <p><strong>책임 한 줄:</strong> 서버 API가 준 판정·판단 보류·경고·근거를 사용자가 오해하지 않게 표시하고 실제 브라우저에서 확인한다. 화면 동작 코드(JS)가 판정을 새로 만들지는 않는다.</p>
+            <div class="table-wrap">
+              <table>
+                <caption>최연우 주 소유 파일과 From → To</caption>
+                <thead><tr><th scope="col">경로·파일</th><th scope="col">From</th><th scope="col">To — 여기까지 책임</th><th scope="col">공동 승인</th><th scope="col">현황</th></tr></thead>
+                <tbody>
+                  <tr><td class="path-cell"><a href="../../app/static/insurance.html"><code>app/static/insurance.html</code></a> · <a href="../../app/static/insurance.js"><code>insurance.js</code></a></td><td class="flow-cell">사전판정·상품목록·대화 데이터 형식(DTO)</td><td>입력→추가 질문→판정→근거·경고 화면</td><td>송채영(상태 의미), 김지혜(API)</td><td><span class="badge done">✓ 고객 서버 첫 화면(<code>/</code>)</span></td></tr>
+                  <tr><td><a href="../../app/static/admin.html"><code>admin.html/js</code></a></td><td>운영 사건 기록·대기열·검색목록 상태</td><td>관리자 검수·상태·조항검색 화면(UI)</td><td>김지혜</td><td><span class="badge done">✓ 관리자 서버 첫 화면(<code>/</code>)</span></td></tr>
+                  <tr><td><a href="../../app/static/mypage.html"><code>mypage.html/js</code></a></td><td>인증·얼굴 API 상태</td><td>로그인·선택 2차 인증 UI</td><td>김지혜(API), 모델 담당 합의 필요</td><td><span class="badge done">✓ UI 구현</span></td></tr>
+                  <tr><td><a href="../../app/static/common.js"><code>common.js</code></a> · <a href="../../app/static/style.css"><code>style.css</code></a></td><td>공통 로그인 확인·브랜드·접근성</td><td>공통 표시·사용자 조작 동작</td><td>김지혜(인증)</td><td><span class="badge done">✓ 공통 화면 자산</span></td></tr>
+                  <tr><td><a href="../../scripts/capture_screenshots_customer.py"><code>scripts/capture_*.py</code></a> · <a href="../../tests/test_static_ui.py"><code>tests/test_static_ui.py</code></a></td><td>실행 서버·화면 상태</td><td>화면 캡처 증빙·화면 코드가 망가지지 않는지 자동 재검사</td><td>중앙 QA 담당 합의 필요</td><td><span class="badge partial">△ 자동 재검사 + 사람 확인 필요</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="three-col">
+              <div class="mini"><h4>구현 완료</h4><ul><li>보험정보·질병분류코드(KCD) 입력과 판정 호출</li><li>적용 약관·조항·쪽·원문 인용으로 이어지는 근거 사슬</li><li>판단 보류·조건부·면책 상태 구분</li><li>관리자·마이페이지 화면</li></ul></div>
+              <div class="mini"><h4>남은 화면 검수</h4><ul><li>08 계약 v2에서 별도 <code>precheck.html</code>/<code>evidence.html</code> 대신 <code>insurance.html/js</code> 통합 화면을 정식 경로로 현행화함</li><li>HTML·스크립트 자동 검사는 보유함</li><li>최종 브라우저·모바일·키보드 눈검사는 아직 필요함</li><li>2026-08-25 인앱 브라우저 연결을 시도했으나 제공된 브라우저 세션이 없어 실제 화면 확인은 보류함</li></ul></div>
+              <div class="mini"><h4>제외 범위</h4><ul><li>“전문가 확인 필요(<code>needs_expert</code>)”를 “보장 안 됨”으로 바꾸면 안 됨</li><li>경고(warnings)·근거를 숨기면 안 됨</li><li>화면 동작 코드(JS)에서 판정 결과를 다시 만들면 안 됨</li><li>얼굴·음성 모델 품질 책임은 미배정</li></ul></div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="unassigned" aria-labelledby="unassigned-title">
+      <h2 id="unassigned-title">3. 실명 담당이 없는 3개 트랙 — 합의 전 임의 배정 금지</h2>
+      <div class="track-grid">
+        <article class="track">
+          <h3>① 데이터 수집·전처리</h3>
+          <p><span class="badge neutral">— 주 담당 합의 필요</span></p>
+          <p><strong>주요 경로</strong></p>
+          <ul>
+            <li><a href="../../scripts/crawl/"><code>scripts/crawl/**</code></a></li>
+            <li><a href="../../scripts/extract/"><code>scripts/extract/**</code></a></li>
+            <li><a href="../../scripts/confirm/"><code>scripts/confirm/**</code></a> · <a href="../../scripts/identify/"><code>identify/**</code></a></li>
+            <li>사진 속 글자를 읽는 기술(OCR)·표 관련 <a href="../../scripts/eval/"><code>scripts/eval/**</code></a></li>
+            <li><a href="../../config/accepted_extraction.json"><code>config/accepted_extraction.json</code></a> · 승인된 추출 정보와 확정 문서 목록</li>
+            <li><a href="../../config/preprocess_quality_preregistration.json"><code>preprocess_quality_preregistration.json</code></a> · 다음 작업 전에 품질 기준을 먼저 적는 문서와 그 검증기</li>
+          </ul>
+          <p><strong>현황:</strong> 중복을 구분하는 원본 전자지문(SHA) 1,703개를 수집했고, 그중 판정 대상 문서 1,367개에서 조항 등장 위치 204,098개와 사람이 승인한 추출 정보 850개를 만들었다. 문장 절단·표 셀 연결 결함(D6)은 일부러 고장 낸 시험까지 통과했다. 다만 S7 작업 전에 D4 품질 기준을 미리 등록하지 않았으므로 “지나간 결과에 소급 적용할 수 없음(<code>not_eligible_retroactively</code>)” 상태다. 다음 세대용 기준 목록·전자지문·검증기는 준비했지만, 사람이 확인할 D5 표본과 합격 수치를 확정하기 전에는 안전하게 중단한다.</p>
+          <p><strong>필수 공동 승인:</strong> 서유현(검색목록 입력), 송채영(판정에 미치는 영향), 김지혜(DB 저장).</p>
+        </article>
+        <article class="track">
+          <h3>② 전체 품질검사(QA)·운영 버전 승인</h3>
+          <p><span class="badge neutral">— 릴리스 관리자 합의 필요</span></p>
+          <p><strong>주요 경로</strong></p>
+          <ul>
+            <li><a href="../../app/core/release.py"><code>app/core/release.py</code></a></li>
+            <li><a href="../../tests/conftest.py"><code>tests/conftest.py</code></a> · <a href="../../tests/requirements_matrix.yaml"><code>requirements_matrix.yaml</code></a></li>
+            <li><a href="../../tests/test_arch.py"><code>test_arch.py</code></a> · 보안·운영 버전 계약 시험</li>
+            <li><a href="../../scripts/verify/"><code>scripts/verify/**</code></a> · <a href="../../scripts/ops/verify_release.py"><code>verify_release.py</code></a></li>
+            <li><a href="../../.github/"><code>.github/**</code></a></li>
+          </ul>
+          <p><strong>현황:</strong> 기능별 자동시험은 있지만, 최종적으로 “이 버전을 사용자에게 공개해도 된다”고 승인할 한 사람은 아직 합의되지 않았다. 2026-08-24에 오래된 자료 적재·쇼핑몰 검색·고객문의 분류 코드는 <a href="../../legacy/README.md"><code>legacy/v14</code>~<code>v20</code></a> 압축 파일로 보존한 뒤 현재 실행 위치에서 치웠고, 설치 목록은 업무별 6개 묶음으로 나눴다. 즉, 필요하면 별도 공간에서 옛 기능을 복원할 수 있지만 현재 보험 서비스가 실수로 불러오지는 않는다.</p>
+          <p><strong>원칙:</strong> 각 기능 담당자는 자기 기능을 시험하고, 중앙 품질 담당자는 기능 사이 연결·전체 재검사·실제 사용 버전 승인을 책임지도록 따로 지정한다.</p>
+        </article>
+        <article class="track">
+          <h3>③ 얼굴·음성·로컬 모델</h3>
+          <p><span class="badge neutral">— 모델 품질 담당 합의 필요</span></p>
+          <p><strong>주요 경로</strong></p>
+          <ul>
+            <li><a href="../../app/ml/"><code>app/ml/**</code></a></li>
+            <li><a href="../../app/services/face_service.py"><code>app/services/face_service.py</code></a></li>
+            <li><a href="../../app/routers/face.py"><code>app/routers/face.py</code></a> · <a href="../../app/routers/voice.py"><code>voice.py</code></a></li>
+            <li><a href="../../scripts/fetch_face_model.py"><code>fetch_face_model.py</code></a> · 개인 PC에서 실행하는 모델 서버</li>
+          </ul>
+          <p><strong>경계:</strong> 김지혜는 서버 API·보안·파일 크기 제한, 최연우는 화면 표시까지 맡을 수 있다. 얼굴 비교(AdaFace), 얼굴 찾기(RetinaFace), 실제 사람인지 확인하는 라이브니스, 음성을 글로/글을 음성으로 바꾸는 STT/TTS의 품질 승인자는 계약에 없다.</p>
+          <p><strong>대기:</strong> 어느 점수부터 같은 사람으로 볼지(threshold), 사진·영상 속임수를 막는 검사(PAD), 딥페이크 대응은 시험용 구현과 분리해 책임자를 지정해야 한다.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="matrix" aria-labelledby="matrix-title">
+      <div class="panel">
+        <h2 id="matrix-title">4. 공동 승인 매트릭스</h2>
+        <p>아래 파일은 한 사람의 폴더 안에 있어 보여도 변경 영향이 다른 역할까지 넘어간다. 주 소유자 승인만으로 끝내지 않는다.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>경계 파일별 필수 승인자</caption>
+            <thead><tr><th scope="col">경계 파일</th><th scope="col">주 소유</th><th scope="col">필수 공동 승인</th><th scope="col">확인할 계약</th><th scope="col">실패하면 생기는 일</th></tr></thead>
+            <tbody>
+              <tr><td><a href="../../app/core/domain/citation_guard.py"><code>citation_guard.py</code></a></td><td>송채영 ↔ 정재희 공동</td><td>AI 판정 + 에이전트</td><td>답변이 밝힌 인용·원문 문구·후보가 여러 개인 경우·근거 0개</td><td>틀린 인용이 통과하거나 정상 답변을 필요 이상으로 막음</td></tr>
+              <tr><td><a href="../../app/workflow/precheck_graph.py"><code>precheck_graph.py</code></a></td><td>정재희</td><td>송채영, 서유현</td><td>판정 결과는 바꾸지 않기·근거 묶음·재시도 최대 2회</td><td>작업 흐름이 판정을 바꾸거나 다른 약관 버전을 다시 검색함</td></tr>
+              <tr><td><a href="../../app/routers/precheck.py"><code>routers/precheck.py</code></a></td><td>김지혜</td><td>송채영; 에이전트 보호 경로는 정재희</td><td>정상 판단 보류(200) / 잘못된 입력(422) / 서버 장애(503)</td><td>근거가 없는 상황과 서버가 고장 난 상황이 똑같이 보임</td></tr>
+              <tr><td><a href="../../db/postgres/pgvector_clause_index.py"><code>pgvector_clause_index.py</code></a></td><td>서유현(검색 의미)</td><td>김지혜(DB·운영)</td><td>숫자 표현 길이·자료 버전·문장 분할·검색 범위·DB 검색문</td><td>서로 호환되지 않는 검색 숫자를 섞거나 운영 DB 표와 코드가 어긋남</td></tr>
+              <tr><td><a href="../../app/core/release.py"><code>release.py</code></a> + <a href="../../config/accepted_extraction.json"><code>accepted_extraction.json</code></a></td><td>릴리스 관리자 합의 필요</td><td>데이터 + 서유현 + 송채영 + 김지혜</td><td>문서·추출 결과·숫자 표현·승인 정보가 같은 버전인지 확인</td><td>한 요청에 서로 다른 세대의 약관 조항과 검색 숫자가 섞임</td></tr>
+              <tr><td><a href="../../app/composition.py"><code>app/composition.py</code></a></td><td>김지혜(부품 조립)</td><td>바뀌는 기능 담당자</td><td>업무 규칙과 외부 연결 부품의 방향·저장소 선택</td><td>웹 주소마다 다른 구현을 골라 결과가 서로 달라짐</td></tr>
+              <tr><td><a href="../../app/schemas/precheck.py"><code>schemas/precheck.py</code></a></td><td>김지혜(주고받는 데이터 형식)</td><td>송채영(의미), 최연우(표시)</td><td>허용 상태값·판단 보류·경고·인용 자료</td><td>화면이 “판단 보류”를 “보장 안 됨”으로 오해함</td></tr>
+              <tr><td><a href="../../app/auth/agent_client.py"><code>auth/agent_client.py</code></a> + 에이전트 DB 표 변경</td><td>정재희(기능)</td><td>김지혜(DB·보안)</td><td>허용 범위·키 전자지문·호출량·중복 요청 방지·덧붙이기만 가능한 감사 기록</td><td>외부 에이전트가 권한을 우회하거나 민감한 원문을 저장함</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="lookup" aria-labelledby="lookup-title">
+      <div class="panel">
+        <h2 id="lookup-title">5. 파일을 바꾸려면 누구에게 연락하는가</h2>
+        <div class="filterbar" aria-label="담당자 조회 필터">
+          <label for="ownerFilter">담당자 또는 트랙
+            <select id="ownerFilter">
+              <option value="all">전체 보기</option>
+              <option value="송채영">송채영</option>
+              <option value="김지혜">김지혜</option>
+              <option value="서유현">서유현</option>
+              <option value="정재희">정재희</option>
+              <option value="최연우">최연우</option>
+              <option value="합의 필요">합의 필요</option>
+            </select>
+          </label>
+          <button type="button" id="resetFilter">필터 초기화</button>
+          <span id="filterStatus" class="fine" aria-live="polite"></span>
+        </div>
+        <div class="table-wrap">
+          <table id="lookupTable">
+            <caption>변경 유형 → 첫 연락 담당 → 공동 검토자</caption>
+            <thead><tr><th scope="col">바꾸려는 것</th><th scope="col">대표 경로</th><th scope="col">첫 연락</th><th scope="col">반드시 함께</th><th scope="col">책임 종료점</th></tr></thead>
+            <tbody>
+              <tr data-owners="송채영"><td>면책·예외·기권 규칙</td><td><code>core/usecases/precheck.py</code></td><td><strong>송채영</strong></td><td>API 변화면 김지혜, graph 변화면 정재희</td><td><code>PrecheckOutcome</code></td></tr>
+              <tr data-owners="서유현"><td>청킹·임베딩·검색 거리·리랭킹</td><td><code>scripts/index/**</code>, <code>pgvector_clause_index.py</code></td><td><strong>서유현</strong></td><td>DB는 김지혜, 판정 근거 형식은 송채영</td><td>근거 후보·provenance</td></tr>
+              <tr data-owners="정재희"><td>LangGraph 분기·재시도·MCP 도구</td><td><code>app/workflow/**</code>, <code>app/mcp/**</code></td><td><strong>정재희</strong></td><td>송채영·서유현·김지혜</td><td>검증된 호출 흐름</td></tr>
+              <tr data-owners="김지혜"><td>DDL·repository·권한·감사·readiness</td><td><code>db/**</code>, <code>app/auth/**</code>, <code>app/obs/**</code></td><td><strong>김지혜</strong></td><td>영향 받는 도메인 담당</td><td>트랜잭션·HTTP·운영 신호</td></tr>
+              <tr data-owners="최연우"><td>고객·관리자·마이페이지 화면</td><td><code>app/static/**</code></td><td><strong>최연우</strong></td><td>문구 의미는 송채영, API는 김지혜</td><td>사용자가 보는 상태·근거</td></tr>
+              <tr data-owners="송채영 정재희"><td>인용 검증</td><td><code>citation_guard.py</code></td><td><strong>송채영·정재희</strong></td><td>검색 handle 변화면 서유현</td><td>독립 원문 대조 결과</td></tr>
+              <tr data-owners="합의 필요 서유현 송채영 김지혜"><td>수집·PDF·OCR·표·승인 facts</td><td><code>scripts/crawl/**</code>, <code>scripts/extract/**</code></td><td><strong>담당 합의 필요</strong></td><td>서유현·송채영·김지혜</td><td>불변 manifest·승인 후보</td></tr>
+              <tr data-owners="합의 필요 송채영 김지혜 서유현"><td>serving release 승격</td><td><code>accepted_extraction.json</code></td><td><strong>릴리스 관리자 합의 필요</strong></td><td>데이터·AI1·AI2·Backend</td><td>원자적 release 포인터</td></tr>
+              <tr data-owners="합의 필요 김지혜 최연우"><td>얼굴·음성 모델/threshold</td><td><code>app/ml/**</code></td><td><strong>모델 담당 합의 필요</strong></td><td>김지혜(API), 최연우(UI)</td><td>모델 품질·운영 한계</td></tr>
+              <tr data-owners="합의 필요"><td>전체 회귀·CI·품질 게이트</td><td><code>tests/**</code>, <code>.github/**</code></td><td><strong>중앙 QA 합의 필요</strong></td><td>각 feature 담당</td><td>릴리스 가능/차단 판정</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="waiting" aria-labelledby="waiting-title">
+      <div class="panel">
+        <h2 id="waiting-title">6. 저장소 안에서 대신 끝낼 수 없는 일</h2>
+        <div class="three-col">
+          <div class="mini">
+            <h4>사람 판단 대기</h4>
+            <ul>
+              <li>문서 종류별로 골고루 뽑은 D5 표본과 조항 시작·끝 위치의 정밀도(P)·재현율(R)·균형점수(F1) 정답표</li>
+              <li>법률자료 114건·근거 240개의 자동 대조 이후, 법률 전문가의 최종 승인</li>
+              <li>확정 문서 잔여 모호·불일치 건의 최종 선택</li>
+              <li>자기부담금·장해지급률 후보의 원문 승인</li>
+              <li>전체 품질검사(QA)·운영 버전 승인·데이터의 실명 책임자 지정</li>
+            </ul>
+          </div>
+          <div class="mini">
+            <h4>운영 비밀·인프라 대기</h4>
+            <ul>
+              <li>보험/관리자 데이터베이스 접속 주소 묶음(<code>INSURANCE_PG_DSN</code> 등)</li>
+              <li>운영 서버 원격 접속(SSH)·계정/권한·복제본과 원본의 차이 0 확인</li>
+              <li>문제 발생 시 이전 버전으로 되돌리는 연습과 백업 복원 증거</li>
+              <li>원격 에이전트의 인터넷 주소(DNS)·통신 암호화(TLS)·방화벽(WAF)·접속키 전달</li>
+              <li>고성능 그래픽 장치(GPU)를 확보한 뒤, 학습에 쓰지 않은 시험셋과 “기존보다 나쁘지 않음” 평가 실행</li>
+            </ul>
+          </div>
+          <div class="mini">
+            <h4>남은 품질·승인 입력</h4>
+            <ul>
+              <li>D4는 S7 결과가 나오기 전에 품질 기준을 미리 등록하지 못한 절차상 결함이다. 이미 끝난 결과에 소급하지 않고 다음 세대부터 먼저 등록한다.</li>
+              <li>D5 문서 종류별 사람 표본·부록을 놓치지 않는 비율·조항 시작/끝 위치의 P·R·F1 확인</li>
+              <li>Qwen3-Embedding-4B 경량화(4bit) 모델의 현행 검색 순위 재측정과, 문서 표현이 증거보다 강하지 않은지 사람 검수</li>
+              <li>실제 운영 DB 접속 정보로 엄격한 공개 전 검사, 원본/복제본 차이 0, 이전 버전 복귀 연습</li>
+              <li>전처리·전체 품질검사·얼굴/음성 모델의 실명 책임자 합의</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="verify" aria-labelledby="verify-title">
+      <div class="panel">
+        <h2 id="verify-title">7. 인계받은 사람이 먼저 돌릴 검증</h2>
+        <p>아래 명령은 개발자가 담당 범위가 깨지지 않았는지 자동으로 다시 확인할 때 쓴다. 실제 DB 접속 정보·GPU 장비·사람 정답표가 없으면 일부 검사가 “건너뜀(skip)” 또는 “중단”으로 끝나는 것이 정상이다. 실행하지 못한 검사를 성공했다고 보고하면 안 된다.</p>
+        <pre><code># 현재 사용자 답변에 연결된 승인 버전과 문서 수 확인
+python -c "from app.core import release; r=release.current(); r.ensure_ready(); print(r.release_id, r.document_count)"
+
+# 전처리 포장 명세서와 전·후 단계(S5↔S6)가 서로 맞는지 확인
+python -m scripts.extract.build_manifest --schema s6 --verify
+python -m scripts.eval.consistency_check --selftest
+
+# 문장이 잘리거나 표의 다른 칸이 잘못 붙는 D6 문제가 다시 생기지 않았는지 확인
+python -m pytest tests/test_table_d6_regressions.py -q -p no:randomly -W ignore
+
+# 판정·인용·에이전트가 서로의 책임을 침범하지 않는지 확인
+python -m pytest tests/test_kcd.py tests/test_precheck_verify.py tests/test_citation_guard.py tests/test_graph.py tests/test_mcp_parity.py -q -p no:randomly -W ignore
+
+# 검색자료와 실제 공개 버전이 같은 세대인지 확인
+python -m pytest tests/test_clause_search.py tests/test_index_release_match.py tests/test_release_single_source.py -q -p no:randomly -W ignore
+
+# 운영 DB 공개 전 점검 - 접속 비밀이 없으면 안전하게 중단하는 것이 정상
+python -m scripts.ops.verify_release --strict --json
+
+# 법률자료의 구조·출처 확인 - 통과해도 법률 전문가 승인까지 끝났다는 뜻은 아님
+python -m scripts.legal.verify_normalized</code></pre>
+        <div class="divider"></div>
+        <p class="fine">
+          참고 근거:
+          <a href="../reports/2026-08-04_S7.1_OCR승격_최종결과.md">S7.1 OCR 승격 결과</a> ·
+          <a href="../reports/2026-08-14_S6_D6_회귀fixture_착수보고.md">D6 fixture 보고</a> ·
+          <a href="17_LangGraph_인용검증_MCP_결함수정_의뢰.md">인용·MCP 결함 의뢰</a> ·
+          <a href="../reports/2026-08-14_레거시격리_릴리스원장_PG운영재검증_완료보고.md">릴리스·PG 재검증</a>.
+        </p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p><strong>인계 원칙:</strong> 폴더가 같다고 한 사람의 코드가 아니다. From → To 경계를 넘는 순간 다음 담당자를 부른다.</p>
+      <p class="fine">Self-contained HTML · 외부 CDN/폰트/스크립트 없음 · 인쇄 및 모바일 대응 · 2026-08-24</p>
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      const select = document.getElementById('ownerFilter');
+      const reset = document.getElementById('resetFilter');
+      const rows = Array.from(document.querySelectorAll('#lookupTable tbody tr'));
+      const status = document.getElementById('filterStatus');
+
+      function applyFilter() {
+        const value = select.value;
+        let shown = 0;
+        rows.forEach((row) => {
+          const visible = value === 'all' || (row.dataset.owners || '').includes(value);
+          row.hidden = !visible;
+          if (visible) shown += 1;
+        });
+        status.textContent = value === 'all'
+          ? `전체 ${shown}개 항목 표시`
+          : `${value}: ${shown}개 관련 항목 표시`;
+      }
+
+      select.addEventListener('change', applyFilter);
+      reset.addEventListener('click', () => {
+        select.value = 'all';
+        applyFilter();
+        select.focus();
+      });
+      applyFilter();
+    })();
+  </script>
+</body>
+</html>

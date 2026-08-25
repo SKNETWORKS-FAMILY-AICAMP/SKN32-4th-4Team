@@ -1,0 +1,648 @@
+<meta charset="utf-8">
+<title>올바른 보험비서 — 테이블·컬럼 사전</title>
+<style>
+  :root{--fg:#1a1a1a;--mut:#666;--bd:#e2e2e2;--bg:#fff;--acc:#0b5fa5;--warn:#a54b0b;--dang:#a51b1b;--ok:#0b7a3b;--card:#fafafa}
+  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--mut:#a0a0a0;--bd:#333;--bg:#161616;--acc:#6fb3ec;--warn:#e8a05a;--dang:#e88;--ok:#6cc48f;--card:#1e1e1e}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;font:15px/1.7 -apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:var(--fg);background:var(--bg)}
+  main{max-width:1000px;margin:0 auto}
+  h1{font-size:1.7rem;font-weight:600;margin:0 0 .3rem}
+  h2{font-size:1.3rem;font-weight:600;margin:3rem 0 .8rem;padding-bottom:.4rem;border-bottom:2px solid var(--bd)}
+  h3{font-size:1.02rem;font-weight:600;margin:2rem 0 .4rem;font-family:ui-monospace,Consolas,monospace}
+  h3 .ko{font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;font-weight:400;color:var(--mut);font-size:.88rem;margin-left:.5rem}
+  .sub{color:var(--mut);margin:0 0 1.5rem}
+  table{border-collapse:collapse;width:100%;max-width:100%;margin:.5rem 0 1.2rem;font-size:.875rem;table-layout:auto}
+  th,td{border:1px solid var(--bd);padding:.42rem .6rem;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+  th{background:var(--card);font-weight:600}
+  td:nth-child(1){font-family:ui-monospace,Consolas,monospace}
+  td:nth-child(2){font-family:ui-monospace,Consolas,monospace;color:var(--mut);font-size:.82rem}
+  /* 좁은 폭에서도 페이지 자체가 가로로 밀리지 않게 한다 — 넓은 것은 각자 안에서 스크롤한다 */
+  @media(min-width:820px){td:nth-child(1){white-space:nowrap}}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  code{background:var(--card);padding:.08rem .32rem;border-radius:3px;font:12.5px ui-monospace,Consolas,monospace}
+  pre{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:.9rem 1rem;overflow-x:auto;font:12.5px/1.55 ui-monospace,Consolas,monospace}
+  .box{border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:0 6px 6px 0;padding:.7rem 1rem;margin:1rem 0;background:var(--card);font-size:.9rem}
+  .box.w{border-left-color:var(--warn)} .box.d{border-left-color:var(--dang)} .box.k{border-left-color:var(--ok)}
+  .box b{display:block;margin-bottom:.25rem}
+  .scroll{overflow-x:auto}
+  .k{color:var(--dang);font-weight:600}
+  .fk{color:var(--acc)}
+  .req{color:var(--warn)}
+  .cnt{color:var(--mut);font-weight:400;font-size:.82rem;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif}
+  .toc{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:.9rem 1.1rem;font-size:.88rem}
+  .toc a{color:var(--acc);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .toc div{margin:.25rem 0}
+  ul{padding-left:1.2rem;font-size:.9rem} li{margin:.2rem 0}
+</style>
+
+<main>
+
+<h1>테이블 · 컬럼 사전</h1>
+<p class="sub">올바른 보험비서 · 2026-08-02 · PostgreSQL 16 + pgvector · 27테이블 + 뷰 1</p>
+
+<div class="box">
+  <b>이 문서는 사전(reference)이다</b>
+  "왜 이렇게 설계했나"와 실측 근거는 <code>erd_briefing.html</code>,
+  결정 이력은 <code>02_ERD_및_스키마.md</code>에 있다. 여기는 <b style="display:inline">무엇이 있는지</b>만 적는다.
+</div>
+
+<div class="toc">
+  <div><b>core</b> (12) —
+    <a href="#insurer">insurer</a> ·
+    <a href="#confirmed_policy_document">confirmed_policy_document</a> ·
+    <a href="#document_extraction">document_extraction</a> ·
+    <a href="#product">product</a> ·
+    <a href="#policy_version">policy_version</a> ·
+    <a href="#clause_content">clause_content</a> ·
+    <a href="#policy_clause">policy_clause</a> ·
+    <a href="#clause_chunk">clause_chunk</a> ·
+    <a href="#clause_code_rule">clause_code_rule</a> ·
+    <a href="#clause_reference">clause_reference</a> ·
+    <a href="#kcd_version">kcd_version</a> ·
+    <a href="#kcd_code">kcd_code</a>
+  </div>
+  <div><b>app</b> (10+뷰1) —
+    <a href="#subject">subject</a> ·
+    <a href="#policy_holding">policy_holding</a> ·
+    <a href="#case">case</a> ·
+    <a href="#case_diagnosis">case_diagnosis</a> ·
+    <a href="#assessment">assessment</a> ·
+    <a href="#assessment_clause_citation">assessment_clause_citation</a> ·
+    <a href="#claim">claim</a> ·
+    <a href="#outcome">outcome</a> ·
+    <a href="#evidence">evidence</a> ·
+    <a href="#evidence_verification">evidence_verification</a> ·
+    <a href="#cohort_stats">cohort_stats</a>
+  </div>
+  <div><b>ops</b> (5) —
+    <a href="#agent_client">agent_client</a> ·
+    <a href="#interaction_log">interaction_log</a> ·
+    <a href="#consent">consent</a> ·
+    <a href="#admin_user">admin_user</a> ·
+    <a href="#audit_log">audit_log</a>
+  </div>
+</div>
+
+<h2>표기</h2>
+<table>
+<tr><th>표기</th><th>뜻</th></tr>
+<tr><td><span class="k">PK</span> / <span class="k">UQ</span></td><td>기본키 / 유일 제약</td></tr>
+<tr><td><span class="fk">FK</span></td><td>외래키. <code>→ 대상테이블</code></td></tr>
+<tr><td><span class="req">NN</span></td><td><code>NOT NULL</code></td></tr>
+<tr><td>★</td><td>이 컬럼이 없거나 틀리면 <b>판정의 정직성이 무너지는</b> 자리</td></tr>
+</table>
+
+<h2>전체 ERD</h2>
+<div class="scroll">
+<pre>┌─ core ─────────────────────────────────────────────────────────────────────────┐
+│                                                                                │
+│  INSURER ──&lt; PRODUCT ──&lt; POLICY_VERSION &gt;──★필수FK── CONFIRMED_POLICY_DOCUMENT  │
+│                               │                              │                 │
+│                               │                              └──&lt; DOCUMENT_    │
+│                               │                                    EXTRACTION  │
+│                               │                                        │       │
+│                               └────(비정규화)──── POLICY_CLAUSE &lt;───────┘       │
+│                                                    │      │                    │
+│                            CLAUSE_CONTENT ─────────┘      └──&lt; CLAUSE_REFERENCE│
+│                              │         │                       (자기참조)      │
+│                     CLAUSE_CHUNK    CLAUSE_CODE_RULE                           │
+│                      (임베딩)         (KCD 범위)                                │
+│                                                                                │
+│  KCD_VERSION ──&lt; KCD_CODE                                                      │
+└────────────────────────────────────────────────────────────────────────────────┘
+        △                    △                          △
+        │ policy_version_id  │ kcd_code_id              │ policy_clause_id
+        │                    │                          │  ★citeable=true 만
+┌─ app ─┼────────────────────┼──────────────────────────┼────────────────────────┐
+│       │                    │                          │                        │
+│  SUBJECT ──&lt; POLICY_HOLDING ──&lt; CASE ──&lt; CASE_DIAGNOSIS                        │
+│     │                             │                                            │
+│     │                             ├──&lt; ASSESSMENT ──&lt; ASSESSMENT_CLAUSE_CITATION│
+│     │                             │                                            │
+│     │                             └──o CLAIM ──o OUTCOME ──&lt; EVIDENCE          │
+│     │                                                          │               │
+│     │                                              EVIDENCE_VERIFICATION o──┘   │
+│     │                                                   │  ★검증 게이트        │
+│     │                                            COHORT_STATS (VIEW)            │
+└─────┼──────────────────────────────────────────────────────────────────────────┘
+      │ subject_id
+┌─ ops┼──────────────────────────────────────────────────────────────────────────┐
+│  CONSENT ┘        ADMIN_USER ──&lt; (identified_by · verified_by · audit)         │
+│  AGENT_CLIENT ──&lt; INTERACTION_LOG      AUDIT_LOG                                │
+│                   ✗ core 로 가는 FK 없음 = 판정 근거가 될 수 없다               │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+  ||--o{  1:N 필수     ||--o|  1:0..1     &gt;──  N:1</pre>
+</div>
+
+<div class="box k">
+  <b>이 그림에서 읽어야 할 세 가지</b>
+  <ul>
+    <li><code>POLICY_VERSION → CONFIRMED_POLICY_DOCUMENT</code> 가 <b style="display:inline">NOT NULL FK</b> —
+        확정 안 된 문서로는 약관 버전 행 자체를 만들 수 없다</li>
+    <li><code>ASSESSMENT_CLAUSE_CITATION</code> 의 FK가 <b style="display:inline"><code>POLICY_CLAUSE</code> 하나뿐</b> —
+        로그·FAQ·외부 보고는 넣을 수 없다</li>
+    <li><code>INTERACTION_LOG</code> 에 <b style="display:inline">core 로 가는 FK가 없다</b> —
+        상호작용 기록이 판정 근거로 승격되지 않는다</li>
+  </ul>
+</div>
+
+<h2>core — 참조 데이터 (12)</h2>
+
+<h3 id="insurer">core.insurer <span class="ko">보험사 · 12행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td>불변 대리키</td></tr>
+<tr><td>slug</td><td>text <span class="k">UQ</span> <span class="req">NN</span></td><td>경로·크롤러가 쓰는 이름. <code>nhlife</code>, <code>samsungfire</code></td></tr>
+<tr><td>legal_name</td><td>text <span class="req">NN</span></td><td>법인명</td></tr>
+<tr><td>display_name</td><td>text <span class="req">NN</span></td><td>화면 표기. <code>NH농협생명</code></td></tr>
+<tr><td>kind</td><td>enum <span class="req">NN</span></td><td><code>general</code>(손보) / <code>life</code>(생보). ★삼성화재와 삼성생명이 같은 코드가 되지 않게</td></tr>
+<tr><td>active</td><td>bool <span class="req">NN</span></td><td>현재 수집 대상인가</td></tr>
+</table>
+
+<h3 id="confirmed_policy_document">core.confirmed_policy_document <span class="ko">확정된 원본 문서 · 1,703행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>sha256</td><td>text <span class="k">UQ</span> <span class="req">NN</span></td><td>파일 실체. 같은 바이트는 한 줄</td></tr>
+<tr><td>source_url</td><td>text <span class="req">NN</span></td><td>★어디서 받았나. 근거 보존</td></tr>
+<tr><td>fetched_at</td><td>timestamptz <span class="req">NN</span></td><td>수집 시각</td></tr>
+<tr><td>http_status</td><td>int</td><td>수집 당시 응답 코드</td></tr>
+<tr><td>bytes / pages</td><td>bigint / int</td><td>파일 크기 · 쪽수</td></tr>
+<tr><td>insurer_id</td><td>uuid <span class="fk">FK</span> → insurer</td><td></td></tr>
+<tr><td>identified_by</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → ops.admin_user</td><td>★<b>확정에는 반드시 사람 이름이 붙는다</b></td></tr>
+<tr><td>identified_at</td><td>timestamptz <span class="req">NN</span></td><td>확정 시각</td></tr>
+<tr><td>identification_note</td><td>text</td><td>무엇을 근거로 확정했나</td></tr>
+<tr><td>license</td><td>text</td><td>이용 조건</td></tr>
+<tr><td>redistributable</td><td>bool <span class="req">NN</span></td><td>기본 <code>false</code>. 약관 원문은 저작물이다</td></tr>
+</table>
+<div class="box k">
+  <b>★<code>status</code> 컬럼이 없다</b>
+  <b style="display:inline">행이 존재하는 것</b>이 곧 "확정됨"이다. 상태 enum은 <code>UPDATE</code> 한 줄로 뚫린다.
+  확정되지 않은 문서는 여기 들어오지 못하고 검수 큐(<code>data/catalog/*_document_manifest.jsonl</code>)에 남는다.
+</div>
+
+<h3 id="document_extraction">core.document_extraction <span class="ko">추출 실행 하나 · 1,367행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>confirmed_document_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span></td><td>어느 파일을 돌렸나</td></tr>
+<tr><td>extractor</td><td>text <span class="req">NN</span></td><td><code>pymupdf/1.28.0</code></td></tr>
+<tr><td>schema_version</td><td>int <span class="req">NN</span></td><td>산출물 스키마. 현재 <code>4</code></td></tr>
+<tr><td>parse_status</td><td>enum <span class="req">NN</span></td><td>★<code>ok</code> / <code>suspect</code> / <code>failed</code>. <b>기본값 없음 — 누락은 fail-closed</b></td></tr>
+<tr><td>failure_reason</td><td>text</td><td><code>no_clause_heads</code> 등. <b>상태가 아니라 이유다</b></td></tr>
+<tr><td>approval</td><td>enum <span class="req">NN</span></td><td><code>candidate</code> / <code>accepted</code> / <code>rejected</code>. ★문서당 <code>accepted</code>는 1건</td></tr>
+<tr><td>numbering</td><td>enum</td><td><code>article</code>(제N조) / <code>numbered</code>(N.) / <code>none</code> / <code>ambiguous</code></td></tr>
+<tr><td>parse_warnings</td><td>jsonb</td><td><code>[{code, detail}]</code>. 조항 길이 초과·조항 수 부족 등</td></tr>
+<tr><td>toc_pages</td><td>int[]</td><td>목차로 판정해 본문에서 제외한 쪽</td></tr>
+<tr><td>toc_page_count</td><td>int <span class="req">NN</span></td><td>집계용</td></tr>
+<tr><td>unmapped_glyph_count</td><td>int <span class="req">NN</span></td><td>★매핑 못 한 글리프 수. <b>이 값이 크면 "제N항"을 특정할 수 없다</b></td></tr>
+<tr><td>unmapped_glyphs</td><td>jsonb</td><td><code>{"U+F02BA": 1207, …}</code> — 지우지 않고 센다</td></tr>
+<tr><td>control_removed_count</td><td>int <span class="req">NN</span></td><td>제거한 제어문자 수</td></tr>
+<tr><td>pua_removed_count</td><td>int <span class="req">NN</span></td><td>제거한 사용자영역 문자 수</td></tr>
+<tr><td>extracted_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+</table>
+<p><code class="k">UNIQUE (confirmed_document_id, schema_version, extractor)</code> — 같은 조합을 두 번 돌리지 않는다.</p>
+<div class="box w">
+  <b>왜 스칼라를 컬럼으로 빼나</b>
+  jsonb 한 덩어리에 넣으면 "감사 신호를 남겼다"는 말은 되지만 <b style="display:inline">세어서 보고하는 쿼리가 안 걸린다.</b>
+</div>
+
+<h3 id="product">core.product <span class="ko">상품 · 약 1,179행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td>★불변 대리키. 업무 코드를 PK로 쓰지 않는다</td></tr>
+<tr><td>insurer_id</td><td>uuid <span class="fk">FK</span> → insurer</td><td></td></tr>
+<tr><td>product_code</td><td>text <span class="k">UQ</span></td><td>사람이 보는 업무 코드. ★<b>여기에 세대를 박지 않는다</b></td></tr>
+<tr><td>name</td><td>text <span class="req">NN</span></td><td>상품명</td></tr>
+<tr><td>line</td><td>enum <span class="req">NN</span></td><td><code>standard</code> / <code>senior</code>(노후) / <code>simplified_issue</code>(유병력자) / <code>travel</code> / <code>unknown</code></td></tr>
+</table>
+<p>★<code>unknown</code>이 enum 멤버다. 라인을 모르는 문서가 실제로 있고, 지어내서 채우지 않는다.</p>
+
+<h3 id="policy_version">core.policy_version <span class="ko">약관 버전 — 이 모델의 중심 · ≥1,703행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>confirmed_document_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span></td><td>★<b>이 FK가 핵심.</b> 확정 문서 없이는 행을 만들 수 없다. <b>UNIQUE 아님</b> — 한 파일을 여러 버전이 공유한다</td></tr>
+<tr><td>product_id</td><td>uuid <span class="fk">FK</span> → product</td><td></td></tr>
+<tr><td>version_label</td><td>text <span class="req">NN</span></td><td><code>UNIQUE (product_id, version_label)</code></td></tr>
+<tr><td>variant</td><td>enum <b>NULL</b></td><td><code>standard</code> / <code>contract_conversion</code> / <code>conversion_resume</code> / <code>child_conversion</code>. ★<b>파생 규칙 미정 — 지금은 NULL</b></td></tr>
+<tr><td>valid_from / valid_to</td><td>date</td><td>★<b>적용 구간.</b> 사고일·가입일을 여기 맞춘다</td></tr>
+<tr><td>sales_from / sales_to</td><td>date</td><td>판매 기간</td></tr>
+<tr><td>date_confidence</td><td>enum <span class="req">NN</span></td><td>★<code>exact</code> / <code>month</code> / <code>unknown</code>. <b><code>unknown</code>은 판정에 쓰지 않는다</b></td></tr>
+<tr><td>generation</td><td>smallint <b>NULL</b></td><td>★1~5세대. <b>모르면 비운다.</b> 숫자로 채우면 그 오류가 판정까지 간다</td></tr>
+<tr><td>generation_source</td><td>text</td><td><code>sale_start</code> / <code>product_code</code> / <code>manual</code> / <code>""</code></td></tr>
+<tr><td>generation_confidence</td><td>enum</td><td><code>exact</code> / <code>month</code> / <code>unknown</code></td></tr>
+</table>
+
+<h3 id="clause_content">core.clause_content <span class="ko">조항 내용 — 같은 내용은 한 줄 · 46,022행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>content_hash</td><td>char(64) <span class="k">PK</span></td><td>★<code>sha256(hash_version ‖ norm(title) ‖ norm(content))</code>. <b>section·조 번호를 넣지 않는다</b></td></tr>
+<tr><td>hash_version</td><td>text <span class="req">NN</span></td><td>정규화 규칙 버전. 규칙이 바뀌면 재현되게</td></tr>
+<tr><td>title</td><td>text <span class="req">NN</span></td><td>조 제목. 없으면 빈 문자열</td></tr>
+<tr><td>body</td><td>text <span class="req">NN</span></td><td>조 머리를 뗀 본문</td></tr>
+<tr><td>char_length</td><td>int <span class="req">NN</span></td><td>글자 수</td></tr>
+</table>
+<p>여기에 임베딩(<code>clause_chunk</code>)·KCD 범위(<code>clause_code_rule</code>)가 붙는다. 조항의 64.3%가 중복이라 한 번만 계산한다.</p>
+
+<h3 id="policy_clause">core.policy_clause <span class="ko">조항 수록 — ★인용이 가리키는 곳 · 129,086행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td>★<b>인용은 이 ID를 가리킨다</b></td></tr>
+<tr><td>document_extraction_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span></td><td>어느 추출 실행에서 나왔나</td></tr>
+<tr><td>policy_version_id</td><td>uuid <span class="fk">FK</span></td><td>비정규화. 검색 단계에서 버전 게이트가 걸리게</td></tr>
+<tr><td>ordinal</td><td>int <span class="req">NN</span></td><td>★문서 내 조항 순서(0-based). <code>UNIQUE (document_extraction_id, ordinal)</code></td></tr>
+<tr><td>content_hash</td><td>char(64) <span class="fk">FK</span> → clause_content</td><td></td></tr>
+<tr><td>qualified_no</td><td>text</td><td><code>보통약관/제9조</code>. ★<b>표시·검색 전용. 유일하지 않다</b></td></tr>
+<tr><td>section / clause_no</td><td>text</td><td>부 이름 · 조 번호. 역시 유일하지 않다</td></tr>
+<tr><td>kind</td><td>enum <span class="req">NN</span></td><td><code>coverage</code> / <code>exclusion</code> / <code>definition</code> / <code>limit</code> / <code>unclassified</code></td></tr>
+<tr><td>citeable</td><td>bool <span class="req">NN</span></td><td>★판정 근거로 쓸 수 있나. <code>page_fallback</code>은 <code>false</code></td></tr>
+<tr><td>locator</td><td>jsonb <span class="req">NN</span></td><td><code>{page_from, page_to, char_offset}</code></td></tr>
+<tr><td>paragraph_count</td><td>int</td><td>항 개수</td></tr>
+<tr><td>table_count / tables_on_pages</td><td>int / jsonb</td><td>★보장 한도·자기부담금이 표에 있다</td></tr>
+</table>
+<pre><span class="k">UNIQUE (document_extraction_id, ordinal)</span>   ← 유일성
+<span class="k">UNIQUE (id, citeable)</span>                      ← 인용 테이블의 복합 FK 대상</pre>
+<div class="box d">
+  <b>★<code>qualified_no</code>로 UPSERT 하지 않는다</b>
+  특별약관마다 조 번호가 1부터 다시 시작해 <b style="display:inline">문서 내 중복이 31,085건</b>이다.
+  <code>kind</code>는 v4 산출물에 분류 필드가 없어 <b style="display:inline"><code>unclassified</code>로 넣고</b> 후처리로 채운다.
+</div>
+
+<h3 id="clause_chunk">core.clause_chunk <span class="ko">검색 전용 청크 · 약 122,512행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>content_hash</td><td>char(64) <span class="fk">FK</span> → clause_content</td><td>내용 종속이라 중복 임베딩을 피한다</td></tr>
+<tr><td>policy_version_id</td><td>uuid <span class="fk">FK</span></td><td>비정규화. ★<b>신선도·식별 게이트가 검색 단계에서 걸려야 한다</b></td></tr>
+<tr><td>chunk_index</td><td>int <span class="req">NN</span></td><td>조항 내 순번</td></tr>
+<tr><td>text</td><td>text <span class="req">NN</span></td><td>청크 본문</td></tr>
+<tr><td>embedding</td><td>vector(N)</td><td>★차원 미확정 — 모델 확정 후 고정. 바꾸면 인덱스 전량 재구축</td></tr>
+<tr><td>token_count</td><td>int</td><td></td></tr>
+<tr><td>chunk_type</td><td>text <span class="req">NN</span></td><td><code>clause</code> / <code>page_fallback</code>. 후자는 <b>검색엔 쓰되 판정 근거로는 안 쓴다</b></td></tr>
+</table>
+
+<h3 id="clause_code_rule">core.clause_code_rule <span class="ko">약관에서 뽑은 KCD 범위 · 74,503행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>content_hash</td><td>char(64) <span class="fk">FK</span> → clause_content</td><td>★내용에 붙는다. 같은 조항이면 같은 규칙이다</td></tr>
+<tr><td>code_letter</td><td>char(1) <span class="req">NN</span></td><td>분류문자. <code>F</code>, <code>E</code>, <code>N</code>…</td></tr>
+<tr><td>code_lo / code_hi</td><td>int <span class="req">NN</span></td><td>범위 양끝의 숫자부. <code>F04∼F99</code> → 4, 99</td></tr>
+<tr><td>code_lo_sub / code_hi_sub</td><td>int <b>NULL</b></td><td>세분류. ★<code>NULL</code>이면 3자리 범위(<code>F04</code>에 <code>F04.1</code>이 든다)</td></tr>
+<tr><td>kind</td><td>enum <span class="req">NN</span></td><td><code>exclude</code>(면책) / <code>exception</code>(면책의 예외=보상) / <code>mention</code>(★성격 불명)</td></tr>
+<tr><td>quote</td><td>text <span class="req">NN</span></td><td>근거가 된 원문 조각</td></tr>
+<tr><td>source_span</td><td>jsonb</td><td>본문에서의 위치</td></tr>
+<tr><td>extractor_version</td><td>text <span class="req">NN</span></td><td>★규칙이 바뀌었을 때 과거 판정이 재현되게</td></tr>
+<tr><td>confidence</td><td>numeric</td><td>추출 신뢰도</td></tr>
+</table>
+<div class="box d">
+  <b>★<code>kind='mention'</code>은 판정 근거로 쓰지 않는다</b>
+  문맥에 면책 문구도 예외 문구도 없어 <b style="display:inline">성격을 단정하지 못한 것</b>이다(전체의 39%).
+  <code>exclude</code>로 뭉개면 "보장 안 된다"고 잘못 말하게 된다.
+  <br>인덱스는 부분 인덱스가 맞다 — <code>(code_letter, code_lo, code_hi) WHERE kind &lt;&gt; 'mention'</code>.
+</div>
+<p><b><code>kcd_code</code>와 다르다.</b> <code>kcd_code</code>는 국가 표준 분류표고, 이건 <b>우리가 약관에서 추출한 파생물</b>이다.</p>
+
+<h3 id="clause_reference">core.clause_reference <span class="ko">준용(조문 상호참조) · 185,061행</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>src_clause_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → policy_clause</td><td>참조를 한 조항</td></tr>
+<tr><td>raw_text</td><td>text <span class="req">NN</span></td><td>본문에 적힌 그대로. <code>보통약관 제9조</code></td></tr>
+<tr><td>target_clause_id</td><td>uuid <b>NULL</b> <span class="fk">FK</span> → policy_clause</td><td>★<b>NULL이 다수다.</b> NOT NULL로 두면 절반 이상을 못 넣는다</td></tr>
+<tr><td>resolution_status</td><td>enum <span class="req">NN</span></td><td><code>resolved</code> 37.6% / ★<code>ambiguous</code> 52.6% / <code>external</code> 9.9% / <code>unresolved</code></td></tr>
+<tr><td>resolver_version</td><td>text <span class="req">NN</span></td><td>해소기 버전</td></tr>
+</table>
+<div class="box w">
+  <b>★순회는 <code>resolved</code>만 따라간다</b>
+  본문에 <code>"보통약관"</code>·<code>"특별약관"</code> 수식어가 붙은 참조는 2.4%뿐이고,
+  나머지는 그냥 <code>"제9조"</code>라고만 쓴다. 같은 문서에 <code>제9조</code>가 여럿이면 특정할 수 없다.
+  <b style="display:inline">모호한 것은 따라가지 않고 기권한다.</b>
+</div>
+
+<h3 id="kcd_version">core.kcd_version <span class="ko">KCD 차수 · 0행 (적재원 없음)</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>label</td><td>text <span class="req">NN</span></td><td><code>제8차</code> 등</td></tr>
+<tr><td>effective_from / effective_to</td><td>date</td><td>시행 구간</td></tr>
+</table>
+
+<h3 id="kcd_code">core.kcd_code <span class="ko">KCD 코드 · 0행 (적재원 없음)</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>kcd_version_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → kcd_version</td><td>★<b>어느 차수의 코드인가</b></td></tr>
+<tr><td>code</td><td>text <span class="req">NN</span></td><td><code>J20.9</code>. <code>UNIQUE (kcd_version_id, code)</code></td></tr>
+<tr><td>name_ko</td><td>text <span class="req">NN</span></td><td>한글 병명</td></tr>
+</table>
+<div class="box w">
+  <b>⚠ 저장소에 KCD 분류표 데이터가 없다</b>
+  두 테이블은 지금 <b style="display:inline">적재원이 없는 테이블</b>이고 <code>app.case_diagnosis.kcd_code_id</code>도 채울 수 없다.
+  면책 판정은 <code>clause_code_rule</code>로 되지만, <b style="display:inline">코드 입력 검증·코드명 표시</b>가 안 된다.
+</div>
+
+<h2>app — 케이스 · 판정 · 사실 (10 + 뷰 1)</h2>
+<div class="box w">
+  <b>두 DB에 같은 DDL로 만들어진다</b>
+  <code>insurance_real</code>(실제·PII 있음) / <code>insurance_demo</code>(합성·PII 없음).
+  ✗ 두 DB를 UNION 하는 뷰·쿼리·롤을 만들지 않는다. ✗ <code>is_synthetic</code> 컬럼으로 대체하지 않는다.
+  <br>현재 <code>insurance_real</code>은 <b style="display:inline">전 테이블 0행</b>이다 — 실제 지급결과를 받을 경로가 아직 없다.
+</div>
+
+<h3 id="subject">app.subject <span class="ko">피보험자</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>age_band</td><td>text</td><td>★<b>생년월일을 저장하지 않는다.</b> <code>(생년월일+질병코드+보험사)</code>면 개인이 특정된다</td></tr>
+<tr><td>sex</td><td>text</td><td></td></tr>
+<tr><td>retention_until</td><td>date</td><td>보존기한</td></tr>
+<tr><td>deleted_at</td><td>timestamptz</td><td>삭제 요청 시각</td></tr>
+</table>
+
+<h3 id="policy_holding">app.policy_holding <span class="ko">가입 계약</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>subject_id</td><td>uuid <span class="fk">FK</span> → subject</td><td></td></tr>
+<tr><td>product_id</td><td>uuid <span class="fk">FK</span> → core.product</td><td></td></tr>
+<tr><td>policy_version_id</td><td>uuid <span class="fk">FK</span> → core.policy_version</td><td>★<b>적용 약관 확정의 결과가 여기 저장된다.</b> 판정마다 다시 추론하지 않는다</td></tr>
+<tr><td>enrolled_on</td><td>date <span class="req">NN</span></td><td>가입일</td></tr>
+</table>
+
+<h3 id="case">app.case <span class="ko">사전검토 요청</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>subject_id</td><td>uuid <b>NULL</b> <span class="fk">FK</span></td><td>★1회 익명 분석은 <code>NULL</code></td></tr>
+<tr><td>policy_holding_id</td><td>uuid <span class="fk">FK</span> → policy_holding</td><td>★<b>직접 연결한다.</b> subject 경유로 조인하면 계약이 여럿일 때 결과가 잘못 배분된다</td></tr>
+<tr><td>incident_on</td><td>date <span class="req">NN</span></td><td>사고일 — 약관 버전 매칭의 기준</td></tr>
+<tr><td>channel</td><td>enum <span class="req">NN</span></td><td><code>web</code> / <code>agent</code></td></tr>
+<tr><td>agent_client_id</td><td>uuid <b>NULL</b> <span class="fk">FK</span> → ops.agent_client</td><td>에이전트 경로면</td></tr>
+<tr><td>created_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+</table>
+
+<h3 id="case_diagnosis">app.case_diagnosis <span class="ko">요청에 딸린 질병기호</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>case_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → case</td><td></td></tr>
+<tr><td>kcd_code_id</td><td>uuid <span class="fk">FK</span> → core.kcd_code</td><td>⚠ 대상 테이블이 아직 0행이다</td></tr>
+<tr><td>ocr_confidence</td><td>numeric</td><td>OCR 신뢰도</td></tr>
+<tr><td>user_corrected</td><td>bool <span class="req">NN</span></td><td>★<b>OCR이 뽑은 값과 사용자가 승인한 값을 구분</b>한다</td></tr>
+<tr><td>corrected_at</td><td>timestamptz</td><td></td></tr>
+</table>
+<p>질병명 → 코드는 <b>1:N이라 자동 확정하지 않는다</b> — 후보 N개 제시 → 사용자 선택 → 그 코드로 판정.</p>
+
+<h3 id="assessment">app.assessment <span class="ko">판정 결과</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>case_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → case</td><td></td></tr>
+<tr><td>policy_version_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → core.policy_version</td><td>★<b>어느 약관으로 판정했는지가 결과의 일부다</b></td></tr>
+<tr><td>verdict</td><td>enum <span class="req">NN</span></td><td><code>likely_covered</code> / <code>unlikely</code> / <code>needs_documents</code> / <code>needs_expert</code> — ★<b>4단. 이진 금지</b></td></tr>
+<tr><td>abstained</td><td>bool <span class="req">NN</span></td><td>★<b>안 한 것과 못 한 것을 구분</b>한다</td></tr>
+<tr><td>abstain_reason</td><td>text</td><td>기권 사유 코드</td></tr>
+<tr><td>missing_documents</td><td>jsonb</td><td>무엇이 더 있어야 판정이 되나</td></tr>
+<tr><td>rule_engine_version</td><td>text <span class="req">NN</span></td><td>★규칙이 바뀌어도 과거 판정이 재현되게</td></tr>
+<tr><td>as_of</td><td>timestamptz <span class="req">NN</span></td><td>판정 시각</td></tr>
+</table>
+
+<h3 id="assessment_clause_citation">app.assessment_clause_citation <span class="ko">★판정 근거 인용 — 가장 중요한 제약</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>assessment_id</td><td>uuid <span class="fk">FK</span> → assessment</td><td><code>PRIMARY KEY (assessment_id, policy_clause_id)</code></td></tr>
+<tr><td>policy_clause_id</td><td>uuid</td><td>★<b>FK가 이것뿐이다</b></td></tr>
+<tr><td>citeable</td><td>bool <span class="req">NN</span> CHECK(citeable)</td><td>★복합 FK용. <code>page_fallback</code> 조항은 참조 자체가 불가능하다</td></tr>
+<tr><td>role</td><td>text <span class="req">NN</span></td><td><code>ground</code>(보상 근거) / <code>exclusion</code>(면책 근거)</td></tr>
+<tr><td>content_hash</td><td>char(64) <span class="req">NN</span></td><td>인용 당시 내용 스냅샷 — 감사 재현용</td></tr>
+<tr><td>quote</td><td>text <span class="req">NN</span></td><td>실제로 인용한 문장</td></tr>
+<tr><td>locator</td><td>jsonb <span class="req">NN</span></td><td>쪽수 등. 사용자가 원문을 확인할 수 있게</td></tr>
+</table>
+<pre>FOREIGN KEY (policy_clause_id, citeable)
+    REFERENCES core.policy_clause (id, citeable)</pre>
+<div class="box k">
+  <b>"그러지 말자"는 규칙이 아니라 넣을 수 없는 구조다</b>
+  상호작용 로그·FAQ·다른 사용자의 답변을 근거로 넣으려면 <b style="display:inline">FK가 없어서 못 넣는다.</b>
+  <br>승격 경로: 지식갭 → 사람 검수 → 문서화 → <code>core</code> 등재 → <b style="display:inline">그때부터 인용 가능</b>.
+</div>
+
+<h3 id="claim">app.claim <span class="ko">청구 — 사실</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>case_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → case</td><td></td></tr>
+<tr><td>claimed_on</td><td>date <span class="req">NN</span></td><td>청구일</td></tr>
+<tr><td>claimed_amount</td><td>numeric</td><td>청구액</td></tr>
+</table>
+
+<h3 id="outcome">app.outcome <span class="ko">지급 결과 — 사실</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>claim_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → claim</td><td>1:1</td></tr>
+<tr><td>decision</td><td>enum <span class="req">NN</span></td><td><code>approved</code> / <code>partial</code> / <code>denied</code></td></tr>
+<tr><td>paid_amount</td><td>numeric</td><td>지급액</td></tr>
+<tr><td>decided_on</td><td>date <span class="req">NN</span></td><td>결정일</td></tr>
+</table>
+<p>★<code>status</code>·<code>verification_method</code> 컬럼이 <b>없다.</b> 검증 사실은 아래가 <b>행의 존재</b>로 표현한다.</p>
+
+<h3 id="evidence">app.evidence <span class="ko">증빙</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>outcome_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → outcome</td><td></td></tr>
+<tr><td>doc_type</td><td>text <span class="req">NN</span></td><td>지급명세서 등</td></tr>
+<tr><td>sha256</td><td>text <span class="req">NN</span></td><td>파일 실체</td></tr>
+<tr><td>stored_ref</td><td>text</td><td>실제 저장소 위치. ★저장소 미정</td></tr>
+<tr><td>submitted_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+<tr><td>consistency_checked_at</td><td>timestamptz</td><td>정합성 검사 시각</td></tr>
+<tr><td>consistency_result</td><td>jsonb</td><td>★<b>정합성은 컬럼이다</b> — 재검사될 수 있는 계산 결과</td></tr>
+</table>
+
+<h3 id="evidence_verification">app.evidence_verification <span class="ko">★검증 사실 — append-only</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>evidence_id</td><td>uuid <span class="k">UQ</span> <span class="req">NN</span> <span class="fk">FK</span> → evidence</td><td>증빙당 1행</td></tr>
+<tr><td>result</td><td>enum <span class="req">NN</span></td><td><code>verified</code> / <code>rejected</code></td></tr>
+<tr><td>verification_method</td><td>text <span class="req">NN</span></td><td>★<b>검증됐다고 주장하려면 방법을 밝힌다.</b> 빈칸 불가</td></tr>
+<tr><td>verified_by</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → ops.admin_user</td><td>누가 책임졌나</td></tr>
+<tr><td>verified_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+<tr><td>reason</td><td>text</td><td>판단 근거</td></tr>
+</table>
+<pre>submitted ──정합성 검사──▶ consistent ──발행처 확인 / 관리자 교차검증──▶ verified
+    │        (evidence 컬럼)              │      (evidence_verification 행 생성)      │
+    └──────────────────────────────────────┴──────── 실패 ──────────────────────▶ rejected</pre>
+<div class="box k">
+  <b>★<code>consistent</code>는 컬럼이고 <code>verified</code>는 행이다</b>
+  이 비대칭이 의도된 것이다 — 정합성은 재검사될 수 있는 계산 결과지만,
+  <b style="display:inline">검증은 사람이 책임진 불변 사실</b>이다. <code>UPDATE</code>·<code>DELETE</code> 금지.
+</div>
+
+<h3 id="cohort_stats">app.cohort_stats <span class="ko">(VIEW) 코호트 집계 — 검증 게이트</span></h3>
+<table>
+<tr><th>출력 컬럼</th><th>설명</th></tr>
+<tr><td>kcd_code_id</td><td>질병코드</td></tr>
+<tr><td>product_id</td><td>상품</td></tr>
+<tr><td>policy_version_id</td><td>★<b>그룹키에 반드시 있어야 한다</b> — 없으면 세대·개정판을 섞는다</td></tr>
+<tr><td>generation</td><td>세대</td></tr>
+<tr><td>n / approved_n / denied_n</td><td>표본 수 · 지급 · 거절</td></tr>
+<tr><td>data_source</td><td><code>verified_real</code> / <code>synthetic</code>. ★<b>두 뷰를 UNION 하지 않는다</b></td></tr>
+</table>
+<pre>WHERE EXISTS (                          -- ★★게이트
+  SELECT 1 FROM app.evidence e
+  JOIN app.evidence_verification v ON v.evidence_id = e.id
+  WHERE e.outcome_id = o.id AND v.result = 'verified'
+)</pre>
+<p>API가 응답에 덧붙이는 것(뷰가 아니라 애플리케이션):
+<code>min_sample_met</code> · <code>warnings[]</code> · <code>as_of</code> · <code>match_level</code>.
+<b><code>warnings[]</code> 상시 포함</b>: 생존 편향(사후 보정 불가) · 소표본 · 에이전트 간 중복 미검출.</p>
+
+<h2>ops — 운영 · 거버넌스 (5)</h2>
+
+<h3 id="agent_client">ops.agent_client <span class="ko">외부 에이전트 클라이언트</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td>★불변. 인증정보와 <b>분리</b>한다</td></tr>
+<tr><td>name</td><td>text <span class="req">NN</span></td><td></td></tr>
+<tr><td>api_key_hash</td><td>text <span class="req">NN</span></td><td>교체 가능. 유출 시 이것만 갈아끼운다</td></tr>
+<tr><td>rate_limit_rpm</td><td>int <span class="req">NN</span></td><td>★에이전트는 사람보다 수백 배 빠르게 호출한다</td></tr>
+<tr><td>status</td><td>text <span class="req">NN</span></td><td></td></tr>
+<tr><td>created_at / disabled_at</td><td>timestamptz</td><td></td></tr>
+</table>
+<p>★<b>고객 식별자로 쓰지 않는다.</b> 인증 주체(누가 호출했나)와 데이터 주체(누구의 데이터인가)는 다르다.</p>
+
+<h3 id="interaction_log">ops.interaction_log <span class="ko">⚠ 상호작용 기록 — core FK 없음</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>channel</td><td>text <span class="req">NN</span></td><td></td></tr>
+<tr><td>agent_client_id</td><td>uuid <b>NULL</b> <span class="fk">FK</span> → agent_client</td><td></td></tr>
+<tr><td>source_event_id</td><td>text</td><td>★<code>UNIQUE (agent_client_id, source_event_id)</code> — 중복 제출 차단</td></tr>
+<tr><td>actor_kind</td><td>enum <span class="req">NN</span></td><td><code>declared</code> / <code>inferred</code> / <code>unknown</code></td></tr>
+<tr><td>question_masked</td><td>text</td><td>개인정보 마스킹한 질의</td></tr>
+<tr><td>answer</td><td>text</td><td></td></tr>
+<tr><td>abstained</td><td>bool <span class="req">NN</span></td><td>기권했나</td></tr>
+<tr><td>gap_status</td><td>enum</td><td><code>open</code> / <code>reviewed</code> / <code>promoted</code> / <code>rejected</code> — 지식갭 처리 상태</td></tr>
+<tr><td>promoted_ref</td><td>text</td><td>승격된 경우 대상</td></tr>
+<tr><td>created_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+</table>
+<div class="box d">
+  <b>★이 테이블에는 <code>core</code>로 가는 FK가 없다</b>
+  = <b style="display:inline">판정 근거가 될 수 없다.</b> "나중에 이것도 근거로 쓰자"가 구조적으로 막힌다.
+  <br>★중복 방지의 <b style="display:inline">1차 방어선은 ID가 아니라 <code>evidence_verification</code></b>이다 —
+  중복 제출이 들어와도 검수를 통과해야 <code>n</code>이 오른다. UNIQUE 제약은 보조수단이다.
+</div>
+
+<h3 id="consent">ops.consent <span class="ko">동의</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>subject_id</td><td>uuid <span class="req">NN</span> <span class="fk">FK</span> → app.subject</td><td>★<b>단방향.</b> <code>subject.consent_id</code>를 두지 않는다</td></tr>
+<tr><td>purpose</td><td>text <span class="req">NN</span></td><td>목적별로 행이 생긴다</td></tr>
+<tr><td>policy_version</td><td>text <span class="req">NN</span></td><td>동의서 버전</td></tr>
+<tr><td>granted_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+<tr><td>revoked_at</td><td>timestamptz</td><td>철회 시각</td></tr>
+<tr><td>retention_until</td><td>date</td><td>보존기한</td></tr>
+</table>
+
+<h3 id="admin_user">ops.admin_user <span class="ko">관리자</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td>★<code>confirmed_policy_document.identified_by</code>와 <code>evidence_verification.verified_by</code>가 이걸 가리킨다</td></tr>
+<tr><td>login</td><td>text <span class="k">UQ</span> <span class="req">NN</span></td><td></td></tr>
+<tr><td>role</td><td>text <span class="req">NN</span></td><td>★관리자 승격은 <b>CLI 전용, UI 버튼 없음</b></td></tr>
+</table>
+
+<h3 id="audit_log">ops.audit_log <span class="ko">★감사 로그 — append-only</span></h3>
+<table>
+<tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+<tr><td>id</td><td>uuid <span class="k">PK</span></td><td></td></tr>
+<tr><td>actor_id / actor_type</td><td>uuid / text</td><td>누가</td></tr>
+<tr><td>action</td><td>text <span class="req">NN</span></td><td>무엇을 했나</td></tr>
+<tr><td>target_table / target_id</td><td>text / uuid</td><td>무엇에</td></tr>
+<tr><td>before / after</td><td>jsonb</td><td>⚠ <b>민감정보가 남을 수 있다</b> — redaction·보존기간을 첫 행 받기 전에 정한다</td></tr>
+<tr><td>created_at</td><td>timestamptz <span class="req">NN</span></td><td></td></tr>
+</table>
+<p>★앱 롤에 <code>UPDATE</code>·<code>DELETE</code> 권한을 주지 않는다.
+<b>누가 언제 무엇을 <code>verified</code>로 바꿨나</b> — 이 서비스에서 가장 중요한 로그다.</p>
+
+<h2>enum 값 한눈에</h2>
+<div class="scroll">
+<table>
+<tr><th>테이블.컬럼</th><th>값</th></tr>
+<tr><td>insurer.kind</td><td><code>general</code> · <code>life</code></td></tr>
+<tr><td>document_extraction.parse_status</td><td><code>ok</code> · <code>suspect</code> · <code>failed</code></td></tr>
+<tr><td>document_extraction.approval</td><td><code>candidate</code> · <code>accepted</code> · <code>rejected</code></td></tr>
+<tr><td>document_extraction.numbering</td><td><code>article</code> · <code>numbered</code> · <code>none</code> · <code>ambiguous</code></td></tr>
+<tr><td>product.line</td><td><code>standard</code> · <code>senior</code> · <code>simplified_issue</code> · <code>travel</code> · <code>unknown</code></td></tr>
+<tr><td>policy_version.variant</td><td><code>standard</code> · <code>contract_conversion</code> · <code>conversion_resume</code> · <code>child_conversion</code> (NULL 허용)</td></tr>
+<tr><td>policy_version.date_confidence<br>· generation_confidence</td><td><code>exact</code> · <code>month</code> · <code>unknown</code></td></tr>
+<tr><td>policy_clause.kind</td><td><code>coverage</code> · <code>exclusion</code> · <code>definition</code> · <code>limit</code> · <code>unclassified</code></td></tr>
+<tr><td>clause_chunk.chunk_type</td><td><code>clause</code> · <code>page_fallback</code></td></tr>
+<tr><td>clause_code_rule.kind</td><td><code>exclude</code> · <code>exception</code> · <code>mention</code></td></tr>
+<tr><td>clause_reference.resolution_status</td><td><code>resolved</code> · <code>ambiguous</code> · <code>external</code> · <code>unresolved</code></td></tr>
+<tr><td>assessment.verdict</td><td><code>likely_covered</code> · <code>unlikely</code> · <code>needs_documents</code> · <code>needs_expert</code></td></tr>
+<tr><td>assessment_clause_citation.role</td><td><code>ground</code> · <code>exclusion</code></td></tr>
+<tr><td>outcome.decision</td><td><code>approved</code> · <code>partial</code> · <code>denied</code></td></tr>
+<tr><td>evidence_verification.result</td><td><code>verified</code> · <code>rejected</code></td></tr>
+<tr><td>case.channel</td><td><code>web</code> · <code>agent</code></td></tr>
+<tr><td>interaction_log.actor_kind</td><td><code>declared</code> · <code>inferred</code> · <code>unknown</code></td></tr>
+<tr><td>interaction_log.gap_status</td><td><code>open</code> · <code>reviewed</code> · <code>promoted</code> · <code>rejected</code></td></tr>
+<tr><td>cohort_stats.data_source</td><td><code>verified_real</code> · <code>synthetic</code></td></tr>
+</table>
+</div>
+
+<h2>제약 한눈에</h2>
+<div class="scroll">
+<table>
+<tr><th>제약</th><th>무엇을 막나</th></tr>
+<tr><td><code>policy_version.confirmed_document_id NOT NULL FK</code></td><td>확인 안 된 약관으로 판정하는 것. <b>UNIQUE는 걸지 않는다</b> — 1파일:N버전</td></tr>
+<tr><td><code>confirmed_policy_document.identified_by NOT NULL FK</code></td><td>사람 이름 없이 문서가 확정되는 것</td></tr>
+<tr><td><code>UNIQUE (document_extraction_id, ordinal)</code></td><td>조항 식별 충돌. <b><code>qualified_no</code>는 유일하지 않다</b></td></tr>
+<tr><td><code>UNIQUE (confirmed_document_id, schema_version, extractor)</code></td><td>같은 추출을 두 번 등록하는 것</td></tr>
+<tr><td>문서당 <code>approval='accepted'</code> 1건</td><td>어느 추출로 판정할지가 모호해지는 것</td></tr>
+<tr><td><code>FK (policy_clause_id, citeable) → policy_clause (id, citeable)</code> + <code>CHECK(citeable)</code></td><td><code>page_fallback</code> 조항을 판정 근거로 인용하는 것</td></tr>
+<tr><td><code>assessment_clause_citation</code>의 FK가 <code>policy_clause</code>뿐</td><td>로그·FAQ·외부 보고를 근거로 넣는 것</td></tr>
+<tr><td><code>evidence_verification.verification_method NOT NULL</code></td><td>"검증됨"만 있고 방법이 빈칸인 것</td></tr>
+<tr><td><code>evidence_verification</code> append-only</td><td>검증 사실이 나중에 바뀌는 것</td></tr>
+<tr><td><code>cohort_stats</code>의 <code>EXISTS</code> 게이트</td><td>검증 안 된 증빙이 통계에 드는 것</td></tr>
+<tr><td><code>cohort_stats</code> 그룹키에 <code>policy_version_id</code></td><td>세대·개정판을 섞어 집계하는 것</td></tr>
+<tr><td><code>UNIQUE (agent_client_id, source_event_id)</code></td><td>같은 에이전트의 중복 제출</td></tr>
+<tr><td><code>UNIQUE (kcd_version_id, code)</code></td><td>어느 차수의 코드인지 모호해지는 것</td></tr>
+<tr><td>DB 물리 분리 (real / demo)</td><td>실제와 합성이 한 쿼리에서 섞이는 것</td></tr>
+<tr><td><code>ops.interaction_log</code>에 core FK 없음</td><td>상호작용 기록이 판정 근거로 승격되는 것</td></tr>
+<tr><td>앱 롤에 <code>audit_log</code> UPDATE/DELETE 없음</td><td>감사 기록을 지우는 것</td></tr>
+</table>
+</div>
+
+<h2>지금 몇 행인가</h2>
+<table>
+<tr><th>테이블</th><th class="n">행수</th><th>비고</th></tr>
+<tr><td><code>core.insurer</code></td><td class="n">12</td><td>매니페스트는 13으로 센다 — <code>samsunglife</code> 정규화 필요</td></tr>
+<tr><td><code>core.confirmed_policy_document</code></td><td class="n">1,703</td><td>고유 sha256 기준. <b>확정된 것은 현재 0건</b></td></tr>
+<tr><td><code>core.document_extraction</code></td><td class="n">1,367</td><td>s4 산출물</td></tr>
+<tr><td><code>core.product</code></td><td class="n">~1,179</td><td></td></tr>
+<tr><td><code>core.policy_version</code></td><td class="n">≥1,703</td><td>1파일:N버전</td></tr>
+<tr><td><code>core.clause_content</code></td><td class="n">46,022</td><td></td></tr>
+<tr><td><code>core.policy_clause</code></td><td class="n">129,086</td><td><code>page_fallback</code> 439 별도</td></tr>
+<tr><td><code>core.clause_chunk</code></td><td class="n">~122,512</td><td>800자 청크 기준</td></tr>
+<tr><td><code>core.clause_code_rule</code></td><td class="n">74,503</td><td></td></tr>
+<tr><td><code>core.clause_reference</code></td><td class="n">185,061</td><td></td></tr>
+<tr><td><code>core.kcd_version</code> / <code>kcd_code</code></td><td class="n">0</td><td>⚠ 적재원이 저장소에 없다</td></tr>
+<tr><td><code>app.*</code> · <code>ops.*</code></td><td class="n">0</td><td><code>insurance_real</code>은 아직 비어 있다</td></tr>
+</table>
+
+<div class="box d">
+  <b>★적재 선행조건</b>
+  <code>policy_version.confirmed_document_id</code>가 NOT NULL FK이므로,
+  <b style="display:inline">확정 문서가 0건이면 조항도 0행</b>이다.
+  <code>세대 규칙셋 확정 → 매니페스트 확장 → 사람이 확정(identified_by) → 적재</code> 순서를 지킨다.
+  확정 절차를 우회하는 임시 경로를 만들지 않는다.
+</div>
+
+</main>
