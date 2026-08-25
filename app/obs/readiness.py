@@ -221,6 +221,10 @@ def check_readiness() -> dict[str, object]:
             getattr(settings, "AUTH_PERSISTENCE", "sqlite") == "postgres",
             getattr(settings, "PRECHECK_PERSISTENCE", "off") == "postgres",
             getattr(settings, "OUTCOME_PERSISTENCE", "file") == "postgres",
+            #: ★코호트 조회(app/adapters/cohort_stats.py)도 같은 PgInsuranceRepository
+            #:   DSN을 쓴다(db/postgres/pg_insurance_cohort_stats.py). 빠지면 이것만
+            #:   postgres인 배포가 "준비됨"으로 잘못 보고된다(코덱스 리뷰 지적).
+            getattr(settings, "VERIFIED_COHORT_STORE", "file") == "postgres",
         )
     )
     if insurance_pg_required:

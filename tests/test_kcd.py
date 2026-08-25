@@ -93,6 +93,16 @@ def test_성격을_모르는_코드는_mention_으로_둔다():
     assert all(m.kind == "mention" for m in ms)
 
 
+def test_코드_뒤_같은_문장의_면책_서술어도_인식한다():
+    ms = scan_clause("회사는 정신 및 행동장애(F04~F99)를 보상하지 않습니다.")
+    assert [m.kind for m in ms] == ["exclude"]
+
+
+def test_세분류_점은_문장끝으로_오인하지_않는다():
+    ms = scan_clause("요실금 N39.3은 보상하지 않습니다.")
+    assert [m.kind for m in ms] == ["exclude"]
+
+
 #: ★실제 약관에서 그대로 가져온 문장. 추출 아티팩트까지 포함한다.
 _실제_DB손보_1904 = (
     "②회사는 '한국표준질병사인분류'에 따른 다음의 입원의료비에 대해서는 보상하지 않 습니다. "

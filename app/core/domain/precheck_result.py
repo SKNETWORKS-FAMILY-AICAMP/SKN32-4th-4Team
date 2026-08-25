@@ -126,7 +126,19 @@ class AppliedPolicyInfo:
     sha256: str = ""
     date_confidence: str = "exact"
     generation_confidence: str = ""
-    parse_status: str = "ok"
+    #: 조항 구조화 상태. `"ok"` 가 아니면 판정 근거로 쓰지 않는다.
+    #:
+    #: ★`None` 은 **"모른다"** 다. `"ok"` 도 아니고 실패도 아니다 —
+    #:   `app/core/ports/precheck.py:143` 과 `eligibility.check()` 가 쓰는 규약과 같다.
+    #:   PG 조항 색인은 문서 파싱 상태를 저장하지 않아 실제로 `None` 이 온다
+    #:   (`db/postgres/pg_clause_store.py:241`).
+    #:
+    #: ★★2026-08-25 이전에는 `str` 이라 `None` 이 들어오면 **응답 직렬화가 터졌다** —
+    #:   `CLAUSE_STORE=pg` 로 켜면 `POST /v1/prechecks` 가 전부 500 이었다.
+    #:   "모른다"를 담을 자리가 없어서 정직한 값이 오류가 됐다.
+    #:   → `docs/reports/debugs/2026-08-25_1120_CLAUSE_STORE_pg로_켜면_판정API가_전부_500이다.md`
+    #:   ★`"ok"` 로 메우지 않는다. 그건 원래 고친 결함으로 되돌아가는 것이다.
+    parse_status: str | None = "ok"
 
 
 @dataclass(frozen=True)

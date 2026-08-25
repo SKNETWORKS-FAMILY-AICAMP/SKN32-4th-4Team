@@ -11,16 +11,20 @@ from app.core.config import get_settings
 
 def get_conn(dsn: str | None = None):
     """psycopg 연결 + pgvector 타입 등록. 연결 실패는 InfraError로 전파."""
-    import psycopg
     from pgvector.psycopg import register_vector
+    from db.postgres.pool import ConnectionLease, connection
 
     from app.core.errors import InfraError
 
     dsn = dsn or get_settings().PGVECTOR_DSN
     conn = None
     try:
-        conn = psycopg.connect(dsn, connect_timeout=5)
-        register_vector(conn)
+        conn = connection(dsn)
+        # pgvector performs a strict ``Connection`` type check.  Register on
+        # the raw checked-out connection while returning the lease so callers
+        # still return it to the shared pool on ``close``/context exit.
+        raw = conn.connection if isinstance(conn, ConnectionLease) else conn
+        register_vector(raw)
         return conn
     except Exception as exc:  # noqa: BLE001 - connection setup is one public boundary
         if conn is not None:

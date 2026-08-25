@@ -138,7 +138,8 @@
   }
   .control::placeholder { color: #aaa9a4; }
   .control:hover { border-color: #c9c9c3; }
-  .control:focus { border-color: #9b9b95; box-shadow: 0 0 0 4px rgba(21,21,19,.045); outline: none; }
+  .control:focus { border-color: #9b9b95; box-shadow: 0 0 0 4px rgba(21,21,19,.045); }
+  .control:focus-visible { outline: 3px solid rgba(21, 21, 19, .35); outline-offset: 2px; }
   select.control {
     appearance: none;
     padding-right: 44px;
@@ -333,7 +334,8 @@
     color: var(--ink);
   }
   .composer input::placeholder { color: #aaa9a4; }
-  .composer input:focus { border-color: #999992; outline: none; }
+  .composer input:focus { border-color: #999992; }
+  .composer input:focus-visible { outline: 3px solid rgba(21, 21, 19, .35); outline-offset: 2px; }
   .send-btn {
     width: 78px;
     min-height: 56px;
@@ -514,6 +516,11 @@
           <label for="enrolled">보험계약일시</label>
           <input class="control" id="enrolled" placeholder="예) 20260801" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" autocomplete="off" required>
         </div>
+        <div class="field date-wrap">
+          <label for="incident">진료(사고)일</label>
+          <input class="control" id="incident" placeholder="예) 20260815" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" autocomplete="off" required>
+          <p class="precheck-help">진료비 세부내역서에 적힌 실제 진료일을 입력하세요.</p>
+        </div>
 
         <div class="precheck-block">
           <p class="precheck-title"><strong>보장 여부 확인</strong></p>
@@ -623,6 +630,20 @@
       </div>
       <div class="row" style="margin-top:12px">
         <div><label for="obReason">보험사가 밝힌 사유 (선택)</label><input id="obReason" placeholder="예: 면책기간 미경과"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="obClaimed">청구일</label><input id="obClaimed" placeholder="예) 20260810" inputmode="numeric" maxlength="8" pattern="[0-9]{8}"></div>
+        <div><label for="obDecided">결정일</label><input id="obDecided" placeholder="예) 20260818" inputmode="numeric" maxlength="8" pattern="[0-9]{8}"></div>
+        <div><label for="obDocType">증거 종류</label>
+          <select id="obDocType">
+            <option value="claim_statement">진료비 영수증/세부내역서</option>
+            <option value="diagnosis">진단서</option>
+            <option value="other">기타</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><label for="obEvidence">증거 파일 (선택, PDF·JPG·PNG)</label><input id="obEvidence" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
       </div>
       <button class="ghost" id="obGo" type="button" style="margin-top:12px">제출하기</button>
       <div id="obOut" style="margin-top:12px"></div>

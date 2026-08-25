@@ -211,7 +211,13 @@ def stats(sha256: str) -> dict:
                 """
                 SELECT count(*) FILTER (WHERE c.h IS NOT NULL),
                        count(DISTINCT c.h),
-                       count(*)
+                       count(*),
+                       --: ★둘 다 NULL 을 무시한다. 그래서
+                       --:   variants=0 → 값이 하나도 없다(모름)
+                       --:   variants=1 → min() 이 그 값
+                       --:   variants>1 → 문서 안에서 값이 갈린다(아래에서 거부)
+                       count(DISTINCT o.parse_status),
+                       min(o.parse_status)
                 FROM policy_clause_occurrence o
                 LEFT JOIN LATERAL (
                     SELECT k.content_hash AS h FROM policy_clause_chunk k
@@ -223,11 +229,36 @@ def stats(sha256: str) -> dict:
                 """,
                 (ix.current_embed_model(), sha256, ix.current_generation()),
             )
-            usable, uniq, recorded = cur.fetchone()
+            usable, uniq, recorded, ps_variants, ps_value = cur.fetchone()
     except Exception as exc:  # noqa: BLE001
         raise InfraError(f"조항 현황을 읽지 못했습니다: {exc}") from exc
     if not recorded:
         raise InfraError(f"이 약관의 조항 기록이 없습니다: {sha256[:12]}")
+
+    #: ★★**PG 에도 그 값이 있었다(2026-08-25 정정).**
+    #:
+    #:   아래 주석은 "PG 에는 그 값이 없다"고 단정했는데 **틀렸다** —
+    #:   `policy_clause_occurrence.parse_status` 컬럼이 있고 활성 세대에는 채워져 있다.
+    #:   실측(mall_vec, 2026-08-25): s6 발생 210,733행 중 190,155행에 값이 있고,
+    #:   **문서 1,314건 전부**가 단일 값(`'ok'`)으로 일치한다 —
+    #:   값이 하나도 없는 문서 0건 · 값이 갈리는 문서 0건.
+    #:   (값이 비어 있는 20,578행은 임베딩이 없는 행이다. 세대 `s5-mixed` 는 전량 비어 있다.)
+    #:
+    #:   그동안 이걸 `None` 으로 고정한 탓에 **`CLAUSE_STORE=pg` 판정이 전건 기권**했다
+    #:   (게이트가 "파싱 상태를 모른다"로 모든 조항을 인용 불가로 처리).
+    #:   → `docs/reports/debugs/2026-08-25_1120_CLAUSE_STORE_pg로_켜면_판정API가_전부_500이다.md`
+    #:
+    #: ★그래도 **지어내지는 않는다**(§0). 값이 없으면 `None`(모름) 그대로 두고,
+    #:   한 문서 안에서 값이 **갈리면 고르지 않는다** — 그것도 "모름"이다.
+    #:   하나를 고르면 어느 쪽이 맞는지 확인한 적 없이 판정 근거가 된다.
+    if ps_variants == 1:
+        parse_status, note = ps_value, ""
+    elif ps_variants == 0:
+        parse_status, note = None, "이 세대의 색인에 문서 파싱 상태가 비어 있다(모름)"
+    else:
+        parse_status = None
+        note = f"문서 안에서 파싱 상태가 {ps_variants}가지로 갈린다 — 고르지 않는다(모름)"
+
     return {
         #: 조회 가능한 조항 수. `load_clauses()` 와 **같은 기준**이다.
         "clauses": usable,
@@ -235,12 +266,12 @@ def stats(sha256: str) -> dict:
         #: ★기록은 있으나 본문이 없는 것. 숨기지 않는다.
         "recorded_occurrences": recorded,
         "missing_bodies": recorded - usable,
-        #: ★★`parse_status: "ok"` 를 **지어내고 있었다**(코덱스 지적).
-        #:   PG 에는 그 값이 없다. 없는 것을 "ok" 로 채우면
-        #:   호출부가 "이 문서는 파싱됐다"고 믿는다 — 확인한 적이 없는데.
-        "parse_status": None,
-        "parse_status_note": "PG 색인은 문서 파싱 상태를 저장하지 않는다(모름)",
-        "eligibility_fields_stored": False,
+        #: ★한때 `"ok"` 를 **지어냈고**(코덱스 지적), 그 뒤엔 반대로 **항상 `None`** 이었다.
+        #:   둘 다 틀렸다 — 지금은 색인에 실제로 있는 값을 읽고, 없으면 없다고 한다(위 주석).
+        "parse_status": parse_status,
+        "parse_status_note": note,
+        #: 이 문서에 대해 게이트 값을 실제로 읽어 왔는가.
+        "eligibility_fields_stored": parse_status is not None,
         "source": "pg/index_a",
     }
 

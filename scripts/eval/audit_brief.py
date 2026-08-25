@@ -318,8 +318,13 @@ def check_generated(r: Report, doc: bytes) -> None:
         if cp.stderr:
             stderr = cp.stderr.decode("utf-8", errors="replace")
             r.bad("생성명령", f"{name} (`{command}`) stderr:\n{stderr}")
-        if found[encoded_name] != cp.stdout:
-            r.bad("생성영역", f"{name} 이 `{' '.join(args)}` stdout과 바이트 단위로 다릅니다")
+        # Git의 autocrlf나 편집기 때문에 Markdown은 LF/CRLF가 섞일 수 있다.
+        # 줄바꿈 표기만 통일한 뒤 비교하고, 그 밖의 공백·문자 차이는 그대로
+        # 실패시킨다. OS가 다른 기계에서도 같은 문서가 거짓 실패하지 않게 한다.
+        normalized_doc = found[encoded_name].replace(b"\r\n", b"\n")
+        normalized_stdout = cp.stdout.replace(b"\r\n", b"\n")
+        if normalized_doc != normalized_stdout:
+            r.bad("생성영역", f"{name} 이 `{' '.join(args)}` stdout과 내용 바이트가 다릅니다")
         else:
             r.good(f"생성영역 {name} 바이트 일치")
 
@@ -489,21 +494,45 @@ def check_claims(
         _expect_claim(r, f"{short} 벡터무변화 전후값", doc, expected)
 
     four_bit = [d for d in rows if d.get("dtype") == "4bit"]
-    origin_gpus = {str(d.get("gpu")) for d in four_bit}
-    probe_gpus = {str(d.get("probes_gpu")) for d in four_bit}
-    mismatches = {d.get("probes_gpu_matches_original") for d in four_bit}
-    gpu_sentence = re.search(
-        r"4bit 원 측정은[^\n.!?]*RTX 2000 Ada[^\n.!?]*재측정은[^\n.!?]*RTX 4070 SUPER[^\n.!?]*[.!?]",
-        doc,
-    )
-    if (not four_bit or not all("RTX 2000 Ada" in gpu for gpu in origin_gpus)
-            or not all("RTX 4070 SUPER" in gpu for gpu in probe_gpus)
-            or mismatches != {False}):
-        r.bad("조건", f"4bit GPU 조건 데이터가 예상과 다릅니다: 원본={origin_gpus}, 재측정={probe_gpus}, 일치={mismatches}")
-    elif not gpu_sentence:
-        r.bad("본문숫자", "4bit 원 측정/재측정 GPU 조건을 같은 문장에서 찾지 못했습니다")
+    # `probes_remeasured`가 있는 옛 파일은 순위 측정 뒤 탐침만 다른 실행으로
+    # 합친 결과다. 그 필드가 없는 현행 파일은 순위와 탐침을 한 실행에서 함께
+    # 측정했다. 둘을 전부 "RunPod 원 측정 + x600 탐침"으로 간주하면 새로 전체
+    # 재측정한 정상 결과를 오진한다.
+    merged_probe_rows = [
+        d for d in four_bit
+        if d.get("probes_remeasured") is True or "probes_gpu" in d
+    ]
+    full_run_rows = [d for d in four_bit if d not in merged_probe_rows]
+    gpu_errors: list[str] = []
+    for d in merged_probe_rows:
+        if ("RTX 2000 Ada" not in str(d.get("gpu"))
+                or "RTX 4070 SUPER" not in str(d.get("probes_gpu"))
+                or d.get("probes_remeasured") is not True
+                or d.get("probes_gpu_matches_original") is not False):
+            gpu_errors.append(f"탐침 병합 {_row_name(d)}")
+    for d in full_run_rows:
+        if "RTX 4070 SUPER" not in str(d.get("gpu")) or d.get("cuda") is not True:
+            gpu_errors.append(f"전체 실행 {_row_name(d)}")
+
+    if not four_bit or not merged_probe_rows or not full_run_rows or gpu_errors:
+        r.bad(
+            "조건",
+            "4bit GPU 측정 유형이 예상과 다릅니다: "
+            f"탐침병합={len(merged_probe_rows)}건, 전체실행={len(full_run_rows)}건, 오류={gpu_errors}",
+        )
     else:
-        r.good("본문숫자 4bit GPU 조건 문장")
+        merged_claim = (
+            f"나머지 4bit {len(merged_probe_rows)}건은 원 측정이 RunPod(RTX 2000 Ada), "
+            "탐침 재측정은 랩(RTX 4070 SUPER)입니다."
+        )
+        _expect_claim(r, "4bit 탐침 병합 GPU 조건", doc, merged_claim)
+        for d in full_run_rows:
+            short = str(d.get("model", "")).split("/")[-1]
+            full_claim = (
+                f"`{short}@4bit`의 전체 재측정은 랩(RTX 4070 SUPER)에서 "
+                "같은 실행으로 순위와 탐침을 함께 쟀습니다."
+            )
+            _expect_claim(r, f"{short} 전체 재측정 GPU 조건", doc, full_claim)
 
 
 def check_env(r: Report, doc: str) -> None:

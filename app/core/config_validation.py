@@ -70,12 +70,25 @@ def validate_production_persistence(settings: Settings) -> None:
         "PRECHECK_PERSISTENCE": settings.PRECHECK_PERSISTENCE,
         "OUTCOME_PERSISTENCE": settings.OUTCOME_PERSISTENCE,
         "DEMO_STORE_BACKEND": settings.DEMO_STORE_BACKEND,
+        "VERIFIED_COHORT_STORE": settings.VERIFIED_COHORT_STORE,
     }
     bad = [name for name, value in persistence.items() if value != "postgres"]
+    if settings.CLAUSE_STORE != "pg":
+        bad.append("CLAUSE_STORE=pg")
     if settings.SQLITE_LEGACY_ENABLED:
         bad.append("SQLITE_LEGACY_ENABLED=false")
     if settings.DATABASE_URL.lower().startswith("sqlite"):
         bad.append("DATABASE_URL=PostgreSQL")
+    #: ★코덱스 3차 리뷰 지적 — 선택자가 전부 postgres여도 실제 접속정보가 비어
+    #:   있으면 여기를 그냥 통과했다. 그러면 기동은 성공하고 인증·저장 요청마다
+    #:   나중에서야 실패한다("배포는 됐는데 아무것도 안 되는" 상태). 셀렉터와
+    #:   함께 검사해야 기동 시점에 막힌다.
+    if not settings.INSURANCE_PG_DSN.strip():
+        bad.append("INSURANCE_PG_DSN")
+    if not settings.INSURANCE_ADMIN_PG_DSN.strip():
+        bad.append("INSURANCE_ADMIN_PG_DSN")
+    if len((settings.INSURANCE_IDEMPOTENCY_SECRET or "").strip()) < 32:
+        bad.append("INSURANCE_IDEMPOTENCY_SECRET(32자 이상)")
     if bad:
         raise ConfigError(
             "APP_ENV=production requires PostgreSQL cutover settings: "

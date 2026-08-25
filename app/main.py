@@ -131,6 +131,15 @@ def create_app(role: str = "full") -> FastAPI:
     if role in {"admin", "full"}:
         app.include_router(admin.router)
 
+    #: ★벤치 전용 경로(`/_bench/noop`)는 **켰을 때만** 실린다(기본 꺼짐).
+    #:   계획: docs/plans/2026-08-25_0955_전달계층_Django분리_계획.md §6.2
+    #:   인증도 검증도 없는 경로라 운영 표면에 상시 두지 않는다.
+    #:   ★끄면 마운트 자체가 없어 404 다 — "있는데 막혀 있다"가 아니라 **없다**.
+    if settings.BENCH_ENDPOINTS_ENABLED:
+        from delivery.bench.router import router as bench_router
+
+        app.include_router(bench_router)
+
     # 고객 앱은 운영/개발 정적 페이지를 차단(정적 마운트보다 먼저 매칭됨).
     if role == "customer":
         @app.get("/static/{filename}", include_in_schema=False)

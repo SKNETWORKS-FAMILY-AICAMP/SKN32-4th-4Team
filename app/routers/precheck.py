@@ -18,15 +18,19 @@
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Query, status
+from fastapi import APIRouter, File, Header, HTTPException, Query, UploadFile, status
 
+from app.core.config import get_settings
 from app.core.domain import kcd_ranges as kcd
 from app.core.domain.precheck_result import PrecheckInput, PrecheckOutcome
 from app.core.errors import InfraError, ValidationErr, public_error_message
 from app.core.config_validation import require_insurance_idempotency_secret
 from app.core.usecases import precheck
+from app.routers._uploads import read_capped
 from app.schemas.precheck import (
     AppliedPolicy,
     Citation,
@@ -35,6 +39,11 @@ from app.schemas.precheck import (
     PrecheckRequest,
     PrecheckResult,
 )
+
+#: 청구 증거 파일 저장 위치. `data/obs/`는 이미 .gitignore 대상이다(진료 관련
+#: 개인정보라 약관 원문보다도 더 커밋하면 안 된다).
+_EVIDENCE_ROOT = Path(__file__).resolve().parents[2] / "data" / "obs" / "evidence"
+_EVIDENCE_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png"}
 
 router = APIRouter(prefix="/v1", tags=["precheck"])
 
@@ -112,13 +121,34 @@ def invalidate_versions_cache() -> None:
     _VERSIONS_STAMP = None
 
 
+#: 확정 현황 캐시. 값과, 그 값을 만들 때의 입력 파일 지문.
+_CONFIRMATION: dict | None = None
+_CONFIRMATION_STAMP: tuple | None = None
+
+
 def _confirmation_stats() -> dict:
     """확정이 **어디까지** 됐나. 분모를 함께 낸다.
 
     ★`total_policy_versions` 만 내보내면 그게 전량인 줄 안다.
       숫자를 인용할 때 분모가 무엇인지 함께 적는다(CLAUDE.md §1).
+
+    ★★**캐시한다(2026-08-25).** 실측으로 드러난 문제다 —
+      이 함수는 부를 때마다 원장(`confirmed_documents.jsonl` 1,248줄)과
+      매니페스트를 **다시 파싱**했다. `GET /v1/support-manifest` 한 요청이
+      **JSON 을 6,739회** 파싱해 **요청당 ~180ms** 를 썼고(동시 8에서 4.65 rps),
+      이 함수는 판정 핫패스(`_create_precheck`)에서도 불린다.
+      → `docs/reports/debugs/2026-08-25_1230_support_manifest가_요청마다_원장을_다시_파싱했다.md`
+
+      ★캐시 무효화는 **파일 지문**으로 한다. `load_versions_cached()` 와 **같은 지문**을 쓴다 —
+      입력(원장·모드·매니페스트)이 똑같기 때문이다. 프로세스가 둘이라 명시적 무효화는 닿지 않는다.
+      시간 기반 TTL 은 쓰지 않는다. "언제 갱신될지 모르는 상태"를 만들지 않는다.
     """
+    global _CONFIRMATION, _CONFIRMATION_STAMP
     from app.adapters import manifest_policy_resolver as mpr
+
+    stamp = mpr._inputs_stamp()
+    if _CONFIRMATION is not None and _CONFIRMATION_STAMP == stamp:
+        return _CONFIRMATION
 
     try:
         ledger = mpr.load_ledger()
@@ -132,13 +162,17 @@ def _confirmation_stats() -> dict:
         scopes[e.get("scope") or "-"] = scopes.get(e.get("scope") or "-", 0) + 1
         if "대기" in (e.get("confirmed_by") or ""):
             pending += 1
-    return {
+    out = {
         "confirmed": len(ledger),
         "collected": collected,
         "scopes": scopes,
         "human_signoff_pending": pending,
         "ledger": "config/confirmed_documents.jsonl",
     }
+    #: ★실패(`error`)는 캐시하지 않는다 — 위에서 이미 반환했다.
+    #:   못 센 것을 캐시하면 원인이 사라진 뒤에도 계속 못 셌다고 답한다.
+    _CONFIRMATION, _CONFIRMATION_STAMP = out, stamp
+    return out
 
 
 def _confirmation_coverage() -> str:
@@ -314,19 +348,6 @@ def _create_precheck(
         outcome, _state = _graph().invoke(_to_input(body))
         dto = _to_dto(outcome)
 
-        #: ★★**근거를 못 대서 기권한 건은 지식갭 큐로 보낸다(2026-08-04).**
-        #:
-        #:   `no_evidence` 는 "약관에 이 질병기호에 대한 근거가 없다"는 뜻이다 —
-        #:   정확히 **문서 보강 대상**이고, 그게 이 큐의 용도다.
-        #:
-        #:   ★`documents_not_confirmed` 는 **넣지 않는다.** 그건 지식이 없는 게 아니라
-        #:     확정 작업이 밀린 것이고, 넣으면 같은 문장으로 큐가 넘쳐
-        #:     진짜 보강 대상이 묻힌다. 그 현황은 `support-manifest` 가 이미 말한다.
-        if record_knowledge_gap and dto.abstained and dto.reason_code == "no_evidence":
-            from app.obs.knowledge_gaps import record_gap_safe
-
-            record_gap_safe(
-                f"[판정] {body.insurer} · {', '.join(body.kcd_codes)} — 근거 조항 없음")
         #: ★★**확정이 부분이면 고른 판본이 진짜 최신이 아닐 수 있다.**
         #:
         #:   `resolve()` 는 「가입일 이전 판매 시작 중 **가장 늦은 것**」을 고른다.
@@ -366,7 +387,7 @@ def _create_precheck(
                     "아직 확정되지 않은 약관 중에 더 나중에 판매된 판본이 있을 수 있고, "
                     "그렇다면 여기 적힌 약관은 실제 적용 판본이 아닐 수 있습니다.",
                 ]
-        dto = _persist_precheck_if_enabled(
+        dto, duplicate = _persist_precheck_if_enabled(
             body,
             outcome,
             dto,
@@ -375,6 +396,29 @@ def _create_precheck(
             agent_client_id=agent_client_id,
             subject_ref_hash=subject_ref_hash,
         )
+
+        #: ★★**근거를 못 대서 기권한 건은 지식갭 큐로 보낸다(2026-08-04).**
+        #:
+        #:   `no_evidence` 는 "약관에 이 질병기호에 대한 근거가 없다"는 뜻이다 —
+        #:   정확히 **문서 보강 대상**이고, 그게 이 큐의 용도다.
+        #:
+        #:   ★`documents_not_confirmed` 는 **넣지 않는다.** 그건 지식이 없는 게 아니라
+        #:     확정 작업이 밀린 것이고, 넣으면 같은 문장으로 큐가 넘쳐
+        #:     진짜 보강 대상이 묻힌다. 그 현황은 `support-manifest` 가 이미 말한다.
+        #:
+        #:   ★★**저장 뒤로 옮겼다(코덱스 리뷰 지적).** 원래 그래프 직후에 불렀는데,
+        #:     그러면 같은 `Idempotency-Key`로 재시도할 때마다 저장은 멱등이어도
+        #:     지식갭은 매번 새로 쌓였다. `duplicate=True`(재생 요청)면 건너뛴다.
+        if (
+            record_knowledge_gap
+            and not duplicate
+            and dto.abstained
+            and dto.reason_code == "no_evidence"
+        ):
+            from app.obs.knowledge_gaps import record_gap_safe
+
+            record_gap_safe(
+                f"[판정] {body.insurer} · {', '.join(body.kcd_codes)} — 근거 조항 없음")
 
         #: ★관측은 **응답을 만들고 필수 저장까지 성공한 뒤** 붙인다.
         #:   그리고 판정 자체를 바꾸지 않는다(`agent_stream` 은 표현 계층이다).
@@ -403,15 +447,20 @@ def _persist_precheck_if_enabled(
     channel: str,
     agent_client_id: str | None,
     subject_ref_hash: str | None,
-) -> PrecheckResult:
-    """명시적으로 켠 환경에서만 실제 원장 저장을 응답 전 필수 단계로 실행한다."""
+) -> tuple[PrecheckResult, bool]:
+    """명시적으로 켠 환경에서만 실제 원장 저장을 응답 전 필수 단계로 실행한다.
+
+    반환하는 `bool`은 **재생 요청(같은 Idempotency-Key로 이미 저장됨)**이었는지다.
+    호출부가 이걸로 지식갭 등 저장과 별개인 부수효과의 중복 기록을 막는다
+    (코덱스 리뷰 지적 — 저장은 멱등인데 부수효과가 매번 새로 쌓이던 결함).
+    """
 
     from datetime import datetime
     from app.core.config import get_settings
 
     settings = get_settings()
     if settings.PRECHECK_PERSISTENCE == "off":
-        return dto
+        return dto, False
     if settings.PRECHECK_PERSISTENCE != "postgres":
         raise ValidationErr("알 수 없는 precheck persistence 설정입니다.")
     if channel == "registered-agent":
@@ -455,7 +504,7 @@ def _persist_precheck_if_enabled(
         ),
         repository=PgInsuranceRepository.from_settings(),
     )
-    return PrecheckResult.model_validate(result.response_snapshot)
+    return PrecheckResult.model_validate(result.response_snapshot), result.duplicate
 
 
 @router.get("/support-manifest")
@@ -543,6 +592,51 @@ def support_manifest() -> dict:
             for k, d in sorted(by_insurer.items())
         },
         "notes": notes,
+    }
+
+
+@router.post("/observations/evidence")
+async def upload_observation_evidence(file: UploadFile = File(...)) -> dict[str, str]:
+    """청구 증거(진료비 영수증·진단서 스캔본)를 저장하고 sha256·저장 참조를 돌려준다.
+
+    ★판정 근거로 쓰지 않는다 — `/observations` 제출에 붙는 감사용 원본일 뿐이고,
+      내용을 파싱·신뢰하지 않는다(§docs/handoff 데이터 축적 설계).
+    ★같은 sha256이면 다시 쓰지 않는다(중복 저장 방지) — 이미 저장된 파일이면 그대로 재사용.
+    """
+    settings = get_settings()
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in _EVIDENCE_SUFFIXES:
+        raise ValidationErr(
+            f"증거 파일은 {', '.join(sorted(_EVIDENCE_SUFFIXES))} 형식만 허용됩니다."
+        )
+    raw = await read_capped(
+        file, settings.OBSERVATION_EVIDENCE_MAX_UPLOAD_BYTES, field="증거 파일"
+    )
+    if not raw:
+        raise ValidationErr("빈 파일은 증거로 저장할 수 없습니다.")
+
+    sha256 = hashlib.sha256(raw).hexdigest()
+    _EVIDENCE_ROOT.mkdir(parents=True, exist_ok=True)
+    dest = _EVIDENCE_ROOT / f"{sha256}{suffix}"
+    if not dest.exists():
+        #: ★익명 공개 엔드포인트다 — 파일당 상한만으로는 **누적** 저장량을 못 막는다
+        #:   (코덱스 리뷰 지적: 서로 다른 파일을 계속 올려 디스크를 채울 수 있음).
+        #:   같은 내용 재업로드는 위에서 이미 걸러진다(디스크가 안 는다) — 여기서
+        #:   막는 건 **새 내용**이 계속 들어와 총량이 느는 경우다.
+        current_total = sum(
+            p.stat().st_size for p in _EVIDENCE_ROOT.glob("*") if p.is_file()
+        )
+        if current_total + len(raw) > settings.OBSERVATION_EVIDENCE_MAX_TOTAL_BYTES:
+            raise InfraError(
+                "증거 저장 공간이 가득 찼습니다. 잠시 후 다시 시도하거나 "
+                "고객센터로 문의해 주세요."
+            )
+        dest.write_bytes(raw)
+    return {
+        "evidence_sha256": sha256,
+        #: ★`str(Path)`는 OS 구분자를 쓴다 — Windows에서 저장하면 `\`가 섞여
+        #:   운영 Linux에서 그대로 못 쓴다. 저장 참조는 항상 posix로 고정한다.
+        "evidence_stored_ref": dest.relative_to(_EVIDENCE_ROOT.parents[2]).as_posix(),
     }
 
 

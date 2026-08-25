@@ -40,6 +40,7 @@ _COMMON = frozenset(
         ("POST", "/v1/chat"),
         ("POST", "/v1/demo/observations"),
         ("POST", "/v1/observations"),
+        ("POST", "/v1/observations/evidence"),
         ("POST", "/v1/prechecks"),
         ("PUT", "/api/face/backend"),
         ("DELETE", "/api/face/register"),

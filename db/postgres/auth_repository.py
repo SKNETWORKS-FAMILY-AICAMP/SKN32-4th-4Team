@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -12,6 +13,9 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.core.config import get_settings
+from app.core.errors import InfraError
+from db.postgres.pg_insurance_repository import _postgres_error
+from db.postgres.pool import connection
 
 
 @dataclass(frozen=True)
@@ -43,8 +47,31 @@ class PgAuthStore:
     def from_settings(cls) -> "PgAuthStore":
         return cls(get_settings().INSURANCE_PG_DSN)
 
-    def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self.dsn)
+    @contextmanager
+    def _connect(self):
+        """연결 획득뿐 아니라 **`with` 블록 안 쿼리 실패까지** 번역한다.
+
+        ★코덱스 3차 리뷰 지적 — 앞선 수정은 연결·SET 문만 감쌌다. `get_user` 등
+          각 메서드의 `conn.execute(...)`는 이 함수가 반환한 *뒤에* 호출자 쪽
+          `with` 블록에서 실행되므로, 거기서 난 `psycopg.Error`는 하나도 못
+          잡고 그대로 FastAPI까지 새어나가 분류 안 된 500이 됐다.
+          `@contextmanager`로 바꿔 호출자의 `with` 블록 전체를 이 함수 안에서
+          감싸면, `yield` 지점에서 그 예외가 다시 던져져 여기서 잡힌다.
+        """
+        try:
+            lease = connection(self.dsn)
+            lease.execute("SET statement_timeout = '10s'")
+            lease.execute("SET lock_timeout = '3s'")
+        except psycopg.Error as exc:
+            raise _postgres_error(exc) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise InfraError(f"인증 PostgreSQL에 연결할 수 없습니다: {exc}") from exc
+
+        try:
+            with lease as conn:
+                yield conn
+        except psycopg.Error as exc:
+            raise _postgres_error(exc) from exc
 
     def get_user(self, username: str) -> PgUser | None:
         with self._connect() as conn:

@@ -366,12 +366,12 @@ def verify_explanation(
         같은 번호가 여러 특약에 있어 우리가 못 가리는 상황이다.
         그때는 `AMBIGUOUS_CITATION` 으로 기권한다 — 사람이 봐야 한다.
 
-    ★아직 호출부가 없다(정직 기록)
+    ★현재 연결 위치
 
-        `run()` 은 지금 LLM 없이 규칙만으로 판정하므로 검증할 설명이 없다.
-        LLM 을 붙일 때 이 함수를 통과한 설명만 응답에 싣는다.
-        미리 만들어 두는 이유는 **경계를 코드로 못박아 두기 위해서**다 —
-        나중에 급할 때 "일단 그냥 내보내자"가 되지 않도록.
+        `run()` 은 지금 LLM 없이 규칙만으로 판정하지만,
+        `app.workflow.precheck_graph.verify_against_store()`가 저장소 원문·쪽·인용문을
+        먼저 대조한 뒤 이 함수를 호출한다. 따라서 그래프 경로의 인용은 실제로 이
+        검증을 통과해야 한다. 나중에 LLM 설명을 붙이더라도 같은 경계를 재사용한다.
     """
     from app.core.domain import citation_guard as cg
 

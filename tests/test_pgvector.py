@@ -14,6 +14,7 @@ def test_get_conn_uses_timeout_and_does_not_echo_dsn(monkeypatch):
 
     captured: dict[str, object] = {}
     sentinel = object()
+    monkeypatch.setattr("db.postgres.pool._pool_for", lambda *args, **kwargs: None)
 
     def connect_ok(dsn, **kwargs):
         captured.update(dsn=dsn, **kwargs)
@@ -60,6 +61,7 @@ def test_get_conn_closes_connection_when_vector_registration_fails(monkeypatch):
             self.closed = True
 
     conn = FakeConnection()
+    monkeypatch.setattr("db.postgres.pool._pool_for", lambda *args, **kwargs: None)
     monkeypatch.setattr(psycopg, "connect", lambda *_args, **_kwargs: conn)
     monkeypatch.setattr(
         pgvector_psycopg,

@@ -32,6 +32,7 @@ from app.core.ports.insurance_repository import (
     InsuranceStoredOutcome,
     InsuranceTransactionPort,
 )
+from db.postgres.pool import connection
 
 
 def _postgres_error(exc: Exception) -> AppError:
@@ -807,7 +808,7 @@ class PgInsuranceRepository:
         import psycopg
 
         try:
-            conn = psycopg.connect(self._dsn, connect_timeout=5)
+            conn = connection(self._dsn)
             conn.execute("SET statement_timeout = '10s'")
             conn.execute("SET lock_timeout = '3s'")
             return conn

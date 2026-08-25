@@ -11,6 +11,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.core.config import get_settings
+from db.postgres.pool import connection
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ class PgOpsStore:
         return cls(get_settings().INSURANCE_PG_DSN)
 
     def _connect(self) -> psycopg.Connection:
-        return psycopg.connect(self.dsn)
+        return connection(self.dsn)
 
     def record_event(
         self, trace_id: str, kind: str, detail: dict[str, Any] | None = None

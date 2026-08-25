@@ -85,6 +85,15 @@ def _skip(reason: str) -> dict[str, Any]:
     return {"configured": False, "checked": False, "ready": None, "reason": reason}
 
 
+def _postgres_pool() -> dict[str, Any]:
+    try:
+        from db.postgres.pool import pool_status
+
+        return {"checked": True, **pool_status()}
+    except Exception as exc:  # noqa: BLE001 - keep the release report machine-readable
+        return {"checked": True, "pool_dependency": False, "reason": str(exc)[:200]}
+
+
 def _persistence_config() -> dict[str, Any]:
     """Check the non-secret production cutover switches without opening a DB."""
     try:
@@ -98,6 +107,8 @@ def _persistence_config() -> dict[str, Any]:
             "precheck": settings.PRECHECK_PERSISTENCE,
             "outcome": settings.OUTCOME_PERSISTENCE,
             "demo_store_backend": getattr(settings, "DEMO_STORE_BACKEND", "file"),
+            "clause_store": getattr(settings, "CLAUSE_STORE", "file"),
+            "verified_cohort_store": getattr(settings, "VERIFIED_COHORT_STORE", "file"),
             "sqlite_legacy_enabled": bool(settings.SQLITE_LEGACY_ENABLED),
             "database_url_is_sqlite": settings.DATABASE_URL.lower().startswith("sqlite"),
         }
@@ -109,6 +120,8 @@ def _persistence_config() -> dict[str, Any]:
             and values["precheck"] == "postgres"
             and values["outcome"] == "postgres"
             and values["demo_store_backend"] == "postgres"
+            and values["clause_store"] == "pg"
+            and values["verified_cohort_store"] == "postgres"
             and not values["sqlite_legacy_enabled"]
             and not values["database_url_is_sqlite"]
         )
@@ -224,6 +237,8 @@ def _is_failure(report: dict[str, Any], *, strict: bool) -> bool:
     persistence = report["persistence_config"]
     if strict and not persistence.get("ready"):
         return True
+    if strict and not report["postgres_pool"].get("pool_dependency"):
+        return True
     for key in ("insurance_readiness", "agent_readiness", "agent_mirror", "demo_readiness"):
         check = report[key]
         if check.get("checked") and not check.get("ready", check.get("in_sync", False)):
@@ -270,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
         "git": _git_info(),
         "migrations": _migration_info(),
         "persistence_config": _persistence_config(),
+        "postgres_pool": _postgres_pool(),
         "insurance_readiness": _insurance_readiness(insurance_dsn),
         "agent_readiness": _agent_readiness(agent_dsn),
         "agent_mirror": _agent_mirror(agent_source_dsn, insurance_admin_dsn),

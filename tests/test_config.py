@@ -77,7 +77,14 @@ def test_production_accepts_postgres_cutover():
         PRECHECK_PERSISTENCE="postgres",
         OUTCOME_PERSISTENCE="postgres",
         DEMO_STORE_BACKEND="postgres",
+        CLAUSE_STORE="pg",
+        VERIFIED_COHORT_STORE="postgres",
         SQLITE_LEGACY_ENABLED=False,
+        #: ★코덱스 리뷰 지적으로 이 검증에 추가됨 — 셀렉터가 postgres여도
+        #:   실제 접속정보가 비어 있으면 통과했던 결함(app/core/config_validation.py).
+        INSURANCE_PG_DSN="postgresql://runtime@db.example/insurance_real",
+        INSURANCE_ADMIN_PG_DSN="postgresql://admin@db.example/insurance_real",
+        INSURANCE_IDEMPOTENCY_SECRET="x" * 32,
     )
 
     validate_production_persistence(settings)

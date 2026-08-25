@@ -263,7 +263,7 @@ def _generated_doc(outputs: dict[str, bytes]) -> bytes:
     return b"".join(chunks)
 
 
-def test_generated_regions_use_exact_stdout_bytes(monkeypatch) -> None:
+def test_generated_regions_use_exact_content_bytes_except_platform_newlines(monkeypatch) -> None:
     outputs = {name: f"{name}\r\n".encode() for name in
                ("fp16-report", "4bit-report", "prefixes", "repro")}
 
@@ -282,8 +282,12 @@ def test_generated_regions_use_exact_stdout_bytes(monkeypatch) -> None:
     audit.check_generated(normal, doc)
     assert not normal.fail
 
+    newline_only = audit.Report()
+    audit.check_generated(newline_only, doc.replace(b"fp16-report\r\n", b"fp16-report\n", 1))
+    assert not newline_only.fail
+
     mutant = audit.Report()
-    audit.check_generated(mutant, doc.replace(b"fp16-report\r\n", b"fp16-report\n", 1))
+    audit.check_generated(mutant, doc.replace(b"fp16-report\r\n", b"fp16-mutant\r\n", 1))
     assert _messages(mutant, "생성영역")
 
 
@@ -455,12 +459,6 @@ def real_claim_fixture(tmp_path, monkeypatch):
     rows_report = audit.Report()
     rows = audit._load_results(rows_report)
     assert not rows_report.fail
-    # 본문 숫자 검사의 정상본은 현행 tail 스키마를 갖춘 것으로 만든다. 저장소의
-    # Qwen3-4B@4bit 구형 스키마 결함은 별도 스키마 mutant 시험이 고정한다.
-    for row in rows:
-        if row.get("model") == "Qwen/Qwen3-Embedding-4B" and row.get("dtype") == "4bit":
-            row["title"] = {"mrr@10": row["mrr@10"]}
-            row["tail"] = copy.deepcopy(row["proviso"])
     data = audit._load_eval_set(rows_report)
     assert data is not None
     return doc, rows, data
@@ -504,7 +502,7 @@ def test_claim_candidate_count_has_normal_and_mutant_cases(real_claim_fixture) -
 def test_claim_4bit_metric_pair_has_normal_and_mutant_cases(real_claim_fixture) -> None:
     doc, rows, data = real_claim_fixture
     assert not _run_claims(doc, rows, data).fail
-    _mutate_doc(doc, "제목 0.521→0.537", "제목 0.521→0.538")
+    _mutate_doc(doc, "제목 0.521→0.535", "제목 0.521→0.538")
     assert any("4bit 제목 전후값" in message for message in _messages(_run_claims(doc, rows, data), "본문숫자"))
 
 
@@ -522,7 +520,7 @@ def test_claim_4bit_title_pair_reads_nested_current_schema(real_claim_fixture) -
 def test_claim_4bit_tail_pair_has_normal_and_mutant_cases(real_claim_fixture) -> None:
     doc, rows, data = real_claim_fixture
     assert not _run_claims(doc, rows, data).fail
-    _mutate_doc(doc, "뒷부분 0.253→0.270", "뒷부분 0.253→0.271")
+    _mutate_doc(doc, "뒷부분 0.253→0.269", "뒷부분 0.253→0.271")
     assert any("4bit 뒷부분 전후값" in message
                for message in _messages(_run_claims(doc, rows, data), "본문숫자"))
 
@@ -539,6 +537,21 @@ def test_claim_4bit_blind_before_after_has_normal_and_mutant_cases(real_claim_fi
 def test_claim_gpu_condition_has_normal_and_mutant_cases(real_claim_fixture) -> None:
     doc, rows, data = real_claim_fixture
     assert not _run_claims(doc, rows, data).fail
-    _mutate_doc(doc, "4bit 원 측정은 RunPod(RTX 2000 Ada), 재측정은 랩(RTX 4070 SUPER)입니다.",
-                "4bit 원 측정은 RunPod(RTX 4070 SUPER), 재측정은 랩(RTX 4070 SUPER)입니다.")
+    _mutate_doc(
+        doc,
+        "`Qwen3-Embedding-4B@4bit`의 전체 재측정은 랩(RTX 4070 SUPER)에서 같은 실행으로 순위와 탐침을 함께 쟀습니다.",
+        "`Qwen3-Embedding-4B@4bit`의 전체 재측정은 랩(RTX 2000 Ada)에서 같은 실행으로 순위와 탐침을 함께 쟀습니다.",
+    )
     assert any("GPU 조건" in message for message in _messages(_run_claims(doc, rows, data), "본문숫자"))
+
+
+def test_claim_full_4bit_run_requires_current_cuda_gpu(real_claim_fixture) -> None:
+    doc, rows, data = real_claim_fixture
+    assert not _run_claims(doc, rows, data).fail
+    qwen = next(row for row in rows
+                if row.get("model") == "Qwen/Qwen3-Embedding-4B"
+                and row.get("dtype") == "4bit")
+    assert "probes_gpu" not in qwen
+    qwen["gpu"] = "CPU"
+    assert any("GPU 측정 유형" in message
+               for message in _messages(_run_claims(doc, rows, data), "조건"))

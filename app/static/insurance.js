@@ -42,6 +42,20 @@ const sessionToken = (() => {
   return `ses_${raw.slice(0, 8)}`;
 })();
 
+//: ★PostgreSQL 저장 모드는 요청마다 `Idempotency-Key`를 요구한다(서버 최소 8자).
+//:   재시도가 아니라 새 논리적 요청마다 새로 만든다 — 호출할 때마다 부른다.
+function newIdempotencyKey() {
+  const raw = globalThis.crypto?.randomUUID?.().replaceAll('-', '')
+    || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  return raw.slice(0, 32).padEnd(8, '0');
+}
+
+//: ★가장 최근 판정 호출의 trace_id·idempotency key. `/observations` 제출이
+//:   "그 판정과 이어진 사례"임을 서버에 밝히는 데 쓴다(사용자가 손으로 입력할
+//:   값이 아니다 — 화면이 실제로 부른 요청을 그대로 되짚는다).
+let lastPrecheckTraceId = '';
+let lastPrecheckIdempotencyKey = '';
+
 function updateSessionCard() {
   $('sessionId').textContent = sessionToken;
   $('sessionInsurer').textContent = $('insurer').value.trim() || '미등록';
@@ -69,6 +83,7 @@ function updateRegisterState() {
   const ready = $('consent').checked
     && $('insurer').value.trim()
     && /^\d{8}$/.test($('enrolled').value.trim())
+    && /^\d{8}$/.test($('incident').value.trim())
     && $('codes').value.trim();
   $('go').disabled = !ready;
 }
@@ -532,12 +547,19 @@ async function runPrecheck(productName, options = {}) {
   $('status').textContent = '판정 중…';
   $('go').disabled = true;
 
+  const precheckKey = newIdempotencyKey();
   const { status, body } = await api('/v1/prechecks', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      //: ★PostgreSQL 저장 모드 필수 헤더(app/routers/precheck.py:428-431).
+      //:   빠지면 이 화면이 보내는 요청이 전부 422로 거부된다(코덱스 리뷰 지적).
+      'Idempotency-Key': precheckKey,
+    },
     body: JSON.stringify({
       insurer: $('insurer').value.trim(),
       enrolled_on: $('enrolled').value.trim(),
+      incident_on: $('incident').value.trim(),
       kcd_codes: codes,
       //: ★사용자가 후보를 고른 경우에만 실린다. 화면이 지어내지 않는다.
       ...(selectedProduct ? { product_name: selectedProduct } : {}),
@@ -546,6 +568,10 @@ async function runPrecheck(productName, options = {}) {
 
   $('status').textContent = '';
   updateRegisterState();
+  if (status === 200 && body?.trace_id) {
+    lastPrecheckTraceId = body.trace_id;
+    lastPrecheckIdempotencyKey = precheckKey;
+  }
   renderResult(status, body);
   bindCandidates();
   if (codes.length) loadCohorts(codes[0]);
@@ -693,6 +719,23 @@ async function sendChat(text) {
  *   서버는 `verification="unverified"` 로 고정해 저장하고, 검증 전까지
  *   통계에 넣지 않는다. 화면이 그보다 강하게 말하면 거짓말이 된다.
  */
+//: ★증거 파일은 판정 근거가 아니라 감사용 원본이다 — 서버가 내용을 파싱·신뢰하지
+//:   않는다(app/routers/precheck.py:upload_observation_evidence). 실패해도 제출
+//:   자체를 막지 않는다(파일은 선택 항목이므로) — 다만 실패 사실은 사용자에게 보인다.
+async function uploadObservationEvidence() {
+  const input = $('obEvidence');
+  const file = input?.files?.[0];
+  if (!file) return { ok: true, sha256: '', storedRef: '' };
+
+  const form = new FormData();
+  form.append('file', file);
+  const { status, body } = await api('/v1/observations/evidence', { method: 'POST', body: form });
+  if (status !== 200 || !body?.evidence_sha256) {
+    return { ok: false, sha256: '', storedRef: '', detail: body?.detail || `HTTP ${status}` };
+  }
+  return { ok: true, sha256: body.evidence_sha256, storedRef: body.evidence_stored_ref };
+}
+
 async function submitObservation() {
   const out = $('obOut');
   const insurer = $('obInsurer').value.trim();
@@ -701,9 +744,21 @@ async function submitObservation() {
     return;
   }
   $('obGo').disabled = true;
+
+  const evidence = await uploadObservationEvidence();
+  if (!evidence.ok) {
+    $('obGo').disabled = false;
+    out.innerHTML = `<div class="banner danger small">증거 파일을 저장하지 못했습니다 — ${esc(evidence.detail)}</div>`;
+    return;
+  }
+
   const { status, body } = await api('/v1/observations', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      //: ★PostgreSQL 저장 모드 필수 헤더(app/routers/precheck.py:658-668).
+      'Idempotency-Key': newIdempotencyKey(),
+    },
     body: JSON.stringify({
       client_ref: 'web-ui',
       insurer,
@@ -711,6 +766,17 @@ async function submitObservation() {
       kcd_codes: $('obCodes').value.split(',').map((s) => s.trim()).filter(Boolean),
       outcome: $('obOutcome').value,
       outcome_reason: $('obReason').value.trim(),
+      //: ★빈 값은 키 자체를 뺀다 — 여러 필드가 패턴 제약(`^[0-9]{8}$` 등)이라
+      //:   빈 문자열을 보내면 "선택 항목이라 안 채웠다"가 아니라 **형식 오류**로
+      //:   읽혀 기본(file) 모드에서도 422가 났다(코덱스 리뷰 지적).
+      ...(lastPrecheckTraceId ? { precheck_trace_id: lastPrecheckTraceId } : {}),
+      ...(lastPrecheckIdempotencyKey
+        ? { precheck_idempotency_key: lastPrecheckIdempotencyKey } : {}),
+      ...($('obClaimed').value.trim() ? { claimed_on: $('obClaimed').value.trim() } : {}),
+      ...($('obDecided').value.trim() ? { decided_on: $('obDecided').value.trim() } : {}),
+      ...($('obDocType').value ? { evidence_doc_type: $('obDocType').value } : {}),
+      ...(evidence.sha256 ? { evidence_sha256: evidence.sha256 } : {}),
+      ...(evidence.storedRef ? { evidence_stored_ref: evidence.storedRef } : {}),
     }),
   });
   $('obGo').disabled = false;

@@ -81,7 +81,16 @@ class AppliedPolicy(BaseModel):
     date_confidence: str = "exact"
     generation_confidence: str = ""
     #: 조항 구조화 상태. `ok` 가 아니면 판정 근거로 쓰지 않는다.
-    parse_status: str = "ok"
+    #:
+    #: ★`null` 은 **"모른다"** 다(`"ok"` 도 실패도 아니다). 클라이언트는 이걸
+    #:   "괜찮다"로 읽으면 안 된다 — 모르는 문서는 인용 근거로 쓰이지 않고,
+    #:   그 경우 판정은 기권한다(`app/core/domain/eligibility.py:63`).
+    #:   PG 조항 색인은 파싱 상태를 저장하지 않아 실제로 `null` 이 온다.
+    #:
+    #: ★★2026-08-25 이전에는 `str` 이라 `null` 을 담을 수 없었고, 그래서
+    #:   `CLAUSE_STORE=pg` 에서 이 응답을 만들 때마다 **500** 이 났다.
+    #:   → `docs/reports/debugs/2026-08-25_1120_CLAUSE_STORE_pg로_켜면_판정API가_전부_500이다.md`
+    parse_status: str | None = "ok"
 
 
 class PrecheckRequest(BaseModel):

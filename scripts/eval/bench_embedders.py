@@ -429,8 +429,36 @@ def run(model_id: str, *, q_prefix: str, d_prefix: str, batch: int, device: str,
     return res
 
 
+def _query_clusters(task: str) -> list[str] | None:
+    """질의 index → 문서(sha12) 라벨. 문서 단위(군집) 부트스트랩용.
+
+    브리핑 §5-4-1: 같은 문서·상품에서 나온 질의는 독립이 아닐 수 있다.
+    질의 단위 재표집은 그 상관을 무시해 구간을 실제보다 좁게 만든다.
+    라벨을 못 만들면(코퍼스 파일 없음·질의 수 불일치) None 을 반환한다 —
+    호출부가 조용히 군집화를 건너뛰지 않고 알아채도록.
+    """
+    if not _SET.exists():
+        return None
+    data = json.loads(_SET.read_text(encoding="utf-8"))
+    corpus_by_id = {c["id"]: c for c in data.get("corpus", [])}
+    if task == "title":
+        queries = data.get("queries") or []
+    elif task == "exclusion":
+        #: ★면책 16개는 뒷부분 60개의 **부분집합**이지 별도 표집이 아니다
+        #:   (핸드오프 §2-3 "뒷부분 60개(그중 진짜 면책 16개)").
+        queries = [q for q in (data.get("proviso_queries") or []) if q.get("is_exclusion")]
+    else:  # "tail" — 60개 전부, is_exclusion 으로 걸러내지 않는다
+        queries = data.get("proviso_queries") or []
+    labels = []
+    for q in queries:
+        gid = (q.get("gold_ids") or [q.get("gold_id")])[0]
+        doc = corpus_by_id.get(gid)
+        labels.append(doc["sha12"] if doc else f"unknown:{gid}")
+    return labels
+
+
 def compare(baseline: str, task: str = "title", n_boot: int = 2000,
-            dtype: str = "float16") -> None:
+            dtype: str = "float16", cluster: bool = False) -> None:
     """기준 모델 대비 **같은 질의에서의 차이**와 신뢰구간.
 
     ★모델별 독립 점수만 보면 "0.557 이 0.549 보다 높다"를 우열로 읽게 된다.
@@ -439,6 +467,12 @@ def compare(baseline: str, task: str = "title", n_boot: int = 2000,
 
     ★구간이 0 을 걸치면 **"차이를 확인하지 못했다"** 이지
       "같다"가 아니다. 표본이 작아 못 가린 것일 수 있다.
+
+    ``cluster=True`` 면 **질의가 아니라 문서(sha12) 를 재표집**한다(§3-3-★ 4번).
+    같은 문서에서 나온 질의들이 재표집 라운드마다 다 같이 들어가거나 다 같이
+    빠져서, 문서 하나가 유난히 쉽거나 어려운 경우의 상관을 구간에 반영한다.
+    군집 크기가 제각각이라 벡터화 대신 라운드마다 평균을 직접 계산한다 —
+    2,000회·질의 200개 안팎에서는 느려질 정도가 아니다.
     """
     import numpy as np
 
@@ -466,11 +500,36 @@ def compare(baseline: str, task: str = "title", n_boot: int = 2000,
 
     base = rr(rows[baseline])
     rng = np.random.default_rng(20260803)
-    idx = rng.integers(0, len(base), size=(n_boot, len(base)))
+
+    groups: list[list[int]] | None = None
+    if cluster:
+        labels = _query_clusters(task)
+        if labels is None or len(labels) != len(base):
+            print("★군집 라벨을 못 만들어 문서 단위 부트스트랩을 건너뜁니다"
+                  f"(라벨 {0 if labels is None else len(labels)}개 vs 질의 {len(base)}개)"
+                  " — 질의 단위로 대체합니다.")
+            cluster = False
+        else:
+            uniq = sorted(set(labels))
+            groups = [[i for i, lab in enumerate(labels) if lab == uniq_lab]
+                      for uniq_lab in uniq]
+
+    if cluster and groups is not None:
+        n_groups = len(groups)
+        boot_idx = []
+        for _ in range(n_boot):
+            picked = rng.integers(0, n_groups, size=n_groups)
+            idxs: list[int] = []
+            for gi in picked:
+                idxs.extend(groups[gi])
+            boot_idx.append(idxs)
+    else:
+        idx = rng.integers(0, len(base), size=(n_boot, len(base)))
 
     n_cmp = sum(1 for m, rk in rows.items() if m != baseline and len(rk) == len(base))
+    unit = f"문서 {len(groups)}개 재표집" if cluster and groups is not None else "질의 재표집"
     print(f"[{task}] 기준: {baseline}  ({dtype or '전체'} · 질의 {len(base)}개 · "
-          f"비교 {n_cmp}개 · 부트스트랩 {n_boot}회)")
+          f"비교 {n_cmp}개 · 부트스트랩 {n_boot}회 · {unit})")
     print(f"{'모델':50} {'ΔMRR':>8} {'95% 구간':>18}  판정")
     print("-" * 92)
     out = []
@@ -478,7 +537,11 @@ def compare(baseline: str, task: str = "title", n_boot: int = 2000,
         if m == baseline or len(ranks) != len(base):
             continue
         d = rr(ranks) - base
-        lo, hi = np.percentile(d[idx].mean(axis=1), [2.5, 97.5])
+        if cluster and groups is not None:
+            means = np.array([d[idxs].mean() for idxs in boot_idx])
+        else:
+            means = d[idx].mean(axis=1)
+        lo, hi = np.percentile(means, [2.5, 97.5])
         out.append((d.mean(), lo, hi, m))
     for mean, lo, hi, m in sorted(out, reverse=True):
         verdict = "★차이 확인" if (lo > 0 or hi < 0) else "구간이 0 을 걸침"
@@ -680,6 +743,8 @@ def main(argv=None) -> int:
     #: ★재현 명령도 **결과에서 되짚는다.** 손 목록은 어긋난다.
     ap.add_argument("--repro", action="store_true", help="저장된 결과를 만든 명령")
     ap.add_argument("--compare", default="", help="이 모델을 기준으로 짝지어 비교")
+    ap.add_argument("--cluster", action="store_true",
+                     help="질의가 아니라 문서(sha12) 단위로 부트스트랩 재표집한다(§3-3-★ 4번)")
     ap.add_argument("--task", default="title", choices=["title", "tail", "exclusion"])
     #: ★정밀도를 섞지 않는다. 빈 값이면 전부.
     #: ★`--compare` 와 `--report` 가 함께 쓴다. 빈 문자열이면 전부(섞인다 — 권장 안 함).
@@ -697,7 +762,7 @@ def main(argv=None) -> int:
             print(f"{m:52} {gb:>5.1f}  {_rest[2]}")
         return 0
     if a.compare:
-        compare(a.compare, a.task, dtype=a.dtype)
+        compare(a.compare, a.task, dtype=a.dtype, cluster=a.cluster)
         return 0
     if a.report:
         report(a.dtype, md=a.md)

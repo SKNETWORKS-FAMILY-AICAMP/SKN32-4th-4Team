@@ -1,0 +1,22 @@
+[
+  {"id":"excluded-01","source":"synthetic_contract_fixture","request":{"kcd_codes":["F32"]},"expect":{"verdict":"unlikely","abstained":false,"must_cite":["E001"]}},
+  {"id":"excluded-02","source":"synthetic_contract_fixture","request":{"kcd_codes":["O10"]},"expect":{"verdict":"unlikely","abstained":false,"must_cite":["E001"]}},
+  {"id":"excluded-03","source":"synthetic_contract_fixture","request":{"kcd_codes":["E66"]},"expect":{"verdict":"unlikely","abstained":false,"must_cite":["E001"]}},
+  {"id":"excluded-04","source":"synthetic_contract_fixture","request":{"kcd_codes":["N39.3"]},"expect":{"verdict":"unlikely","abstained":false,"must_cite":["E001"]}},
+  {"id":"excluded-05","source":"synthetic_contract_fixture","request":{"kcd_codes":["R32"]},"expect":{"verdict":"unlikely","abstained":false,"must_cite":["E001"]}},
+  {"id":"exception-01","source":"synthetic_contract_fixture","request":{"kcd_codes":["F32"]},"expect":{"verdict":"needs_documents","abstained":false,"must_cite":["E001"]}},
+  {"id":"exception-02","source":"synthetic_contract_fixture","request":{"kcd_codes":["F04"]},"expect":{"verdict":"needs_documents","abstained":false,"must_cite":["E001"]}},
+  {"id":"exception-03","source":"synthetic_contract_fixture","request":{"kcd_codes":["F20"]},"expect":{"verdict":"needs_documents","abstained":false,"must_cite":["E001"]}},
+  {"id":"exception-04","source":"synthetic_contract_fixture","request":{"kcd_codes":["F41"]},"expect":{"verdict":"needs_documents","abstained":false,"must_cite":["E001"]}},
+  {"id":"exception-05","source":"synthetic_contract_fixture","request":{"kcd_codes":["F90"]},"expect":{"verdict":"needs_documents","abstained":false,"must_cite":["E001"]}},
+  {"id":"no-evidence-01","source":"synthetic_contract_fixture","request":{"kcd_codes":["Z99"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"no-evidence-02","source":"synthetic_contract_fixture","request":{"kcd_codes":["A00"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"no-evidence-03","source":"synthetic_contract_fixture","request":{"kcd_codes":["B20"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"no-evidence-04","source":"synthetic_contract_fixture","request":{"kcd_codes":["C10"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"no-evidence-05","source":"synthetic_contract_fixture","request":{"kcd_codes":["S72"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"invalid-01","source":"synthetic_contract_fixture","request":{"kcd_codes":["우울증"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"invalid-02","source":"synthetic_contract_fixture","request":{"kcd_codes":["F3"]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"invalid-03","source":"synthetic_contract_fixture","request":{"kcd_codes":[""]},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"unreliable-01","source":"synthetic_contract_fixture","request":{"kcd_codes":["F32"],"evidence":"other_policy"},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}},
+  {"id":"unreliable-02","source":"synthetic_contract_fixture","request":{"kcd_codes":["F32"],"evidence":"citation_ineligible"},"expect":{"verdict":"needs_expert","abstained":true,"must_cite":[]}}
+]
