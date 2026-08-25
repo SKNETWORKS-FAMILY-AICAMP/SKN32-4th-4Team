@@ -5,27 +5,138 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>마이페이지 — {{BRAND}}</title>
   <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    :root {
+      --accent: #1c1c18;
+      --on-accent: #ffffff;
+      --border: rgba(28, 28, 24, 0.09);
+      --background: #c9d2c6;
+      --surface: #faf8f2;
+      --surface-soft: #efece2;
+      --text: #211f1a;
+      --muted: #7d7c72;
+      --success: #4f9d78;
+      --success-bg: #e4eee6;
+      --warning: #d9843f;
+      --warning-bg: #faead9;
+      --danger: #cc5b62;
+      --danger-bg: #fbe6e7;
+      --shadow: 0 12px 28px rgba(46, 54, 40, 0.1);
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    .icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; }
+
+    body {
+      background: var(--background);
+      color: var(--text);
+      font-family: Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", sans-serif;
+    }
+
+    header {
+      background: var(--surface);
+      color: var(--text);
+      max-width: 880px;
+      margin: 20px auto 0;
+      padding: 20px 26px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    header h1 { color: var(--text); display: flex; align-items: center; gap: 10px; }
+    header .sub { color: var(--muted); }
+    .header-mark {
+      width: 30px; height: 30px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 10px; color: var(--on-accent);
+      background: linear-gradient(135deg, #3a3a34, var(--accent));
+    }
+    nav.top-nav { display: none; }
+
+    main { max-width: 880px; }
+
+    .ai-disclaimer {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--warning-bg); border: 1px solid rgba(217, 132, 63, 0.35); color: #8a5a1e;
+      border-radius: var(--radius);
+    }
+    .ai-disclaimer .icon { margin-top: 2px; color: var(--warning); }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px 24px;
+    }
+    .panel h2 { color: var(--text); }
+    .panel p.hint, .hint { color: var(--muted); }
+
+    .field { color: var(--muted); }
+    .field input, .field select {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-soft);
+      color: var(--text);
+    }
+    .field input:focus, .field select:focus {
+      outline: none; border-color: var(--accent);
+    }
+
+    .face-cam-wrap { background: #14150f; border: 1px solid var(--border); }
+
+    button {
+      display: inline-flex; align-items: center; gap: 7px;
+      border-radius: 999px; font-weight: 650;
+      background: var(--accent); color: var(--on-accent);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+        0 3px 10px rgba(0, 0, 0, 0.2);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    button:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    button:disabled { background: var(--surface-soft); color: var(--muted); border-color: var(--border); box-shadow: none; }
+
+    button.secondary {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 2px rgba(28, 28, 24, 0.05);
+    }
+    button.danger { background: var(--danger); }
+
+    .badge.ok { background: var(--success-bg); color: var(--success); }
+    .badge.warn { background: var(--warning-bg); color: var(--warning); }
+    .badge.err { background: var(--danger-bg); color: var(--danger); }
+
+    .auth-status { color: var(--muted); }
+    .auth-status strong { color: var(--text); }
+    .voice-status { color: var(--danger); }
+  </style>
 </head>
 <body>
   <header>
-    <h1>🙍 마이페이지 · 얼굴 로그인</h1>
+    <h1>
+      <span class="header-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg></span>
+      마이페이지 · 얼굴 로그인
+    </h1>
     <p class="sub">비밀번호 로그인 + 선택적 얼굴 2차 인증(패시브 라이브니스 포함)</p>
     <nav class="top-nav">
-      <a href="/static/mypage.html" class="active">🙍 마이페이지</a>
+      <a href="/static/mypage.html" class="active">마이페이지</a>
     </nav>
   </header>
 
   <main>
     <p class="auth-status" id="authStatusBar"></p>
     <p class="ai-disclaimer">
-      ⚠️ 얼굴 인증은 <strong>학습·포트폴리오용</strong> 구현입니다. 패시브 라이브니스(정지 사진·화면
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <span>얼굴 인증은 <strong>학습·포트폴리오용</strong> 구현입니다. 패시브 라이브니스(정지 사진·화면
       재촬영 억제)를 포함하지만, 재생영상·딥페이크·카메라 주입 방어나 공인 PAD(iBeta 등) 성능은
-      보장하지 않습니다. 관리자 승격은 여전히 CLI 전용입니다.
+      보장하지 않습니다. 관리자 승격은 여전히 CLI 전용입니다.</span>
     </p>
 
     <!-- 1) 로그인 (비인증 상태) -->
     <div class="panel" id="loginPanel">
-      <h2>1. 로그인</h2>
+      <h2>로그인</h2>
       <div class="row">
         <div class="field">아이디
           <input id="loginUser" type="text" autocomplete="username" />
@@ -40,21 +151,21 @@
 
     <!-- 2) 얼굴 2차 인증 단계 (로그인 응답이 2FA 요구할 때만) -->
     <div class="panel" id="twofaPanel" hidden>
-      <h2>2. 얼굴 2차 인증</h2>
+      <h2>얼굴 2차 인증</h2>
       <p class="hint">등록한 얼굴로 본인 확인을 완료해야 로그인이 끝납니다(무폴백 — 비밀번호만으로는 접근 불가).</p>
       <div class="face-cam-wrap">
         <video id="twofaVideo" autoplay playsinline muted></video>
       </div>
       <div class="row">
-        <button id="twofaCaptureBtn" type="button">📸 촬영해서 인증</button>
-        <button id="twofaCancelBtn" type="button" class="secondary">취소</button>
+        <button id="twofaCaptureBtn" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/></svg> 촬영해서 인증</button>
+        <button id="twofaCancelBtn" type="button" class="secondary"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> 취소</button>
       </div>
       <p class="voice-status" id="twofaStatus"></p>
     </div>
 
     <!-- 3) 얼굴 등록 관리 (로그인 상태) -->
     <div class="panel" id="facePanel" hidden>
-      <h2>3. 얼굴 등록 관리</h2>
+      <h2>얼굴 등록 관리</h2>
       <p class="hint">
         상태: <strong id="faceStatusText">확인 중…</strong>
         <span class="hint">— 등록은 로그인된 이 세션에서만 가능합니다(체인 잠김 방지).</span>
@@ -63,10 +174,11 @@
         <video id="regVideo" autoplay playsinline muted></video>
       </div>
       <div class="row">
-        <button id="regCameraBtn" type="button">📷 카메라 켜기</button>
-        <button id="regCaptureBtn" type="button" hidden>📸 촬영해서 등록</button>
-        <button id="regDeleteBtn" type="button" class="danger" hidden>얼굴 등록 삭제</button>
-        <button id="logoutBtn" type="button" class="secondary">로그아웃</button>
+        <button id="regCameraBtn" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg> 카메라 켜기</button>
+        <button id="regCaptureBtn" type="button" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/></svg> 촬영해서 등록</button>
+        <button id="regDeleteBtn" type="button" class="danger" hidden><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 얼굴 등록 삭제</button>
+        <button id="adminBoardBtn" type="button" class="secondary"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg> 관리자 보드</button>
+        <button id="logoutBtn" type="button" class="secondary"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg> 로그아웃</button>
       </div>
       <p class="voice-status" id="regStatus"></p>
     </div>

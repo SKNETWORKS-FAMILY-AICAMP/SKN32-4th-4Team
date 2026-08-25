@@ -43,7 +43,6 @@ const sessionToken = (() => {
 })();
 
 function updateSessionCard() {
-  $('sessionId').textContent = sessionToken;
   $('sessionInsurer').textContent = $('insurer').value.trim() || '미등록';
   $('sessionProduct').textContent = $('productName').value.trim() || '미등록';
   $('sessionDate').textContent = $('enrolled').value.trim() || '미등록';
@@ -51,7 +50,7 @@ function updateSessionCard() {
 
 function showChat() {
   updateSessionCard();
-  $('appShell').classList.add('show-chat');
+  $('emptyState').hidden = $('chatLog').children.length > 0;
   requestAnimationFrame(() => {
     $('chatIn').focus({ preventScroll: true });
     //: ★★**보일 때 다시 잰다.** 숨은 요소는 `scrollWidth`·`clientWidth` 가 0 이라
@@ -364,104 +363,17 @@ async function loadScope() {
 
 /* ── 컷②~⑦ 판정 ──────────────────────────────────────────────── */
 
-function renderCitations(cites) {
-  if (!cites || !cites.length) return '';
-  return `<h2 style="margin-top:18px">근거 조항</h2>` + cites.map((c) => `
-    <div class="cite">
-      <div><strong>${esc(c.title || c.qualified_no)}${c.scope ? ` · ${esc(c.scope)}` : ''}</strong></div>
-      <div class="quote">${esc(c.quote || '')}</div>
-      <div class="loc">${esc(c.clause_id)} · ${esc(c.section || '')} p${c.page_from}${c.page_to && c.page_to !== c.page_from ? '–' + c.page_to : ''}</div>
-    </div>`).join('');
-}
+/* ★판정 결과의 전체 상세(근거 조항·코호트·후보 재선택)는 더 이상 이 화면에
+   그리지 않는다. `/static/coverage-detail.html` 이 별도 대시보드로 그린다 —
+   여기서는 sessionStorage로 마지막 판정 입력·결과만 넘긴다(아래 저장 로직 참고). */
+const PRECHECK_HANDOFF_KEY = 'lastPrecheckHandoff';
 
-function renderResult(status, b) {
-  const out = $('result');
-
-  if (status === 422) {
-    out.innerHTML = `<div class="card"><div class="banner warn">입력을 확인해 주세요 —
-      ${esc(b?.message || b?.detail || '형식이 올바르지 않습니다.')}</div></div>`;
-    return;
-  }
-  if (status === 503) {
-    //: ★이때만 "우리 잘못"이다. 기권과 섞으면 안 된다.
-    out.innerHTML = `<div class="card"><div class="banner danger">
-      일시적으로 조회할 수 없습니다 — ${esc(b?.message || b?.detail || '')}<br>
-      <span class="small">보장 여부를 판단한 것이 아닙니다. 잠시 후 다시 시도해 주세요.</span></div></div>`;
-    return;
-  }
-  if (status !== 200 || !b) {
-    out.innerHTML = `<div class="card"><div class="banner danger">예상하지 못한 응답입니다 (HTTP ${status}).</div></div>`;
-    return;
-  }
-
-  const [label, tone] = VERDICT_KO[b.verdict] || [b.verdict, 'warn'];
-  const p = b.applied_policy;
-
-  out.innerHTML = `
-    <section class="card">
-      <div class="verdict">${esc(label)}</div>
-      <div class="banner ${tone}">${esc(b.message || '')}</div>
-
-      ${b.abstained ? `<p class="small muted">
-        ★근거 조항을 대지 못해 판정하지 않았습니다. <strong>오류가 아닙니다</strong> —
-        추측으로 "보장됩니다"라고 말하지 않기 위한 정상 동작입니다.</p>` : ''}
-
-      ${(b.warnings || []).length ? `<div class="banner warn">
-        ${b.warnings.map((w) => `<div>⚠ ${esc(w)}</div>`).join('')}</div>` : ''}
-
-      ${p ? `<h2 style="margin-top:16px">어느 약관으로 봤나</h2>
-      <dl class="kv">
-        <dt>보험사</dt><dd>${esc(p.insurer)}</dd>
-        <dt>상품</dt><dd>${esc(p.product_name)}</dd>
-        <dt>판매기간</dt><dd>${esc(p.sale_start)} ~ ${esc(p.sale_end || '')}</dd>
-        <dt>세대</dt><dd>${esc(p.generation_label || p.generation || '미확정')}</dd>
-        <dt>날짜 신뢰도</dt><dd>${esc(p.date_confidence)}</dd>
-        <dt>추출 상태</dt><dd>${esc(p.parse_status)}</dd>
-      </dl>` : ''}
-
-      ${(b.candidates || []).length ? `<h2 style="margin-top:16px">후보 약관</h2>
-        <div class="small muted">어느 것인지 특정하지 못했습니다.
-          ★<strong>고르지 않으면 판정하지 않습니다</strong> — 아무거나 골라 답하면
-          다른 약관의 조항을 근거로 대게 됩니다.</div>
-        <div style="margin-top:8px">
-        ${b.candidates.map((c, i) => `<button class="chip-btn cand" data-i="${i}"
-            data-name="${esc(c.product_name)}">${esc(c.product_name)} ·
-            ${esc(c.sale_start)}${c.generation_label ? ' · ' + esc(c.generation_label) : ''}</button>`).join('')}
-        </div>` : ''}
-
-      ${(b.per_code || []).length ? `<h2 style="margin-top:16px">질병기호별</h2>
-        ${b.per_code.map((a) => {
-          const [l] = VERDICT_KO[a.verdict] || [a.verdict];
-          return `<div class="cite"><strong>${esc(a.code)}</strong> — ${esc(l)}
-            <div class="small muted">${esc(a.note || a.reason_code || '')}</div></div>`;
-        }).join('')}` : ''}
-
-      ${renderCitations(b.citations)}
-
-      <div class="small muted" style="margin-top:16px">
-        ${/*
-          ★빈 값이면 라벨째 뺀다. 앞서 `추출 ` 만 덩그러니 찍혔다(실측 2026-08-04).
-            `extractor` 는 PG 색인 경로에서 **원래 비어 있다** — PG 에 그 값이 없어
-            `pg_clause_store.stats()` 가 안 돌려준다. 없는 것을 채우지 않는 것은 맞고
-            (CLAUDE.md §1), 화면이 라벨만 보여 주는 것이 틀렸다.
-        */''}
-        ${[
-          b.rule_engine_version ? `규칙엔진 ${esc(b.rule_engine_version)}` : '',
-          b.extractor ? `추출 ${esc(b.extractor)}` : '',
-          b.trace_id ? `추적 ${esc(b.trace_id)}` : '',
-        ].filter(Boolean).join(' · ')}
-      </div>
-    </section>`;
-}
-
-/* ── 컷③ 되묻기 ──────────────────────────────────────────────────
- * ★후보를 고르면 **그 상품명을 실어 다시 판정한다.**
- *   화면이 후보 중 하나를 임의로 고르지 않는다 — 고르는 것은 사용자다.
- *   임의로 고르면 다른 약관의 조항을 근거로 대게 된다.
- */
-function bindCandidates() {
-  document.querySelectorAll('.cand').forEach((b) =>
-    b.addEventListener('click', () => runPrecheck(b.dataset.name)));
+function savePrecheckHandoff(status, body, { insurer, enrolledOn, codes }) {
+  try {
+    sessionStorage.setItem(PRECHECK_HANDOFF_KEY, JSON.stringify({
+      status, body, insurer, enrolledOn, codes, savedAt: Date.now(),
+    }));
+  } catch { /* 저장 실패해도 채팅 흐름은 계속된다 */ }
 }
 
 function renderPrecheckChat(body) {
@@ -489,8 +401,7 @@ function bindResultLink(message) {
   const button = message?.querySelector('[data-scroll-result]');
   if (!button) return;
   button.addEventListener('click', () => {
-    $('detailTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    $('result').focus({ preventScroll: true });
+    window.location.href = '/static/coverage-detail.html';
   });
 }
 
@@ -524,7 +435,9 @@ async function runPrecheck(productName, options = {}) {
       : `${invalidCode}의 형식이 올바르지 않습니다. 단일 질병기호(예: F32, S72.0)를 입력하세요.`;
     $('status').textContent = '';
     updateRegisterState();
-    renderResult(422, { detail });
+    savePrecheckHandoff(422, { detail }, {
+      insurer: $('insurer').value.trim(), enrolledOn: $('enrolled').value.trim(), codes,
+    });
     if (!options.silentChat) bubble('bot', detail);
     showChat();
     return { status: 422, body: { detail } };
@@ -546,9 +459,9 @@ async function runPrecheck(productName, options = {}) {
 
   $('status').textContent = '';
   updateRegisterState();
-  renderResult(status, body);
-  bindCandidates();
-  if (codes.length) loadCohorts(codes[0]);
+  savePrecheckHandoff(status, body, {
+    insurer: $('insurer').value.trim(), enrolledOn: $('enrolled').value.trim(), codes,
+  });
 
   if (status === 200 && body && !options.silentChat) {
     const message = bubble('bot', renderPrecheckChat(body));
@@ -572,41 +485,6 @@ async function runPrecheckForChatProductLine(line) {
   return initial;
 }
 
-/* ── 컷⑧ 코호트 — ★실제와 합성을 각각 제 구역에만 그린다 ────────── */
-
-async function loadCohort(path, elId, isDemo) {
-  const el = $(elId);
-  const { status, body } = await api(path);
-  if (status !== 200 || !body) {
-    el.innerHTML += `<div class="banner danger small">조회하지 못했습니다 (HTTP ${status}).</div>`;
-    return;
-  }
-  el.innerHTML = `
-    <h2>${isDemo ? 'DEMO · 합성 데이터' : '실제 검증 데이터'}</h2>
-    <div class="banner ${isDemo ? 'warn' : (body.n ? 'ok' : '')}"
-         ${!isDemo && !body.n ? 'style="background:transparent;border:1px solid var(--line)"' : ''}>
-      ${esc(body.headline || '')}
-    </div>
-    <dl class="kv">
-      <dt>사례 수</dt><dd>${body.n}</dd>
-      <dt>지급</dt><dd>${body.approved_n}</dd>
-      <dt>부지급</dt><dd>${body.denied_n}</dd>
-      <dt>최소 표본</dt><dd>${body.min_sample} ${body.min_sample_met ? '충족' : '미달'}</dd>
-    </dl>
-    ${body.approval_rate != null ? `<p class="small">관측 비율 ${(body.approval_rate * 100).toFixed(1)}%
-      <strong>(95% 구간 ${(body.approval_ci[0] * 100).toFixed(0)}~${(body.approval_ci[1] * 100).toFixed(0)}%)</strong></p>`
-      : `<p class="small muted">표본이 적어 비율을 계산하지 않았습니다.</p>`}
-    ${(body.warnings || []).map((w) => `<div class="small muted">⚠ ${esc(w)}</div>`).join('')}
-    <div class="small muted" style="margin-top:8px">data_source: <code>${esc(body.data_source)}</code></div>`;
-}
-
-function loadCohorts(code) {
-  const q = `?code=${encodeURIComponent(code)}`;
-  //: ★엔드포인트가 다르다. 한 응답을 나눠 그리지 않는다.
-  loadCohort('/v1/cohorts' + q, 'cohortReal', false);
-  loadCohort('/v1/demo/cohorts' + q, 'cohortDemo', true);
-}
-
 /* ── 용어 챗봇 ────────────────────────────────────────────────── */
 
 /* ★대화창이 판정하지 않는다.
@@ -621,9 +499,20 @@ function bubble(cls, html) {
   d.innerHTML = html;
   const log = $('chatLog');
   log.appendChild(d);
+  $('emptyState').hidden = true;
+  document.body.classList.add('has-chat');
   const scroll = $('chatScroll');
   scroll.scrollTop = scroll.scrollHeight;
   return d;
+}
+
+/* ★대화만 지운다 — 등록해 둔 보험정보(사이드 패널)는 그대로 둔다.
+   질문을 다시 하려는 것이지, 보험정보를 다시 입력하고 싶은 게 아니다. */
+function resetChat() {
+  $('chatLog').replaceChildren();
+  $('emptyState').hidden = false;
+  document.body.classList.remove('has-chat');
+  $('chatIn').focus({ preventScroll: true });
 }
 
 async function sendChat(text) {
@@ -687,50 +576,6 @@ async function sendChat(text) {
   }
 }
 
-/* ── 컷⑨ 증빙 제출 ────────────────────────────────────────────── */
-
-/* ★제출 결과를 "반영되었습니다"로 그리지 않는다.
- *   서버는 `verification="unverified"` 로 고정해 저장하고, 검증 전까지
- *   통계에 넣지 않는다. 화면이 그보다 강하게 말하면 거짓말이 된다.
- */
-async function submitObservation() {
-  const out = $('obOut');
-  const insurer = $('obInsurer').value.trim();
-  if (!insurer) {
-    out.innerHTML = '<div class="banner warn small">보험사를 적어 주세요.</div>';
-    return;
-  }
-  $('obGo').disabled = true;
-  const { status, body } = await api('/v1/observations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_ref: 'web-ui',
-      insurer,
-      enrolled_on: $('enrolled').value.trim(),
-      kcd_codes: $('obCodes').value.split(',').map((s) => s.trim()).filter(Boolean),
-      outcome: $('obOutcome').value,
-      outcome_reason: $('obReason').value.trim(),
-    }),
-  });
-  $('obGo').disabled = false;
-
-  if (status === 503) {
-    out.innerHTML = `<div class="banner danger small">저장하지 못했습니다 — ${esc(body?.message || body?.detail || '')}</div>`;
-    return;
-  }
-  if (status !== 202 || !body) {
-    out.innerHTML = `<div class="banner danger small">제출하지 못했습니다 (HTTP ${status}).</div>`;
-    return;
-  }
-  out.innerHTML = `
-    <div class="banner ok small">${esc(body.note || '')}</div>
-    <div class="small muted">
-      검증 상태 <code>${esc(body.verification)}</code>
-      ${body.duplicate ? ' · 이미 접수된 보고입니다(중복으로 쌓지 않았습니다)' : ''}
-    </div>`;
-}
-
 /* ── 시작 ─────────────────────────────────────────────────────── */
 
 $('insuranceForm').addEventListener('submit', (e) => {
@@ -748,8 +593,8 @@ $('insuranceForm').addEventListener('submit', (e) => {
 });
 $('consent').addEventListener('change', updateRegisterState);
 $('skipBtn').addEventListener('click', showChat);
-$('mobileBack').addEventListener('click', () => $('appShell').classList.remove('show-chat'));
-$('obGo').addEventListener('click', submitObservation);
+$('sideToggle').addEventListener('click', () => $('sidePanel').classList.toggle('is-pinned'));
+$('resetChatBtn').addEventListener('click', resetChat);
 $('chatGo').addEventListener('click', () => sendChat());
 $('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
 document.querySelectorAll('.chip-btn').forEach((b) =>

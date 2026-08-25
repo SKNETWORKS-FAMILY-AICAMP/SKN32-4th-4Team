@@ -224,12 +224,12 @@ function _face2faOverlay(challengeToken) {
     ov.className = "twofa-overlay";
     ov.innerHTML =
       '<div class="twofa-box">' +
-      '<h3>🙂 얼굴 2차 인증</h3>' +
+      '<h3><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg> 얼굴 2차 인증</h3>' +
       '<p class="twofa-hint">등록한 얼굴로 본인 확인을 완료해야 로그인이 끝납니다.</p>' +
       '<div class="twofa-cam"><video autoplay playsinline muted></video></div>' +
       '<p class="twofa-status"></p>' +
       '<div class="twofa-actions">' +
-      '<button class="twofa-shot" type="button">📸 촬영해서 인증</button>' +
+      '<button class="twofa-shot" type="button"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/></svg> 촬영해서 인증</button>' +
       '<button class="twofa-cancel secondary" type="button">취소</button>' +
       "</div></div>";
     document.body.appendChild(ov);

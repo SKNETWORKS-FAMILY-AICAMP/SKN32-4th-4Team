@@ -208,7 +208,11 @@ def create_app(role: str = "full") -> FastAPI:
     def index():
         target = _STATIC_DIR / landing if landing else None
         if target and target.is_file():
-            return FileResponse(str(target))
+            #: `/static/*`와 같은 이유로 no-cache — 랜딩 페이지도 파일명이 고정이라
+            #: heuristic 캐시에 걸리면 새 배포가 반영 안 된 옛 HTML이 계속 보인다.
+            return FileResponse(
+                str(target), headers={"Cache-Control": "no-cache"}
+            )
         return PlainTextResponse(
             "올바른 보험비서 — 보장 사전판정 API\n"
             "\n"

@@ -3,498 +3,306 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f4f4f1">
+<meta name="theme-color" content="#c9d2c6">
 <title>올바른 보험비서</title>
 <style>
   :root {
-    --page: #f4f4f1;
-    --surface: #ffffff;
-    --surface-soft: #f8f8f6;
-    --ink: #151513;
-    --muted: #85857f;
-    --line: #deded9;
-    --line-soft: #ecece8;
-    --black: #0d0d0c;
-    --ok: #246348;
-    --ok-bg: #edf6f0;
-    --warn: #8a5d0a;
-    --warn-bg: #fff8e8;
-    --danger: #a13b3b;
-    --danger-bg: #fff1f1;
-    --radius-xl: 28px;
-    --radius-lg: 20px;
-    --radius-md: 14px;
-    --shadow: 0 18px 50px rgba(21, 21, 19, .06);
+    /* ★파티클 배경(검은 화면) 위에 뜨는 페이지라 전체를 다크 글래스 톤으로 맞춘다.
+       버튼(--accent)은 그대로 검게 둔다 — 옅은 테두리 링 하나로도 검은 배경 위에서
+       충분히 구분된다(참고 이미지의 "Subscribe" 필 버튼과 같은 원리). */
+    --accent: #1c1c18;
+    --accent-dark: #000000;
+    --on-accent: #ffffff;
+    --active-pill: rgba(255, 255, 255, 0.14);
+    --border: rgba(255, 255, 255, 0.14);
+    --background: #050505;
+    --surface: rgba(255, 255, 255, 0.08);
+    --surface-soft: rgba(255, 255, 255, 0.05);
+    --text: #f3f2ee;
+    --muted: rgba(255, 255, 255, 0.6);
+    --success: #4f9d78;
+    --success-bg: rgba(79, 157, 120, 0.18);
+    --warning: #d9843f;
+    --warning-bg: rgba(217, 132, 63, 0.18);
+    --danger: #e28288;
+    --danger-bg: rgba(226, 130, 136, 0.18);
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    --radius: 20px;
+    --glass-blur: blur(16px);
   }
 
   * { box-sizing: border-box; }
-  html { background: var(--page); }
+  html { background: var(--background); }
   body {
     min-width: 320px;
     margin: 0;
-    background: var(--page);
-    color: var(--ink);
-    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "Pretendard",
+    background: var(--background);
+    color: var(--text);
+    font: 15.5px/1.55 Inter, Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI",
       "Noto Sans KR", "Malgun Gothic", sans-serif;
-    letter-spacing: -.02em;
+    letter-spacing: -.01em;
   }
   button, input, select { font: inherit; letter-spacing: inherit; }
-  button { -webkit-tap-highlight-color: transparent; }
+  button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
   button:focus-visible, input:focus-visible, select:focus-visible {
-    outline: 3px solid rgba(21, 21, 19, .13);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
   [hidden] { display: none !important; }
+  .icon { width: 17px; height: 17px; flex: none; }
 
-  .app-shell { min-height: 100dvh; }
-  .topbar {
-    height: 76px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 0 34px;
+  #particleCanvas {
+    position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; background: #050505;
   }
-  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .brand-mark {
-    width: 34px;
-    height: 34px;
-    display: grid;
-    place-items: center;
-    border-radius: 11px;
-    background: var(--black);
-    color: #fff;
-    font-size: 18px;
-    font-weight: 800;
+  .bg-vignette {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: radial-gradient(120% 100% at 50% 45%, transparent 35%, rgba(0,0,0,.55) 100%);
   }
-  .brand-copy { display: flex; flex-direction: column; line-height: 1.2; }
-  .brand-copy strong { font-size: 16px; }
-  .brand-copy span { margin-top: 3px; color: var(--muted); font-size: 12px; }
-  .service-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
-  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #45a477; }
+  .app-shell { position: relative; z-index: 1; height: 100dvh; overflow: hidden; }
 
-  .workspace {
-    width: min(1380px, calc(100% - 40px));
-    height: calc(100dvh - 96px);
-    min-height: 680px;
-    margin: 0 auto 20px;
-    display: grid;
-    grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
-    overflow: hidden;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-xl);
+  /* ── 왼쪽 보험정보 패널 — 평소엔 접혀있고 마우스를 올리면 펼쳐진다 ───── */
+  .side-panel {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 30;
+    width: 64px;
+    display: flex; flex-direction: column;
     background: var(--surface);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border-right: 1px solid var(--border);
     box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: width .2s ease;
   }
+  .side-panel:hover, .side-panel.is-pinned { width: 380px; }
+  .side-panel-inner { width: 380px; height: 100%; display: flex; flex-direction: column; overflow-y: auto; }
 
-  /* ★두 창 모두 `min-height: 0` 이 **필요하다**. 그리드 아이템의 기본 최소 크기는
-       `auto`(=내용 높이)라, 내용이 늘면 창이 스크롤되는 대신 **행 트랙이 늘어난다**.
-       늘어난 행은 고정 높이인 `.workspace` 를 넘고 `overflow: hidden` 이 잘라낸다.
+  .side-panel .label {
+    display: inline-block; max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+    transition: max-width .18s ease, opacity .12s ease;
+  }
+  .side-panel:hover .label, .side-panel.is-pinned .label { max-width: 320px; opacity: 1; }
 
-       실측(2026-08-04, 1440x900): 채팅 12개를 넣자 행이 802 → 1427.6px 로 늘고
-       `.chat-scroll` 넘침 0(스크롤 없음) · 입력창 바닥이 y=1504(workspace 바닥 880) 로
-       화면 밖에 잘렸다. `.profile-pane` 은 스크롤 컨테이너라 자기 최소 크기는 0 이지만
-       **행을 chat-pane 과 공유**해서, 행이 부풀면 같이 늘어나 있던 스크롤(넘침 161)까지
-       0 이 됐다. 그래서 한쪽만 고치면 안 된다. */
-  .profile-pane {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow-y: auto;
-    border-right: 1px solid var(--line-soft);
-    background: #fbfbf9;
-  }
-  .pane-head { padding: 34px 34px 20px; }
-  .eyebrow {
-    margin: 0 0 12px;
-    color: var(--muted);
-    font-size: 14px;
-    font-weight: 650;
-  }
-  .pane-head h1 {
-    margin: 0;
-    font-size: clamp(27px, 2vw, 34px);
-    line-height: 1.25;
-    letter-spacing: -.055em;
-  }
-  .pane-head .lead { margin: 12px 0 0; color: #64645f; font-size: 16px; line-height: 1.65; }
+  /* ★`overflow:hidden` 클리핑만 믿지 않는다 — 접힌 상태에서 확실히 숨기려고
+     콘텐츠 자체를 `visibility:hidden`으로도 감춘다(겹벌이지만 값싸고 확실하다). */
+  .side-panel-body { visibility: hidden; flex: 1; display: flex; flex-direction: column; }
+  .side-panel:hover .side-panel-body, .side-panel.is-pinned .side-panel-body { visibility: visible; }
 
-  .insurance-form { padding: 4px 34px 34px; }
-  .field { margin-top: 20px; }
-  .field label { display: block; margin: 0 0 7px; color: #777771; font-size: 13px; font-weight: 650; }
+  .side-toggle {
+    height: 64px; flex: none; display: flex; align-items: center; gap: 12px;
+    padding: 0 20px; border: 0; background: transparent; color: var(--text); text-align: left;
+  }
+  .side-brand-mark {
+    width: 32px; height: 32px; flex: none; display: flex; align-items: center; justify-content: center;
+    border-radius: 10px; color: var(--on-accent);
+    background: linear-gradient(135deg, #3a3a34, var(--accent));
+  }
+  .side-brand-mark .icon { width: 17px; height: 17px; }
+  .side-toggle .label strong { display: block; font-size: 14px; }
+  .side-toggle .label span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+  .insurance-form { padding: 4px 20px 20px; flex: 1; }
+  .field { margin-top: 16px; white-space: nowrap; }
+  .field label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 12px; font-weight: 650; white-space: normal; }
   .control {
-    width: 100%;
-    height: 54px;
-    padding: 0 15px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--surface);
-    color: var(--ink);
-    transition: border-color .18s, box-shadow .18s, background .18s;
+    width: 316px;
+    height: 46px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    color: var(--text);
+    transition: border-color .15s, box-shadow .15s;
   }
-  .control::placeholder { color: #aaa9a4; }
-  .control:hover { border-color: #c9c9c3; }
-  .control:focus { border-color: #9b9b95; box-shadow: 0 0 0 4px rgba(21,21,19,.045); outline: none; }
+  .control::placeholder { color: rgba(255, 255, 255, 0.32); }
+  .control:focus { border-color: rgba(255, 255, 255, 0.4); outline: none; }
   select.control {
     appearance: none;
-    padding-right: 44px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2385857f' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    padding-right: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 14px center;
+    background-position: right 12px center;
   }
-  .precheck-block {
-    margin-top: 24px;
-    padding-top: 22px;
-    border-top: 1px solid var(--line-soft);
-  }
-  .precheck-title { margin: 0 0 5px; font-size: 14px; }
-  .precheck-help { margin: 0 0 13px; color: var(--muted); font-size: 12px; }
+  select.control option { background: #1a1a1a; color: #fff; }
+  .precheck-block { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); white-space: normal; }
+  .precheck-title { margin: 0 0 4px; font-size: 13px; }
+  .precheck-help { margin: 0 0 11px; color: var(--muted); font-size: 11.5px; }
   .consent {
-    display: flex;
-    align-items: flex-start;
-    gap: 9px;
-    margin-top: 12px;
-    color: #5e5e59;
-    font-size: 12px;
-    line-height: 1.5;
-    cursor: pointer;
+    display: flex; align-items: flex-start; gap: 8px; margin-top: 12px;
+    color: var(--muted); font-size: 11.5px; line-height: 1.5; cursor: pointer; white-space: normal;
   }
-  .consent input { width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--black); }
+  .consent input { width: 15px; height: 15px; margin: 1px 0 0; accent-color: var(--accent); }
 
-  .form-actions { display: grid; gap: 10px; margin-top: 22px; }
+  .form-actions { display: grid; gap: 8px; margin-top: 18px; white-space: normal; }
   .primary-btn, .secondary-btn {
-    min-height: 54px;
-    border-radius: var(--radius-md);
-    font-weight: 750;
-    cursor: pointer;
-    transition: transform .15s, opacity .15s, background .15s;
+    min-height: 46px; border-radius: 999px; font-weight: 700; font-size: 13.5px;
+    border: 1px solid rgba(255,255,255,.16);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.18);
+    transition: opacity .15s, transform .15s;
   }
-  .primary-btn { border: 1px solid var(--black); background: var(--black); color: #fff; }
-  .secondary-btn { border: 1px solid #cfcfca; background: var(--surface); color: var(--ink); }
-  .primary-btn:hover, .secondary-btn:hover { transform: translateY(-1px); }
+  .primary-btn { background: var(--accent); color: var(--on-accent); }
+  .secondary-btn { background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(28,28,24,.05); }
+  .primary-btn:hover, .secondary-btn:hover { opacity: .9; transform: translateY(-1px); }
   .primary-btn:disabled { cursor: not-allowed; opacity: .35; transform: none; }
-  #status { display: block; min-height: 19px; margin-top: 8px; color: var(--muted); font-size: 12px; text-align: center; }
+  #status { display: block; min-height: 16px; margin-top: 6px; color: var(--muted); font-size: 11.5px; text-align: center; white-space: normal; }
 
   .scope-card {
-    margin: auto 34px 30px;
-    padding: 14px 15px;
-    border-radius: 14px;
-    background: #f2f2ef;
+    margin: 4px 20px 12px; padding: 12px 13px; border-radius: 14px; background: var(--surface-soft);
+    border: 1px solid var(--border); white-space: normal;
   }
-  .scope-card summary { color: #696963; font-size: 12px; font-weight: 700; cursor: pointer; }
-  #scopeBody { margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .scope-card summary { color: var(--text); font-size: 11.5px; font-weight: 700; cursor: pointer; }
+  #scopeBody { margin-top: 8px; color: var(--muted); font-size: 11.5px; }
 
-  /* ★`min-height: 0` — 위 `.profile-pane` 주석의 이유가 그대로 여기에 해당한다.
-       이쪽이 근본 원인이다(`overflow: visible` 이라 자동 최소 크기가 그대로 걸린다). */
-  .chat-pane {
-    position: relative;
-    min-width: 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface);
+  .side-link {
+    display: flex; align-items: center; gap: 10px; margin: 4px 12px 16px; padding: 11px 12px;
+    border-radius: 12px; background: var(--surface-soft); border: 1px solid var(--border); color: var(--text);
+    text-decoration: none; font-size: 12.5px; font-weight: 650; white-space: nowrap;
   }
-  .chat-head {
-    min-height: 92px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    padding: 19px 28px;
-    border-bottom: 1px solid var(--line-soft);
+  .side-link:hover { background: var(--active-pill); }
+
+  /* ── 메인 채팅 화면 (클로드/챗지피티 데스크탑 느낌) ─────────────────── */
+  .chat-main { position: relative; height: 100%; margin-left: 64px; display: flex; flex-direction: column; }
+
+  .chat-topbar {
+    height: 56px; flex: none; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; gap: 16px;
   }
-  .chat-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .assistant-avatar {
-    width: 42px;
-    height: 42px;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    border-radius: 14px;
-    background: #f0f0ed;
-    font-weight: 850;
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .service-status {
+    display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px;
+    background: var(--surface); border: 1px solid var(--border);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    padding: 7px 14px; border-radius: 999px; box-shadow: var(--shadow);
   }
-  .chat-title h2 { margin: 0; font-size: 16px; }
-  .chat-title p { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
-  .session-card {
-    max-width: 510px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(90px, 1fr));
-    gap: 3px 18px;
-    padding: 12px 16px;
-    border-radius: 14px;
-    background: var(--surface-soft);
-    color: #6f6f69;
-    font-size: 12px;
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+  .reset-chat-btn {
+    display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+    border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow); transition: color .15s ease, transform .15s ease;
   }
-  .session-item { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .session-item strong { color: #979790; font-weight: 600; }
+  .reset-chat-btn:hover { color: #fff; transform: rotate(-24deg); }
+  .session-chip {
+    display: flex; gap: 12px; padding: 6px 14px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow); color: var(--muted); font-size: 11.5px;
+  }
+  .session-chip strong { color: var(--text); font-weight: 650; }
 
   .chat-scroll {
-    min-height: 0;
-    flex: 1;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 34px clamp(26px, 5vw, 72px) 18px;
+    flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 12px clamp(20px, 8vw, 160px) 16px;
+    transition: background-color .3s ease, backdrop-filter .3s ease;
   }
-  .intro-message, .msg {
-    max-width: min(650px, 84%);
-    padding: 16px 18px;
-    border-radius: 6px 20px 20px 20px;
-    background: var(--surface-soft);
-    white-space: pre-wrap;
-    word-break: keep-all;
+  /* ★채팅이 시작되면(메시지가 생기면) 검은 반투명 유리 패널을 깔아 —
+     원래 디자인(말풍선 없는 어시스턴트 텍스트)의 가독성을 지킨다.
+     비어있는 환영 화면일 때만 파티클이 아무 여과 없이 그대로 비친다. */
+  body.has-chat .chat-scroll {
+    background: rgba(5, 5, 5, 0.55);
+    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
   }
-  .intro-message { margin-bottom: 14px; font-size: 16px; line-height: 1.65; }
-  .chatlog { display: flex; flex-direction: column; gap: 12px; }
-  .msg { margin: 0; font-size: 14px; }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
+  .empty-mark {
+    width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;
+    border-radius: 22px; color: #fff; margin-bottom: 18px;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.18);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    box-shadow: 0 16px 40px rgba(0,0,0,.4);
+  }
+  .empty-mark .icon { width: 30px; height: 30px; }
+  .empty-state h2 { margin: 0; font-size: 21px; color: #fff; }
+  .empty-state p { margin: 8px 0 0; color: rgba(255,255,255,.7); font-size: 13.5px; max-width: 380px; }
+
+  .chatlog { display: flex; flex-direction: column; gap: 18px; max-width: 720px; margin: 0 auto; }
+  .msg { max-width: 88%; font-size: 14.5px; white-space: pre-wrap; word-break: keep-all; line-height: 1.6; }
+  .msg.bot { align-self: flex-start; color: var(--text); }
   .msg.me {
-    align-self: flex-end;
-    max-width: min(650px, 78%);
-    border-radius: 20px 6px 20px 20px;
-    background: var(--black);
-    color: #fff;
+    align-self: flex-end; padding: 13px 16px; border-radius: 20px 6px 20px 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow); color: var(--text);
   }
-  .msg.bot { align-self: flex-start; }
-  .precheck-chat-details {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line-soft);
-  }
-  .precheck-chat-line { margin-top: 8px; }
-  .precheck-chat-warning { margin-top: 8px; color: #8a5b16; }
+  .precheck-chat-details { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .precheck-chat-line { margin-top: 6px; font-size: 13.5px; }
+  .precheck-chat-warning { margin-top: 6px; color: var(--warning); font-size: 12.5px; }
   .chat-detail-link {
-    margin-top: 12px;
-    padding: 8px 12px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--black);
-    color: #fff;
-    font-size: 12px;
-    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; padding: 8px 14px;
+    border: 0; border-radius: 999px; background: var(--accent); color: var(--on-accent);
+    font-size: 12px; font-weight: 650; cursor: pointer;
   }
-  .cite { margin: 12px 0 0; padding: 10px 0 4px 12px; border-left: 2px solid #b8b8b2; font-size: 12px; }
-  .cite .loc { margin-top: 4px; color: var(--muted); font: 11px/1.4 ui-monospace, monospace; }
+  .cite { margin: 10px 0 0; padding: 8px 0 2px 12px; border-left: 2px solid var(--border); font-size: 12.5px; }
+  .cite .loc { margin-top: 3px; color: var(--muted); font: 11px/1.4 ui-monospace, monospace; }
   .quote { white-space: pre-wrap; }
 
+  .quick-wrap { position: relative; flex: none; }
   .quick-prompts {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 0 clamp(26px, 5vw, 72px) 12px;
-    scrollbar-width: none;
+    display: flex; gap: 8px; overflow-x: auto; max-width: 720px; margin: 0 auto;
+    padding: 0 clamp(20px, 8vw, 160px) 10px; scrollbar-width: none;
   }
   .quick-prompts::-webkit-scrollbar { display: none; }
-
-  /* ★스크롤바를 숨겨 놨는데 칩이 4개뿐이라 **스크롤되는 줄 몰랐다**.
-     칩을 늘리는 김에 오른쪽에 페이드를 둬 "더 있다"를 보이게 한다.
-     `.is-scrollable` 은 실제로 넘칠 때만 JS 가 붙인다 — 안 넘치는데
-     페이드가 있으면 없는 것을 있다고 말하는 셈이다. */
-  .quick-wrap { position: relative; }
   .quick-wrap.is-scrollable::after {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 12px;
-    width: 46px;
-    background: linear-gradient(to right, rgba(255,255,255,0), var(--surface) 72%);
-    pointer-events: none;
-    content: "";
+    position: absolute; top: 0; right: 0; bottom: 10px; width: 46px;
+    background: linear-gradient(to right, rgba(201,210,198,0), var(--background) 75%);
+    pointer-events: none; content: "";
   }
   .chip-btn {
-    flex: 0 0 auto;
-    padding: 8px 12px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--surface);
-    color: #666660;
-    font-size: 12px;
-    cursor: pointer;
+    flex: 0 0 auto; padding: 7px 13px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface); color: var(--muted); font-size: 12px;
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   }
+  .chip-btn:hover { background: rgba(255,255,255,.14); color: var(--text); }
+
+  .composer-wrap { flex: none; padding: 0 20px calc(20px + env(safe-area-inset-bottom)); }
   .composer {
-    display: flex;
-    gap: 10px;
-    padding: 14px 28px calc(18px + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--line-soft);
-    background: rgba(255,255,255,.96);
+    display: flex; align-items: flex-end; gap: 10px; max-width: 720px; margin: 0 auto;
+    padding: 12px 12px 12px 20px; border-radius: 28px; background: var(--surface);
+    border: 1px solid var(--border);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow);
   }
   .composer input {
-    min-width: 0;
-    height: 56px;
-    flex: 1;
-    padding: 0 17px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--surface);
-    color: var(--ink);
+    min-width: 0; flex: 1; height: 40px; border: 0; background: transparent; color: var(--text);
   }
-  .composer input::placeholder { color: #aaa9a4; }
-  .composer input:focus { border-color: #999992; outline: none; }
+  .composer input::placeholder { color: rgba(255,255,255,.32); }
+  .composer input:focus { outline: none; }
   .send-btn {
-    width: 78px;
-    min-height: 56px;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: var(--black);
-    color: #fff;
-    font-weight: 750;
-    cursor: pointer;
+    width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.3);
   }
-
-  .detail-area {
-    width: min(1180px, calc(100% - 40px));
-    margin: 42px auto 80px;
-  }
-  .detail-heading { margin: 0 0 8px; font-size: 23px; letter-spacing: -.04em; }
-  .detail-copy { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
-  .detail-card, .card {
-    margin-bottom: 16px;
-    padding: 24px;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-  }
-  .detail-card h2, .card h2 { margin: 0 0 12px; font-size: 16px; }
-  .detail-card input, .detail-card select {
-    width: 100%;
-    height: 44px;
-    padding: 0 12px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--surface);
-  }
-  .detail-card label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
-  .row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .row > * { flex: 1 1 180px; }
-  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .small { font-size: 12px; }
-  .muted { color: var(--muted); }
-  .banner { margin: 0 0 12px; padding: 12px 14px; border-radius: 12px; font-size: 13px; }
-  .banner.warn { color: var(--warn); background: var(--warn-bg); border: 1px solid #ead9ac; }
-  .banner.danger { color: var(--danger); background: var(--danger-bg); border: 1px solid #edc9c9; }
-  .banner.ok { color: var(--ok); background: var(--ok-bg); border: 1px solid #c9e2d2; }
-  .verdict { margin-bottom: 8px; font-size: 20px; font-weight: 800; }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 16px; font-size: 13px; }
-  .kv dt { color: var(--muted); }
-  .kv dd { margin: 0; }
-  .ghost { min-height: 44px; padding: 0 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); cursor: pointer; }
-  .detail-card .chip { display: inline-block; margin: 0 5px 5px 0; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; font-size: 11px; }
-  .footer-note { color: var(--muted); font-size: 12px; text-align: center; }
-  .mobile-back { display: none; }
-
-  @media (min-width: 861px) and (max-width: 1100px) {
-    .chat-head { align-items: stretch; flex-direction: column; gap: 10px; }
-    .session-card { width: 100%; max-width: none; grid-template-columns: 1fr 1fr; }
-  }
+  .send-btn:hover { opacity: .9; }
 
   @media (max-width: 860px) {
-    body { background: var(--surface); }
-    .topbar { height: 64px; padding: 0 20px; }
-    .brand-copy span, .service-status { display: none; }
-    .workspace {
-      width: 100%;
-      height: calc(100dvh - 64px);
-      min-height: 0;
-      margin: 0;
-      display: block;
-      border: 0;
-      border-radius: 0;
-      box-shadow: none;
-    }
-    .profile-pane, .chat-pane { width: 100%; height: 100%; border: 0; }
-    .app-shell:not(.show-chat) .chat-pane { display: none; }
-    .app-shell.show-chat .profile-pane { display: none; }
-    .pane-head { padding: 30px 24px 16px; }
-    .pane-head h1 { font-size: 29px; }
-    .pane-head .lead { font-size: 16px; }
-    .insurance-form { padding: 0 24px 28px; }
-    .field { margin-top: 17px; }
-    .control { height: 53px; }
-    .precheck-block { margin-top: 20px; padding-top: 18px; }
-    .form-actions { margin-top: 20px; }
-    .scope-card { margin: auto 24px 22px; }
-    .chat-head { min-height: 74px; padding: 13px 18px; }
-    .mobile-back {
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      flex: 0 0 auto;
-      border: 0;
-      border-radius: 12px;
-      background: #f2f2ef;
-      color: var(--ink);
-      font-size: 21px;
-      cursor: pointer;
-    }
-    .assistant-avatar { width: 38px; height: 38px; border-radius: 12px; }
-    .session-card {
-      position: absolute;
-      top: 86px;
-      left: 18px;
-      right: 18px;
-      z-index: 1;
-      max-width: none;
-      grid-template-columns: 1fr 1fr;
-      padding: 12px 14px;
-    }
-    .session-card .session-item:first-child { display: none; }
-    .chat-scroll { padding: 82px 18px 14px; }
-    .intro-message { max-width: 94%; font-size: 15px; }
-    .msg { max-width: 88%; }
-    .quick-prompts { padding: 0 18px 10px; }
-    .composer { padding: 10px 18px calc(12px + env(safe-area-inset-bottom)); }
-    .composer input { height: 54px; }
-    .send-btn { width: 72px; min-height: 54px; }
-    .detail-area { width: calc(100% - 32px); margin: 32px auto 60px; }
-    .split { grid-template-columns: 1fr; }
-  }
-
-  @media (max-width: 390px) {
-    .pane-head { padding-top: 20px; }
-    .pane-head h1 { font-size: 26px; }
-    .pane-head .lead { margin-top: 8px; }
-    .field { margin-top: 13px; }
-    .control { height: 49px; }
-    .precheck-block { margin-top: 16px; padding-top: 14px; }
-    .form-actions { margin-top: 16px; }
-    .primary-btn, .secondary-btn { min-height: 49px; }
-    .scope-card { display: none; }
-    .chat-title { gap: 8px; }
-    .chat-title p { display: none; }
-    .chat-title h2 { font-size: 15px; }
+    .side-panel { width: 0; border-right: 0; }
+    .side-panel:hover { width: 0; }
+    .side-panel.is-pinned { width: min(86vw, 380px); }
+    .side-panel.is-pinned:hover { width: min(86vw, 380px); }
+    .chat-main { margin-left: 0; }
+    .side-toggle { padding-left: 16px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+    *, *::before, *::after { transition: none !important; }
   }
 </style>
 </head>
 <body>
+<canvas id="particleCanvas" aria-hidden="true"></canvas>
+<div class="bg-vignette" aria-hidden="true"></div>
 <div class="app-shell" id="appShell">
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-mark" aria-hidden="true">올</div>
-      <div class="brand-copy">
-        <strong>올바른 보험비서</strong>
-        <span>내 보험을 이해하기 쉽게</span>
-      </div>
-    </div>
-    <div class="service-status"><span class="status-dot"></span>상담 서비스 이용 가능</div>
-  </header>
 
-  <main class="workspace">
-    <aside class="profile-pane" aria-labelledby="profileTitle">
-      <div class="pane-head">
-        <p class="eyebrow">보험정보 입력</p>
-        <h1 id="profileTitle">환영합니다</h1>
-        <p class="lead">가지고 계신 보험 정보를<br>입력해주세요</p>
-      </div>
+  <aside class="side-panel" id="sidePanel">
+    <div class="side-panel-inner">
+      <button type="button" class="side-toggle" id="sideToggle" aria-label="보험정보 패널 열기/닫기">
+        <span class="side-brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <span class="label">
+          <strong>보험정보 입력</strong>
+          <span>가지고 계신 보험 정보를 입력해주세요</span>
+        </span>
+      </button>
 
+      <div class="side-panel-body">
       <form class="insurance-form" id="insuranceForm">
         <div class="field">
           <label for="productName">상품명</label>
@@ -510,7 +318,7 @@
           <input class="control" id="insurer" list="insurers" placeholder="보험사 선택" autocomplete="off" required>
           <datalist id="insurers"></datalist>
         </div>
-        <div class="field date-wrap">
+        <div class="field">
           <label for="enrolled">보험계약일시</label>
           <input class="control" id="enrolled" placeholder="예) 20260801" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" autocomplete="off" required>
         </div>
@@ -519,17 +327,17 @@
           <p class="precheck-title"><strong>보장 여부 확인</strong></p>
           <p class="precheck-help">질병코드를 입력하면 가입 약관을 기준으로 확인합니다.</p>
           <input class="control" id="codes" placeholder="예) F32, S82" autocomplete="off" aria-label="질병코드" required>
-          <button class="chip-btn" type="button" id="codeListOpen" style="margin-top:6px">
+          <button class="chip-btn" type="button" id="codeListOpen" style="margin-top:8px">
             약관에 등장한 질병코드 보기
           </button>
-          <div id="codeListPanel" class="detail-card" hidden style="margin-top:8px">
+          <div id="codeListPanel" class="scope-card" hidden style="margin:8px 0 0">
             <p class="precheck-help" style="margin:0 0 6px">
               진료비 세부내역서·진단서에 적힌 <strong>상병코드</strong>를 그대로 넣는 것이 가장 정확합니다.
               아래는 약관에 실제로 언급된 코드이며 <strong>목록에 없는 코드도 입력하실 수 있습니다.</strong>
               <strong>C30~C39 같은 약관 범위는 선택할 수 없고, C34.1 같은 개별 코드를 입력해야 합니다.</strong>
             </p>
             <input class="control" id="codeListQuery" placeholder="코드 검색 (예: F0)"
-                   autocomplete="off" aria-label="질병코드 검색" style="margin-bottom:6px">
+                   autocomplete="off" aria-label="질병코드 검색" style="margin-bottom:6px;width:100%">
             <p class="precheck-help" id="codeListSummary" style="margin:0 0 6px">불러오는 중…</p>
             <div id="codeListBody" style="max-height:200px;overflow-y:auto"></div>
             <button class="chip-btn" type="button" id="codeListClose" style="margin-top:6px">닫기</button>
@@ -551,86 +359,68 @@
         <summary>현재 확인 가능한 보험 범위</summary>
         <div id="scopeBody">불러오는 중…</div>
       </details>
-    </aside>
 
-    <section class="chat-pane" aria-labelledby="chatTitle">
-      <header class="chat-head">
-        <div class="chat-title">
-          <button class="mobile-back" id="mobileBack" type="button" aria-label="보험정보 입력으로 돌아가기">‹</button>
-          <div class="assistant-avatar" aria-hidden="true">AI</div>
-          <div>
-            <h2 id="chatTitle">보험 상담 챗봇</h2>
-            <p>약관을 근거로 이해하기 쉽게 안내해드려요</p>
-          </div>
-        </div>
-        <div class="session-card" aria-label="현재 보험 정보">
-          <div class="session-item"><strong>세션ID:</strong> <span id="sessionId">ses_loading</span></div>
-          <div class="session-item"><strong>보험사:</strong> <span id="sessionInsurer">미등록</span></div>
-          <div class="session-item"><strong>상품명:</strong> <span id="sessionProduct">미등록</span></div>
-          <div class="session-item"><strong>계약일:</strong> <span id="sessionDate">미등록</span></div>
-        </div>
-      </header>
-
-      <div class="chat-scroll" id="chatScroll">
-        <div class="intro-message">질병코드로 보장여부를 확인할 수 있습니다. 질병코드를 모른다면 병명을 입력해보세요. 어려운 보험 용어를 쉽게 설명해드려요.</div>
-        <div id="chatLog" class="chatlog" aria-live="polite"></div>
+      <a class="side-link" href="/static/coverage-detail.html">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        <span>보장 확인 상세 (대시보드)</span>
+      </a>
       </div>
+    </div>
+  </aside>
 
-      <div class="quick-wrap" id="quickWrap">
-        <div class="quick-prompts" id="quickPrompts" aria-label="추천 질문">
-          <!-- ★약관에 정의가 **실제로 있는** 용어로 채운다(GET /v1/chat/terms).
-               하드코딩하면 약관이 바뀌어도 그대로 남아, 눌렀는데 못 찾는 칩이 생긴다. -->
-        </div>
+  <main class="chat-main" aria-labelledby="chatTitle">
+    <header class="chat-topbar">
+      <div class="topbar-left">
+        <div class="service-status"><span class="status-dot" aria-hidden="true"></span>상담 서비스 이용 가능</div>
+        <button type="button" class="reset-chat-btn" id="resetChatBtn" aria-label="대화 초기화" title="대화 초기화">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h2"/><path d="M16 19h-2"/><path d="M2 12v-2"/><path d="M2 16v5.286a.71.71 0 0 0 1.212.502l1.149-1.149"/><path d="M20 19a2 2 0 0 0 2-2v-1"/><path d="M22 10v2"/><path d="M22 6V5a2 2 0 0 0-2-2"/><path d="M4 3a2 2 0 0 0-2 2v1"/><path d="M8 19h2"/><path d="M8 3h2"/></svg>
+        </button>
       </div>
+      <div class="session-chip" aria-label="현재 보험 정보">
+        <span><strong id="sessionInsurer">미등록</strong></span>
+        <span id="sessionProduct">미등록</span>
+        <span id="sessionDate">미등록</span>
+      </div>
+    </header>
+
+    <div class="chat-scroll" id="chatScroll">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-mark" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <h2 id="chatTitle">올바른 보험비서</h2>
+        <p>질병코드로 보장여부를 확인할 수 있습니다. 질병코드를 모른다면 병명을 입력해보세요.<br>어려운 보험 용어도 쉽게 설명해드려요.</p>
+      </div>
+      <div id="chatLog" class="chatlog" aria-live="polite"></div>
+    </div>
+
+    <div class="quick-wrap" id="quickWrap">
+      <div class="quick-prompts" id="quickPrompts" aria-label="추천 질문">
+        <!-- ★약관에 정의가 **실제로 있는** 용어로 채운다(GET /v1/chat/terms).
+             하드코딩하면 약관이 바뀌어도 그대로 남아, 눌렀는데 못 찾는 칩이 생긴다. -->
+      </div>
+    </div>
+    <div class="composer-wrap">
       <div class="composer">
         <input id="chatIn" list="chatTerms" placeholder="메시지 입력" autocomplete="off" aria-label="메시지 입력">
         <datalist id="chatTerms"></datalist>
-        <button class="send-btn" id="chatGo" type="button">보내기</button>
-      </div>
-    </section>
-  </main>
-
-  <section class="detail-area" aria-labelledby="detailTitle">
-    <h2 class="detail-heading" id="detailTitle">보장 확인 상세</h2>
-    <p class="detail-copy">판정 결과와 근거, 비슷한 사례를 한곳에서 확인할 수 있습니다.</p>
-    <div id="result" tabindex="-1"></div>
-
-    <div class="split">
-      <div class="detail-card" id="cohortReal">
-        <h2>실제 검증 데이터</h2>
-        <div class="muted small">질병코드를 넣고 판정하면 함께 조회합니다.</div>
-      </div>
-      <div class="detail-card" id="cohortDemo">
-        <h2>DEMO · 합성 데이터</h2>
-        <div class="muted small">시연용이며 실제 지급 통계가 아닙니다.</div>
+        <button class="send-btn" id="chatGo" type="button" aria-label="보내기">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+        </button>
       </div>
     </div>
-
-    <section class="detail-card">
-      <h2>실제 청구 결과 알려주기</h2>
-      <p class="small muted">검증 전까지 통계나 다른 사람의 판정 근거에 반영되지 않습니다.</p>
-      <div class="row">
-        <div><label for="obInsurer">보험사</label><input id="obInsurer" list="insurers" placeholder="예: DB손해보험"></div>
-        <div><label for="obCodes">질병기호</label><input id="obCodes" placeholder="F32"></div>
-        <div><label for="obOutcome">결과</label>
-          <select id="obOutcome">
-            <option value="paid">지급됨</option>
-            <option value="partial">일부 지급</option>
-            <option value="denied">부지급</option>
-            <option value="pending">심사 중</option>
-          </select>
-        </div>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <div><label for="obReason">보험사가 밝힌 사유 (선택)</label><input id="obReason" placeholder="예: 면책기간 미경과"></div>
-      </div>
-      <button class="ghost" id="obGo" type="button" style="margin-top:12px">제출하기</button>
-      <div id="obOut" style="margin-top:12px"></div>
-    </section>
-    <p class="footer-note">이 서비스는 참고용 사전 안내입니다. 최종 지급 여부는 보험사의 심사로 결정됩니다.</p>
-  </section>
+  </main>
 </div>
 
+<script type="module">
+  import { initParticleBackground } from '/static/particle-bg.js';
+  const canvas = document.getElementById('particleCanvas');
+  if (canvas && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    initParticleBackground(canvas);
+  } else if (canvas) {
+    canvas.remove(); // 모션 최소화 설정이면 정적 배경으로 둔다.
+  }
+</script>
 <script src="/static/insurance.js"></script>
 </body>
 </html>

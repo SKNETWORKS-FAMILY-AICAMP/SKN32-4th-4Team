@@ -144,12 +144,30 @@ td.err-cell { color: #c23616; font-size: 12px; }
 .twofa-box {
   background: #fff; border-radius: 14px; padding: 22px; width: min(92vw, 420px); text-align: center;
 }
-.twofa-box h3 { margin: 0 0 6px; }
+.twofa-box h3 {
+  margin: 0 0 6px; display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.twofa-box h3 .icon { width: 20px; height: 20px; flex: none; color: #1c1c18; }
 .twofa-hint { margin: 0 0 12px; font-size: 13px; color: #576574; }
 .twofa-cam { aspect-ratio: 4/3; background: #1e272e; border-radius: 10px; overflow: hidden; }
 .twofa-cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
 .twofa-status { min-height: 18px; font-size: 13px; color: #c23616; margin: 10px 0; }
 .twofa-actions { display: flex; gap: 8px; justify-content: center; }
+/* 앱 전역에서 쓰는 검정 알약 버튼(.login-btn)과 톤을 맞춘다 — 이 오버레이는
+   테마 변수(--accent 등)가 없는 페이지에도 뜨므로 값은 고정으로 박아둔다. */
+.twofa-shot {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 18px; height: 38px; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px;
+  background: #1c1c18; color: #fff; font-size: 13.5px; font-weight: 650; cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+    0 3px 10px rgba(0, 0, 0, 0.28);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.twofa-shot:hover { opacity: 0.9; transform: translateY(-1px); }
+.twofa-shot .icon { width: 15px; height: 15px; flex: none; }
+.twofa-cancel { border-radius: 999px; }
 
 /* ============ 고객 쇼핑 화면 (shop) ============ */
 .shop-layout { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 20px; align-items: start; }

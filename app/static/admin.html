@@ -8,23 +8,27 @@
 
   <style>
     :root {
-      --header: #2f3640;
-      --accent: #4a69bd;
-      --accent-dark: #3c58a0;
-      --border: #dcdde1;
-      --background: #f5f6fa;
-      --surface: #ffffff;
-      --text: #2f3640;
-      --muted: #718093;
-      --success: #218c74;
-      --success-bg: #e8f6f1;
-      --warning: #cc8e35;
-      --warning-bg: #fff5e5;
-      --danger: #c23616;
-      --danger-bg: #fdeeea;
-      --info: #40739e;
-      --info-bg: #edf5fb;
-      --shadow: 0 2px 10px rgba(47, 54, 64, 0.07);
+      --header: #1c1c18;
+      --accent: #1c1c18;
+      --accent-dark: #000000;
+      --on-accent: #ffffff;
+      --active-pill: #f3e3e3;
+      --border: rgba(28, 28, 24, 0.09);
+      --background: #c9d2c6;
+      --surface: #faf8f2;
+      --surface-soft: #efece2;
+      --text: #211f1a;
+      --muted: #7d7c72;
+      --success: #4f9d78;
+      --success-bg: #e4eee6;
+      --warning: #d9843f;
+      --warning-bg: #faead9;
+      --danger: #cc5b62;
+      --danger-bg: #fbe6e7;
+      --info: #8a8ed4;
+      --info-bg: #ebeafb;
+      --shadow: 0 12px 28px rgba(46, 54, 40, 0.1);
+      --radius: 20px;
     }
 
     * {
@@ -57,14 +61,18 @@
     }
 
     .app-header {
-      height: 68px;
+      height: 72px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 30px;
-      color: #fff;
-      background: var(--header);
-      box-shadow: 0 2px 8px rgba(47, 54, 64, 0.2);
+      margin: 20px auto 0;
+      width: calc(100% - 60px);
+      max-width: 1500px;
+      color: var(--text);
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
     }
 
     .brand {
@@ -74,24 +82,30 @@
     }
 
     .brand-mark {
-      width: 13px;
-      height: 13px;
-      border: 3px solid rgba(255, 255, 255, 0.45);
-      border-radius: 50%;
-      background: #78e08f;
-      box-shadow: 0 0 0 4px rgba(120, 224, 143, 0.13);
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 11px;
+      color: var(--on-accent);
+      background: linear-gradient(135deg, #3a3a34, var(--accent));
+      box-shadow: 0 0 0 4px rgba(28, 28, 24, 0.1);
     }
+    .brand-mark .icon { width: 19px; height: 19px; }
 
     .brand h1 {
       margin: 0;
-      font-size: 19px;
-      font-weight: 700;
+      font-size: 18px;
+      font-weight: 750;
       letter-spacing: -0.3px;
+      color: var(--text);
     }
 
     .brand p {
       margin: 3px 0 0;
-      color: #c8cdd4;
+      color: var(--muted);
       font-size: 12px;
     }
 
@@ -102,22 +116,26 @@
     }
 
     .refresh-status {
-      color: #c8cdd4;
+      color: var(--muted);
       font-size: 12px;
     }
 
     .refresh-button {
       min-width: 92px;
       height: 36px;
-      padding: 0 15px;
-      border: 1px solid rgba(255, 255, 255, 0.23);
-      border-radius: 6px;
-      color: #fff;
-      background: rgba(255, 255, 255, 0.08);
+      padding: 0 18px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      background: var(--surface);
+      font-weight: 600;
+      box-shadow: 0 1px 3px rgba(28, 28, 24, 0.07);
+      transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
     }
+    .refresh-button:hover:not(:disabled) { transform: translateY(-1px); }
 
     .refresh-button:hover {
-      background: rgba(255, 255, 255, 0.15);
+      background: var(--surface-soft);
     }
 
     .refresh-button:disabled {
@@ -135,9 +153,9 @@
     .error-banner {
       margin-bottom: 18px;
       padding: 14px 17px;
-      border: 1px solid #f0c8be;
+      border: 1px solid var(--danger);
       border-radius: 7px;
-      color: #8d2b16;
+      color: var(--danger);
       background: var(--danger-bg);
     }
 
@@ -150,7 +168,7 @@
 
     .error-banner button {
       border: 0;
-      color: #8d2b16;
+      color: var(--danger);
       background: transparent;
       font-weight: 700;
     }
@@ -165,35 +183,30 @@
     .summary-card {
       position: relative;
       min-height: 150px;
-      padding: 21px 22px;
+      padding: 22px;
       overflow: hidden;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: var(--radius);
       background: var(--surface);
       box-shadow: var(--shadow);
     }
 
-    .summary-card::before {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      width: 4px;
-      background: var(--accent);
-      content: "";
+    .summary-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      border-radius: 12px;
+      color: var(--info);
+      background: var(--info-bg);
     }
+    .summary-icon .icon { width: 19px; height: 19px; }
 
-    .summary-card.is-success::before {
-      background: var(--success);
-    }
-
-    .summary-card.is-warning::before {
-      background: var(--warning);
-    }
-
-    .summary-card.is-danger::before {
-      background: var(--danger);
-    }
+    .summary-card.is-success .summary-icon { color: var(--success); background: var(--success-bg); }
+    .summary-card.is-warning .summary-icon { color: var(--warning); background: var(--warning-bg); }
+    .summary-card.is-danger .summary-icon { color: var(--danger); background: var(--danger-bg); }
 
     .summary-label {
       margin: 0 0 13px;
@@ -248,7 +261,7 @@
       border: 1px solid var(--border);
       border-radius: 999px;
       color: var(--muted);
-      background: #fafafa;
+      background: var(--surface-soft);
       font-size: 11px;
     }
 
@@ -256,7 +269,7 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
-      background: #a4b0be;
+      background: var(--muted);
       content: "";
     }
 
@@ -282,8 +295,9 @@
     }
 
     .panel {
+      overflow: hidden;
       border: 1px solid var(--border);
-      border-radius: 9px;
+      border-radius: var(--radius);
       background: var(--surface);
       box-shadow: var(--shadow);
     }
@@ -346,7 +360,7 @@
     .data-table td {
       height: 46px;
       padding: 0 15px;
-      border-bottom: 1px solid #edf0f3;
+      border-bottom: 1px solid var(--border);
       text-align: left;
       vertical-align: middle;
     }
@@ -354,13 +368,13 @@
     .data-table th {
       height: 43px;
       color: var(--muted);
-      background: #fafbfc;
+      background: var(--surface-soft);
       font-size: 12px;
       font-weight: 650;
     }
 
     .data-table tbody tr:hover {
-      background: #f8f9fc;
+      background: rgba(28, 28, 24, 0.035);
     }
 
     .data-table tbody tr:last-child td {
@@ -397,9 +411,9 @@
     }
 
     .track-real {
-      color: #176d59;
+      color: var(--success);
       background: var(--success-bg);
-      border: 1px solid #b9e0d3;
+      border: 1px solid var(--success);
     }
 
     .track-none {
@@ -478,7 +492,7 @@
       justify-content: space-between;
       gap: 12px;
       padding: 13px 18px;
-      border-bottom: 1px solid #edf0f3;
+      border-bottom: 1px solid var(--border);
     }
 
     .queue-item:last-child {
@@ -506,18 +520,19 @@
     .ghost-btn {
       height: 30px;
       padding: 0 12px;
-      border: 1px solid #d6dbe1;
-      border-radius: 6px;
-      background: #fff;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
       color: var(--muted);
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
+      transition: background-color 0.15s ease, color 0.15s ease;
     }
 
     .ghost-btn:hover {
-      border-color: #b9c1ca;
-      color: #1c1c1a;
+      background: var(--active-pill);
+      color: var(--text);
     }
 
     /* 질병기호 쓰임 배지 — 면책/예외/언급을 색으로 가른다. */
@@ -536,17 +551,23 @@
     .verify-btn {
       flex: 0 0 auto;
       height: 32px;
-      padding: 0 13px;
-      border: 0;
-      border-radius: 6px;
+      padding: 0 15px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
       color: #fff;
       background: var(--success);
       font-size: 12px;
       font-weight: 650;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+        0 2px 8px rgba(0, 0, 0, 0.16);
+      transition: opacity 0.15s ease, transform 0.15s ease;
     }
 
-    .verify-btn:hover {
-      background: #1b7361;
+    .verify-btn:hover:not(:disabled) {
+      opacity: 0.9;
+      transform: translateY(-1px);
     }
 
     .verify-btn:disabled {
@@ -582,9 +603,9 @@
     }
 
     .mode-desc.is-strict {
-      color: #176d59;
+      color: var(--success);
       background: var(--success-bg);
-      border-color: #b9e0d3;
+      border-color: var(--success);
     }
 
     .mode-counts {
@@ -612,7 +633,7 @@
     .sim-bar {
       height: 8px;
       border-radius: 999px;
-      background: #edf0f3;
+      background: var(--surface-soft);
       overflow: hidden;
     }
 
@@ -660,7 +681,7 @@
     .sim-fields input:focus {
       border-color: var(--accent);
       outline: 0;
-      box-shadow: 0 0 0 2px rgba(74, 105, 189, 0.12);
+      box-shadow: 0 0 0 2px rgba(28, 28, 24, 0.08);
     }
 
     .sim-check {
@@ -695,40 +716,39 @@
 
     .sim-btn {
       height: 36px;
-      padding: 0 15px;
-      border: 0;
-      border-radius: 6px;
+      padding: 0 17px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
       color: #fff;
       font-size: 13px;
       font-weight: 650;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.25),
+        0 3px 10px rgba(0, 0, 0, 0.18);
+      transition: opacity 0.15s ease, transform 0.15s ease;
     }
+    .sim-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
 
     .sim-btn.is-start {
       background: var(--success);
-    }
-
-    .sim-btn.is-start:hover:not(:disabled) {
-      background: #1b7361;
     }
 
     .sim-btn.is-stop {
       background: var(--danger);
     }
 
-    .sim-btn.is-stop:hover:not(:disabled) {
-      background: #a52d12;
-    }
-
     .sim-btn.is-reset {
       margin-left: auto;
       border: 1px solid var(--border);
       color: var(--muted);
-      background: #f7f8f9;
+      background: var(--surface-soft);
+      box-shadow: 0 1px 2px rgba(28, 28, 24, 0.06);
     }
 
     .sim-btn.is-reset:hover:not(:disabled) {
       color: var(--danger);
-      border-color: #f0c8be;
+      border-color: var(--danger);
       background: var(--danger-bg);
     }
 
@@ -753,17 +773,17 @@
     }
 
     .status-running {
-      color: #176d59;
+      color: var(--success);
       background: var(--success-bg);
     }
 
     .status-stopped {
-      color: #596275;
-      background: #eef0f3;
+      color: var(--muted);
+      background: var(--surface-soft);
     }
 
     .status-error {
-      color: #9d2f19;
+      color: var(--danger);
       background: var(--danger-bg);
     }
 
@@ -783,7 +803,7 @@
       align-items: baseline;
       gap: 10px;
       padding: 9px 18px;
-      border-bottom: 1px solid #f2f4f6;
+      border-bottom: 1px solid var(--border);
     }
 
     .stream-item.is-new {
@@ -806,7 +826,7 @@
     }
 
     .stream-body {
-      color: #4b5563;
+      color: var(--text);
       overflow-wrap: anywhere;
     }
 
@@ -837,26 +857,26 @@
     }
 
     .status-pending {
-      color: #9b671c;
+      color: var(--warning);
       background: var(--warning-bg);
     }
 
     .status-paid,
     .status-confirmed {
-      color: #315e8a;
+      color: var(--info);
       background: var(--info-bg);
     }
 
     .status-processing,
     .status-shipped {
-      color: #425da8;
-      background: #edf0fc;
+      color: var(--info);
+      background: var(--info-bg);
     }
 
     .status-delivered,
     .status-completed,
     .status-resolved {
-      color: #176d59;
+      color: var(--success);
       background: var(--success-bg);
     }
 
@@ -865,13 +885,13 @@
     .status-failed,
     .status-refunded,
     .status-unresolved {
-      color: #9d2f19;
+      color: var(--danger);
       background: var(--danger-bg);
     }
 
     .status-unknown {
-      color: #596275;
-      background: #eef0f3;
+      color: var(--muted);
+      background: var(--surface-soft);
     }
 
     .timeline {
@@ -887,14 +907,14 @@
       bottom: 28px;
       left: 27px;
       width: 2px;
-      background: #e4e7eb;
+      background: var(--border);
       content: "";
     }
 
     .timeline-item {
       position: relative;
       padding: 15px 0 17px 20px;
-      border-bottom: 1px solid #edf0f3;
+      border-bottom: 1px solid var(--border);
     }
 
     .timeline-item:last-child {
@@ -960,7 +980,7 @@
 
     .event-summary {
       margin: 10px 0 0;
-      color: #4b5563;
+      color: var(--text);
       font-size: 12px;
       line-height: 1.55;
       overflow-wrap: anywhere;
@@ -983,10 +1003,10 @@
       margin: 9px 0 0;
       padding: 12px;
       overflow: auto;
-      border: 1px solid #e4e7eb;
+      border: 1px solid var(--border);
       border-radius: 6px;
       color: #dfe4ea;
-      background: #353b48;
+      background: #0a0b11;
       font-family: Consolas, "SFMono-Regular", monospace;
       font-size: 11px;
       line-height: 1.5;
@@ -1006,7 +1026,8 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       outline: 0;
-      background: #fff;
+      color: var(--text);
+      background: var(--surface-soft);
     }
 
     .filter-select {
@@ -1022,7 +1043,7 @@
     .filter-select:focus,
     .filter-input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(74, 105, 189, 0.12);
+      box-shadow: 0 0 0 2px rgba(28, 28, 24, 0.08);
     }
 
     .gap-list {
@@ -1033,7 +1054,7 @@
 
     .gap-item {
       padding: 16px 18px;
-      border-bottom: 1px solid #edf0f3;
+      border-bottom: 1px solid var(--border);
     }
 
     .gap-item:last-child {
@@ -1079,7 +1100,7 @@
     .empty-state strong {
       display: block;
       margin-bottom: 7px;
-      color: #596275;
+      color: var(--text);
       font-size: 14px;
     }
 
@@ -1096,9 +1117,9 @@
       background:
         linear-gradient(
           90deg,
-          #eceff2 25%,
-          #f7f8f9 50%,
-          #eceff2 75%
+          rgba(28, 28, 24, 0.06) 25%,
+          rgba(28, 28, 24, 0.12) 50%,
+          rgba(28, 28, 24, 0.06) 75%
         );
       background-size: 200% 100%;
       animation: skeleton 1.3s infinite;
@@ -1119,8 +1140,8 @@
       border-radius: 6px; border: 1px solid transparent; margin-right: 4px;
     }
     nav.top-nav a:hover { border-color: var(--accent); }
-    nav.top-nav a.active { background: var(--accent); color: #fff; }
-    .login-panel { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 30px; }
+    nav.top-nav a.active { background: var(--accent); color: var(--on-accent); }
+    .login-panel { position: relative; overflow: hidden; background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 30px; }
     .login-panel-inner { max-width: 1400px; }
     .login-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .login-fields label { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
@@ -1128,15 +1149,184 @@
       padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; min-width: 170px;
     }
     .login-btn {
-      align-self: flex-end; height: 34px; padding: 0 14px; border: 0; border-radius: 6px;
-      background: var(--accent); color: #fff; font-size: 13px; cursor: pointer;
+      align-self: flex-end; height: 34px; padding: 0 18px;
+      border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 999px;
+      background: var(--accent); color: var(--on-accent); font-size: 13px; cursor: pointer; font-weight: 650;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.35),
+        0 3px 10px rgba(0, 0, 0, 0.28);
+      transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
     }
-    .login-btn:hover { background: var(--accent-dark); }
-    .login-btn.is-ghost { background: #e2e6ea; color: var(--text); }
-    .login-btn.is-ghost:hover { background: #d4d9df; }
+    .login-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .login-btn.is-ghost {
+      border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      box-shadow: 0 1px 2px rgba(28, 28, 24, 0.05);
+    }
+    .login-btn.is-ghost:hover { background: var(--surface-soft); }
     .login-status { align-self: flex-end; font-size: 12.5px; color: var(--muted); padding-bottom: 8px; }
     .login-hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
     .login-hint code { background: #f1f2f6; padding: 1px 5px; border-radius: 4px; }
+
+    /* 로그인 전 히어로: 배경 영상 + 글래스 카드. #loggedOutGate가 보이는 동안(=미인증)에만 적용.
+       기본(로그인 후) 상태는 위 규칙 그대로 — 얇은 라이트 바를 유지한다. */
+    .login-bg-video, .login-overlay, .login-brand { display: none; }
+    /* display:contents — 로그인 후 얇은 바에서는 감싸지 않은 것처럼 원래 순서(가입/로그아웃 버튼)를 유지한다 */
+    .login-btn-row { display: contents; }
+    #loggedOutGate { display: none !important; } /* 히어로 카드가 같은 메시지를 대신한다 */
+
+    .login-panel:has(~ #loggedOutGate:not([hidden])) {
+      min-height: 100vh; padding: 0; border-bottom: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-bg-video {
+      display: block; position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; z-index: 0;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-overlay {
+      display: block; position: absolute; inset: 0; z-index: 1;
+      background: linear-gradient(180deg, rgba(10,10,18,.5), rgba(10,10,18,.82));
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-panel-inner {
+      position: relative; z-index: 2; width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 20px;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-card {
+      width: 100%; background: rgba(255,255,255,.08);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,.18); border-radius: 18px;
+      padding: 36px 30px; box-shadow: 0 25px 60px rgba(0,0,0,.45);
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-brand {
+      display: block; text-align: center; margin-bottom: 24px;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-brand-mark {
+      width: 52px; height: 52px; margin: 0 auto 12px; display: flex;
+      align-items: center; justify-content: center; border-radius: 15px; color: var(--on-accent);
+      background: linear-gradient(135deg, #3a3a34, var(--accent));
+      box-shadow: 0 0 0 5px rgba(255,255,255,.08);
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-brand-mark .icon {
+      width: 26px; height: 26px;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-brand h1 {
+      margin: 0; font-size: 17px; font-weight: 700; color: #fff;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-brand p {
+      margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,.6);
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-fields {
+      flex-direction: column; align-items: stretch; gap: 14px;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-fields label {
+      color: rgba(255,255,255,.68); font-size: 11.5px; letter-spacing: .02em;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-fields input {
+      background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.22);
+      color: #fff; padding: 11px 12px; border-radius: 9px; min-width: 0; font-size: 13.5px;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-fields input::placeholder { color: rgba(255,255,255,.35); }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-fields input:focus {
+      outline: none; border-color: var(--accent); background: rgba(255,255,255,.12);
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-btn {
+      align-self: stretch; height: 44px; font-size: 14px;
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-btn.is-ghost {
+      background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.22);
+    }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-btn.is-ghost:hover { background: rgba(255,255,255,.18); }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-btn-row { display: flex; gap: 8px; }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-btn-row .login-btn { flex: 1; }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-status { align-self: center; color: rgba(255,255,255,.75); }
+
+    /* 로그인 전 화면은 로그인/가입만 필요 — 네비 바·로그아웃 버튼·운영 설명은 숨긴다 */
+    /* 사이드바가 브랜드/로그아웃을 모두 대신한다 — 상단 top-nav·로그인 바는 항상 숨긴다 */
+    nav.top-nav { display: none; }
+    body:has(#dashboardHeader:not([hidden])) .login-panel { display: none; }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) #logoutBtn { display: none; }
+    .login-panel:has(~ #loggedOutGate:not([hidden])) .login-hint { display: none; }
+
+    /* ── 좌측 사이드바(로그인 후에만) ───────────────────────────────── */
+    .sidebar {
+      display: none;
+      position: fixed; top: 0; left: 0; bottom: 0; width: 68px;
+      flex-direction: column;
+      padding: 22px 14px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-x: hidden;
+      overflow-y: auto;
+      z-index: 5;
+      box-shadow: var(--shadow);
+      transition: width 0.18s ease;
+    }
+    body:has(#dashboardHeader:not([hidden])) .sidebar { display: flex; }
+    .sidebar:hover { width: 240px; }
+
+    /* 접혔을 때 사라지는 라벨 텍스트 — 아이콘만 남기고 폭을 0으로 접는다 */
+    .sidebar .label {
+      display: inline-block;
+      max-width: 0;
+      opacity: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      vertical-align: middle;
+      transition: max-width 0.18s ease, opacity 0.12s ease;
+    }
+    .sidebar:hover .label { max-width: 170px; opacity: 1; }
+
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; margin: 4px 4px 22px; }
+    .icon { width: 18px; height: 18px; flex: none; }
+
+    .sidebar-brand-mark {
+      width: 36px; height: 36px; flex: none; display: flex; align-items: center; justify-content: center;
+      border-radius: 11px; color: var(--on-accent);
+      background: linear-gradient(135deg, #3a3a34, var(--accent));
+    }
+    .sidebar-brand-mark .icon { width: 19px; height: 19px; }
+    .sidebar-brand h2 { margin: 0; font-size: 14px; font-weight: 750; color: var(--text); }
+    .sidebar-brand p { margin: 2px 0 0; font-size: 11px; color: var(--muted); }
+
+    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; overflow-y: auto; }
+    .sidebar-nav a {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 10px; border-radius: 9px;
+      color: var(--text); text-decoration: none; font-size: 13px;
+    }
+    .sidebar-nav a:hover { background: var(--active-pill); }
+    .sidebar-nav a:focus-visible { background: var(--active-pill); outline: none; }
+
+    .sidebar-bottom {
+      display: flex; flex-direction: column; gap: 4px;
+      margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border);
+    }
+    .sidebar-link {
+      display: flex; align-items: center; gap: 9px;
+      padding: 9px 10px; border-radius: 9px;
+      color: var(--text); text-decoration: none; font-size: 13px;
+    }
+    .sidebar-link:hover { background: var(--active-pill); }
+    .sidebar-logout {
+      display: flex; align-items: center; gap: 9px; width: 100%;
+      padding: 6px 10px; border: 0; border-radius: 9px;
+      background: transparent; color: var(--text); font-size: 13px; font-weight: 650;
+      text-align: left; cursor: pointer;
+    }
+    .sidebar-logout-mark {
+      width: 26px; height: 26px; flex: none; display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; color: #fff; background: var(--accent);
+    }
+    .sidebar-logout-mark .icon { width: 14px; height: 14px; }
+    .sidebar-logout:hover { background: var(--active-pill); }
+
+    body:has(#dashboardHeader:not([hidden])) #dashboardHeader {
+      margin: 20px 24px 0 108px; width: auto; max-width: none;
+    }
+    body:has(#dashboardHeader:not([hidden])) #dashboardMain {
+      margin: 28px 24px 50px 108px; width: auto; max-width: none;
+    }
+
     .logged-out-gate {
       max-width: 1400px; margin: 40px auto; padding: 32px 30px; text-align: center;
       color: var(--muted);
@@ -1166,20 +1356,60 @@
       <a href="/static/admin.html" class="active">🛡️ 관리자</a>
     </nav>
 
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+      <div class="label sidebar-brand-text">
+        <h2 data-brand></h2>
+        <p>관리자 대시보드</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav" aria-label="대시보드 섹션 이동">
+      <a href="#cohortTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span class="label"> 코호트 표본</span></a>
+      <a href="#kcdTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.172 2a2 2 0 0 1 1.414.586l6.71 6.71a2.4 2.4 0 0 1 0 3.408l-4.592 4.592a2.4 2.4 0 0 1-3.408 0l-6.71-6.71A2 2 0 0 1 6 9.172V3a1 1 0 0 1 1-1z"/><path d="M2 7v6.172a2 2 0 0 0 .586 1.414l6.71 6.71a2.4 2.4 0 0 0 3.191.193"/><circle cx="10.5" cy="6.5" r=".5" fill="currentColor"/></svg><span class="label"> 질병기호</span></a>
+      <a href="#streamTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg><span class="label"> 실시간 상호작용</span></a>
+      <a href="#eventsTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg><span class="label"> 이벤트 타임라인</span></a>
+      <a href="#usersTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg><span class="label"> 사용자 관리</span></a>
+      <a href="#modeTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg><span class="label"> 판정 모드</span></a>
+      <a href="#realQueueTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg><span class="label"> 실제 증빙 검수</span></a>
+      <a href="#simTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/></svg><span class="label"> 시뮬레이션 제어</span></a>
+      <a href="#queueTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5H3"/><path d="M16 12H3"/><path d="M11 19H3"/><path d="m15 18 2 2 4-4"/></svg><span class="label"> 증빙 검수 큐</span></a>
+      <a href="#agentsTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6V2H8"/><path d="M15 11v2"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M20 16a2 2 0 0 1-2 2H8.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 4 20.286V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/><path d="M9 11v2"/></svg><span class="label"> 에이전트 목록</span></a>
+      <a href="#gapsTitle"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span class="label"> 지식갭</span></a>
+    </nav>
+    <div class="sidebar-bottom">
+      <a href="/static/mypage.html" class="sidebar-link"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg><span class="label"> 얼굴 로그인 등록</span></a>
+      <button type="button" class="sidebar-logout" onclick="document.getElementById('logoutBtn').click()"><span class="sidebar-logout-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></svg></span><span class="label"> 로그아웃</span></button>
+    </div>
+  </aside>
+
   <section class="login-panel">
+    <video class="login-bg-video" autoplay muted loop playsinline>
+      <source src="/static/media/admin-login-bg.mp4" type="video/mp4">
+    </video>
+    <div class="login-overlay"></div>
     <div class="login-panel-inner">
-      <div class="login-fields">
-        <label>아이디
-          <input id="adminUsername" type="text" placeholder="demo_admin (관리자) 또는 일반 계정" />
-        </label>
-        <label>비밀번호
-          <input id="adminPassword" type="password" placeholder="비밀번호" />
-        </label>
-        <button id="adminLoginBtn" class="login-btn" type="button">로그인</button>
-        <!-- ★일반 계정(USER)으로만 만들어진다. 관리자 승격은 아래 안내 참조. -->
-        <button id="signupBtn" class="login-btn is-ghost" type="button">계정 만들기</button>
-        <button id="logoutBtn" class="login-btn is-ghost" type="button">로그아웃</button>
-        <span id="loginStatus" class="login-status"></span>
+      <div class="login-card">
+        <div class="login-brand">
+          <span class="login-brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
+          <h1 data-brand></h1>
+          <p>관리자 로그인</p>
+        </div>
+        <div class="login-fields">
+          <label>아이디
+            <input id="adminUsername" type="text" placeholder="demo_admin (관리자) 또는 일반 계정" />
+          </label>
+          <label>비밀번호
+            <input id="adminPassword" type="password" placeholder="비밀번호" />
+          </label>
+          <button id="adminLoginBtn" class="login-btn" type="button">로그인</button>
+          <!-- ★일반 계정(USER)으로만 만들어진다. 관리자 승격은 아래 안내 참조. -->
+          <div class="login-btn-row">
+            <button id="signupBtn" class="login-btn is-ghost" type="button">계정 만들기</button>
+            <button id="logoutBtn" class="login-btn is-ghost" type="button">로그아웃</button>
+          </div>
+          <span id="loginStatus" class="login-status"></span>
+        </div>
       </div>
       <p class="login-hint">
         <strong>계정 만들기</strong>는 항상 일반 사용자(USER)로 만듭니다.
@@ -1200,7 +1430,7 @@
 
   <header id="dashboardHeader" class="app-header" hidden>
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-mark" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span>
 
       <div>
         <h1>AI Agent Operations</h1>
@@ -1239,6 +1469,7 @@
 
     <section class="summary-grid" aria-label="시스템 요약">
       <article id="readinessCard" class="summary-card">
+        <span class="summary-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></span>
         <p class="summary-label">시스템 준비 상태</p>
         <p id="readinessValue" class="summary-value is-text">확인 중</p>
 
@@ -1252,7 +1483,8 @@
         </p>
       </article>
 
-      <article id="agentSummaryCard" class="summary-card">
+      <article id="agentSummaryCard" class="summary-card is-success">
+        <span class="summary-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6V2H8"/><path d="M15 11v2"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M20 16a2 2 0 0 1-2 2H8.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 4 20.286V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z"/><path d="M9 11v2"/></svg></span>
         <p class="summary-label">에이전트 (최근 30초 요청)</p>
 
         <p class="summary-value">
@@ -1266,7 +1498,8 @@
         </p>
       </article>
 
-      <article id="queueSummaryCard" class="summary-card">
+      <article id="queueSummaryCard" class="summary-card is-warning">
+        <span class="summary-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg></span>
         <p class="summary-label">검수 대기 (합성)</p>
 
         <p class="summary-value">
@@ -1279,7 +1512,8 @@
         </p>
       </article>
 
-      <article id="gapSummaryCard" class="summary-card">
+      <article id="gapSummaryCard" class="summary-card is-danger">
+        <span class="summary-icon" aria-hidden="true"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></span>
         <p class="summary-label">미해결 지식갭</p>
 
         <p class="summary-value">
@@ -1400,6 +1634,57 @@
           <ol id="eventTimeline" class="timeline">
             <li class="empty-state">이벤트를 불러오는 중입니다.</li>
           </ol>
+        </section>
+
+        <section class="panel" aria-labelledby="queueTitle">
+          <header class="panel-header">
+            <div>
+              <h2 id="queueTitle" class="panel-title">증빙 검수 큐
+                <span class="track-badge track-synthetic">합성 전용</span>
+              </h2>
+              <p class="panel-subtitle">
+                승인하면 <strong>그 순간</strong> 합성 코호트 n이 +1 됩니다.
+                실제 트랙에는 이 버튼이 없습니다 — 발행처 확인 절차가 정해지기 전에는
+                “관리자가 눌렀다”가 “검증됐다”가 되면 안 됩니다.
+              </p>
+            </div>
+
+            <span id="queuePanelCount" class="panel-count">0건</span>
+          </header>
+
+          <ul id="reviewQueue" class="queue-list">
+            <li class="empty-state">검수 큐를 불러오는 중입니다.</li>
+          </ul>
+        </section>
+
+        <section class="panel" aria-labelledby="agentsTitle">
+          <header class="panel-header">
+            <div>
+              <h2 id="agentsTitle" class="panel-title">에이전트 목록</h2>
+              <p class="panel-subtitle">가상 에이전트 포함 · 마지막 요청 기준</p>
+            </div>
+
+            <span id="agentsPanelCount" class="panel-count">0대</span>
+          </header>
+
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">에이전트</th>
+                  <th scope="col">트랙</th>
+                  <th scope="col" class="num">요청</th>
+                  <th scope="col" class="num">유휴</th>
+                </tr>
+              </thead>
+
+              <tbody id="agentsTableBody">
+                <tr class="loading-row">
+                  <td colspan="4"><span class="skeleton"></span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
 
@@ -1550,57 +1835,6 @@
             </div>
 
             <p class="sim-note" id="simNote"></p>
-          </div>
-        </section>
-
-        <section class="panel" aria-labelledby="queueTitle">
-          <header class="panel-header">
-            <div>
-              <h2 id="queueTitle" class="panel-title">증빙 검수 큐
-                <span class="track-badge track-synthetic">합성 전용</span>
-              </h2>
-              <p class="panel-subtitle">
-                승인하면 <strong>그 순간</strong> 합성 코호트 n이 +1 됩니다.
-                실제 트랙에는 이 버튼이 없습니다 — 발행처 확인 절차가 정해지기 전에는
-                “관리자가 눌렀다”가 “검증됐다”가 되면 안 됩니다.
-              </p>
-            </div>
-
-            <span id="queuePanelCount" class="panel-count">0건</span>
-          </header>
-
-          <ul id="reviewQueue" class="queue-list">
-            <li class="empty-state">검수 큐를 불러오는 중입니다.</li>
-          </ul>
-        </section>
-
-        <section class="panel" aria-labelledby="agentsTitle">
-          <header class="panel-header">
-            <div>
-              <h2 id="agentsTitle" class="panel-title">에이전트 목록</h2>
-              <p class="panel-subtitle">가상 에이전트 포함 · 마지막 요청 기준</p>
-            </div>
-
-            <span id="agentsPanelCount" class="panel-count">0대</span>
-          </header>
-
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th scope="col">에이전트</th>
-                  <th scope="col">트랙</th>
-                  <th scope="col" class="num">요청</th>
-                  <th scope="col" class="num">유휴</th>
-                </tr>
-              </thead>
-
-              <tbody id="agentsTableBody">
-                <tr class="loading-row">
-                  <td colspan="4"><span class="skeleton"></span></td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </section>
 

@@ -20,6 +20,7 @@ const regVideo = document.getElementById("regVideo");
 const regCameraBtn = document.getElementById("regCameraBtn");
 const regCaptureBtn = document.getElementById("regCaptureBtn");
 const regDeleteBtn = document.getElementById("regDeleteBtn");
+const adminBoardBtn = document.getElementById("adminBoardBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const faceStatusText = document.getElementById("faceStatusText");
 const regStatus = document.getElementById("regStatus");
@@ -205,6 +206,11 @@ regCaptureBtn.addEventListener("click", async () => {
 regDeleteBtn.addEventListener("click", async () => {
   const { ok } = await apiFetch("/api/face/register", { method: "DELETE", headers: authHeaders() });
   if (ok) { regStatus.textContent = "얼굴 등록을 삭제했습니다."; await refreshFaceStatus(); }
+});
+
+adminBoardBtn.addEventListener("click", () => {
+  // 관리자 서버는 별도 프로세스/포트(8081)라 같은 호스트에서 포트만 바꿔 이동한다.
+  window.location.href = `http://${window.location.hostname}:8081/static/admin.html`;
 });
 
 logoutBtn.addEventListener("click", () => {
