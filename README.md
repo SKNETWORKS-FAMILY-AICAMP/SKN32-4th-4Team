@@ -1,90 +1,98 @@
-# 올바른 보험비서
+# backend — 백엔드 관련 자료
 
-진료비 내역의 KCD 질병기호와 가입 시점의 실손보험 약관을 비교해, 보장·면책 가능성과
-근거 조항을 함께 안내하는 서비스입니다. 근거가 없거나 문서 판본을 확정할 수 없으면 임의로
-답하지 않고 `확인 불가`로 처리합니다.
+`develop`(483파일)에서 **백엔드에 해당하는 310개 + 핸드오프 문서 6개**를 남긴 브랜치다.
 
-## 주요 기능
+> ★★**`develop` 에 그대로 머지하지 말 것.** 머지하면 여기 없는 **173개 파일이 삭제된다**
+> (수집·전처리·평가·임베딩 스크립트, 프론트 정적 자산 등).
+> 올릴 것이 생기면 그 파일만 `cherry-pick` 하거나 경로를 지정해 옮긴다.
 
-- 보험사·상품·가입일을 이용한 약관 판본 확인
-- KCD 코드와 약관의 보장·면책 조항 대조
-- 근거 조항·쪽수·인용문 검증
-- FastAPI 고객·관리자·외부 Agent API
-- PostgreSQL/pgvector 검색과 선택형 리랭킹
-- PDF 좌표 추출 및 선별 OCR 전처리 도구
-- 음성 상담과 얼굴 로그인용 선택 모듈
+---
 
-## 폴더 구조
+## 들어 있는 것 (310 + docs 6)
 
-```text
-app/           API, 도메인 규칙, 검색·LLM 어댑터, 프론트엔드
-config/        공개 가능한 실행 설정과 승인 릴리스 정보
-db/            PostgreSQL migration과 저장소 구현
-requirements/  역할별 의존성 목록
-scripts/       서버 실행, 수집·전처리·색인·운영 명령
-tests/         회귀·보안·계약 테스트
-data/raw/manifests/  약관 본문이 없는 수집 메타데이터
+| 갈래 | 수 | 내용 |
+|---|---:|---|
+| `app/` | 122 | 라우터 13 · `core` 42 · 어댑터 22 · `obs` 9 · 인증 5 · `outer` 5 · 스키마 4 · 서비스 4 · `db` 3 |
+| `tests/` | 105 | 계약·라우터·권한·DB 시험 |
+| `db/` | 36 | `migrations/postgres/` 22 · `postgres/` 11 · `sqlite_legacy/` 3 |
+| `scripts/` | 24 | 서버 실행(`run_*_server`) · 운영(`ops`) · `db/apply.py` · `manage` · `pg` |
+| `config/` | 12 | 승인 릴리스 · 세대 프로필 · 환경 예시 |
+| `requirements/` | 6 | 런타임·개발·색인·전처리 분리 |
+| `docs/handoff/` | 6 | 아래 |
+
+### 뺀 것 (173)
+
+수집 `scripts/crawl` 40 · 평가 `scripts/eval` 60 · 전처리 `scripts/extract` 11 ·
+**임베딩 `scripts/index` 9**(→ `embedding` 브랜치) · 파인튜닝 5 ·
+프론트 `app/static` 8 · 모델 `app/ml` 4 · `data/raw` 매니페스트 12 등.
+
+---
+
+## 백엔드 핸드오프 문서
+
+| 문서 | 무엇 | 상태 |
+|---|---|---|
+| `07_계약_백엔드.md` | DB · API · 감사 인터페이스 계약 | **경로 갱신함**(2026-08-25) |
+| `02_ERD_및_스키마.md` | ERD · 테이블 정의 | 대조 통과 |
+| `16_DB_스키마_적재_의뢰.md` | 스키마 완성·적용 의뢰 | **경로 갱신함** |
+| `06_계약_Agent.md` | 외부 에이전트 · MCP 계약 | **부재 1건 명시** |
+| `03_에이전트_데이터_축적_설계.md` | 에이전트 데이터 수집·재사용 | 대조 통과 |
+| `01_데이터_현황.md` | 무엇이 있고 무엇을 믿을 수 있나 | **부재 1건 명시** |
+
+### ★올리기 전에 문서를 코드와 대조했다
+
+문서가 가리키는 경로를 **이 브랜치의 실제 파일 목록과 기계로 맞춰 봤다.**
+어긋난 것은 고치거나, 고칠 수 없으면 **문서 안에 적어 두었다.**
+
+| 어긋남 | 처리 |
+|---|---|
+| `scripts/db/*.sql` → `db/migrations/postgres/*.sql` | **경로 고침**(4곳) |
+| `app/obs/audit.py` → `app/obs/agent_audit.py` | **경로 고침** — 이름이 바뀌어 있었다 |
+| `app/db/models_insurance.py` | **없음** — `app/db/models.py` 가 그 자리. 문서에 명시 |
+| `scripts/db/load_clauses.py` · `tests/test_load_clauses.py` | **없음** — 계약만 적히고 구현되지 않았다. 문서에 명시 |
+| `app/routers/a2a.py` | **없음** — A2A 경로 미구현. 문서에 명시 |
+| `config/precheck_mode.json` | 런타임 상태 파일이라 공개본에 없다. 문서에 명시 |
+
+★**지우지 않고 적었다.** 「계약에는 있는데 구현되지 않은 것」이 어디인지가
+이 문서들의 값어치다. 없는 것을 조용히 지우면 그 정보가 사라진다.
+
+---
+
+## 구조 — 두 앱을 일부러 가른다
+
+```
+scripts/run_customer_server.py  → :8080  고객   경로 33 · 관리자 경로 0
+scripts/run_admin_server.py     → :8081  운영   경로 60 · 관리자 경로 21
 ```
 
-## 개발 환경 실행
+`app/main.py` 의 `create_app(role)` 이 역할에 따라 라우터를 다르게 싣는다.
+**고객 앱에는 `/api/admin/*` 이 아예 실리지 않는다** — 인증으로 막는 게 아니라
+존재하지 않게 한다. 무인증 노출 표면을 줄이려는 것이므로 **하나로 합치지 말 것.**
 
-Python 3.12 이상이 필요합니다.
+## DB 계층
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+```
+db/migrations/postgres/   001_core · 002_grants · 003_embedding · … · 016   (forward-only)
+db/postgres/              어댑터 — pg_clause_store · pg_insurance_repository · pgvector_*
+db/sqlite_legacy/         옛 런타임. 지우지 않고 남긴다
+scripts/db/apply.py       번호 SQL 적용기
+```
+
+★`002_grants.sql`·`005_integrity_and_privileges.sql` 이 **외부 스키마**를 만든다 —
+런타임 역할 `insurance_app` 은 `core` 를 **읽기만** 하고, 감사 로그는 `INSERT` 만 되며
+`UPDATE`·`DELETE` 는 회수돼 있다(append-only). 권한이 곧 도메인 규칙이다.
+
+---
+
+## 띄우는 법
+
+```bash
 pip install -r requirements/runtime.txt
-pip install -r requirements/dev.txt
-
-Copy-Item config/development.env.example .env
-python -m scripts.manage migrate
-python -m scripts.run_customer_server
+python -m scripts.db.apply                 # 스키마 적용(forward-only)
+python -m scripts.run_customer_server      # :8080
+python -m scripts.run_admin_server         # :8081
+pytest -q                                  # 시험(테스트 DB 는 postgres 를 쓴다)
 ```
 
-고객 화면은 `http://127.0.0.1:8080`, 관리자 서버는 별도 터미널에서
-`python -m scripts.run_admin_server`로 실행한 뒤 `http://127.0.0.1:8081`에서 확인합니다.
-
-`.env`의 `SECRET_KEY`는 반드시 각자 만든 긴 난수로 교체해야 합니다. OpenAI나 Gemini를
-선택할 때만 해당 API 키를 로컬 `.env`에 넣고 Git에는 올리지 않습니다.
-
-## 선택 설치
-
-```powershell
-# PDF 수집·전처리
-pip install -r requirements/preprocess.txt
-
-# 임베딩·리랭킹·색인
-pip install -r requirements/index.txt
-
-# 음성·얼굴 기능
-pip install -r requirements/local-ml-optional.txt
-```
-
-전체 묶음이 꼭 필요한 환경에서만 `pip install -r requirements.txt`를 사용합니다.
-
-## 데이터 안내
-
-이 공개 저장소에는 보험약관 PDF, 약관 본문을 추출한 JSON, 벡터 DB, 모델 가중치,
-사용자·에이전트 제출 데이터와 로컬 DB가 포함되지 않습니다. 이 자료는 저작권·개인정보·용량
-문제로 Git에 올리지 않습니다.
-
-따라서 코드는 실행할 수 있지만, 실제 약관 판정과 검색은 팀 내부에서 별도로 전달받은
-구조화 약관 데이터 또는 승인된 PostgreSQL/pgvector DB를 연결해야 동작합니다. 데이터가
-없을 때 서비스는 빈 결과를 꾸며내지 않고 준비되지 않았다는 오류를 반환합니다.
-
-## 기본 검사
-
-```powershell
-python -m scripts.verify_public_repo
-```
-
-이 명령은 공개 금지 파일과 대표 비밀키가 섞이지 않았는지 확인하고, Python 문법 검사와
-공개본만으로 실행 가능한 회귀검사를 차례로 수행합니다. 전체 테스트 중 실제 PostgreSQL,
-LLM, GPU 모델, 내부 문서 또는 비공개 약관 데이터가 필요한 검사는 해당 환경을 준비한 뒤
-별도로 실행합니다.
-
-## 주의
-
-이 서비스의 결과는 보험금 지급을 확정하는 법률·의학적 판단이 아닙니다. 실제 지급 여부는
-보험사가 계약 내용과 제출 서류를 심사해 결정합니다.
+★시험 하네스가 **sqlite 가 아니라 postgres** 를 쓴다. 전용 DB(`insurance_pytest`)에
+프로세스마다 새 스키마를 만들었다 지운다 — `tests/conftest.py` 참고.

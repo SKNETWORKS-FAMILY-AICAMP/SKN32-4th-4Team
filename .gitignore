@@ -37,6 +37,12 @@ legacy/
 
 # Internal documents and copyrighted/private/large data
 docs/
+# ★backend 브랜치는 백엔드 핸드오프 문서를 함께 싣는다.
+#   docs/ 를 통째로 막아 두면 계약서가 코드와 따로 놀게 된다 —
+#   실제로 이 브랜치 첫 커밋에서 문서 6개가 조용히 빠졌다.
+!docs/
+!docs/handoff/
+!docs/handoff/*.md
 data/*
 !data/raw/
 data/raw/*
