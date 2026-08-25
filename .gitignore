@@ -5,6 +5,10 @@
 # Local secrets and environments
 .env
 .env.*
+# ★`.env.*` 가 `.env.example` 까지 막고 있었다. 그래서 팀 저장소에
+#   설정 예시가 하나도 없었다 — 받는 사람이 무엇을 채워야 할지 모른다.
+#   예시 파일은 비밀이 아니므로 예외로 연다(값이 아니라 **키와 설명**이다).
+!.env.example
 .venv/
 venv/
 

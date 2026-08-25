@@ -42,6 +42,36 @@ def _admin_app(monkeypatch, **settings):
         app.dependency_overrides.clear()
 
 
+@contextlib.contextmanager
+def _fake_worker(**stats):
+    """★전역 워커에 **가짜를 심는다.**
+
+    이걸 안 하면 라우터가 진짜 `CrossEncoderReranker` 를 만들고,
+    시험이 **4B 무게추를 실제로 내려받는다**(2026-08-25에 실제로 그랬다).
+    시험은 모델을 건드리면 안 된다.
+    """
+    from app.adapters import rerank_worker as rw
+
+    class _W:
+        def rerank(self, query, evidence, top_n=None, timeout=None):
+            if "raise" in stats:
+                raise stats["raise"]
+            return evidence[:top_n] if top_n else evidence
+
+        def stats(self):
+            return {"loaded": True, "alive": True, **stats.get("stats", {})}
+
+        def stop(self, timeout=None):
+            return None
+
+    rw.reset_worker()
+    rw._WORKER = _W()
+    try:
+        yield rw._WORKER
+    finally:
+        rw.reset_worker()
+
+
 def test_고객앱에는_경로가_없다():
     """★관리자 API 는 고객 프로세스에 **실리지도 않는다**(무인증 노출 표면 축소)."""
     r = TestClient(create_app("customer")).post(
@@ -174,18 +204,28 @@ def test_기본_설정이_실측_우세값이다():
 # ── 코덱스 독립 검증에서 나온 결함들(2026-08-05) ────────────────────────
 
 def test_리랭커를_준비하지_못하면_503이다(monkeypatch):
-    """★생성이 try 밖에 있어 500 으로 나갔다. 리랭커를 못 쓰는 것은 인프라 문제다."""
-    import app.adapters.reranker as rr
+    """리랭커를 못 쓰는 것은 인프라 문제다 — 500(서버 버그)이 아니라 503.
 
-    class _Boom:
-        def __init__(self, *a, **k): raise RuntimeError("no CUDA")
+    ★워커 설계로 바뀌면서 실패가 드러나는 자리가 옮겨졌다. 무게추 적재는
+      워커 스레드에서 일어나므로 `get_worker()` 는 곧바로 돌아오고,
+      **첫 일감에서** `RerankUnavailable` 이 올라온다.
+    """
+    from app.adapters import rerank_worker as rw
+    from app.core.usecases import clause_search
 
-    monkeypatch.setattr(rr, "CrossEncoderReranker", _Boom)
-    with _admin_app(monkeypatch, INSURANCE_CLAUSE_RERANK_ENABLED=True) as c:
+    #: ★유스케이스도 가짜로 바꾼다. 안 그러면 **진짜 검색 경로**가 돌면서
+    #:   질의 임베더가 arctic 무게추를 내려받는다 — 시험은 모델을 건드리면 안 된다.
+    def _unavailable(**_kw):
+        raise clause_search.RerankUnavailable("no CUDA") from rw.RerankUnavailable("no CUDA")
+
+    monkeypatch.setattr(clause_search, "search", _unavailable)
+    with _fake_worker(), _admin_app(
+            monkeypatch, INSURANCE_CLAUSE_RERANK_ENABLED=True) as c:
         r = c.post("/api/admin/clause-search",
                    json={"query": "치과치료", "scope_sha256s": ["a" * 64], "rerank": True})
     assert r.status_code == 503
-    assert "리랭커를 준비하지 못했습니다" in r.json()["detail"]
+    assert "no CUDA" in r.json()["detail"]
+
 
 
 def test_동시성_설정이_실제로_쓰인다(monkeypatch):
@@ -209,3 +249,69 @@ def test_채점_못한_후보_수를_응답이_말한다(monkeypatch):
                       json={"query": "치과치료", "scope_sha256s": ["a" * 64]}).json()
     assert body["dropped_incomplete"] == 1
     assert body["dropped_unscorable"] == 2
+
+
+# ── 전용 워커 · 시한 (2026-08-25) ───────────────────────────────────────
+
+def test_시한을_넘기면_504다(monkeypatch):
+    """★시한 초과와 장애는 다른 일이다. 둘 다 503 이면 원인을 못 가린다."""
+    from app.adapters import rerank_worker as rw
+    from app.core.usecases import clause_search
+
+    def _timeout(**_kw):
+        raise clause_search.RerankUnavailable("TimeoutError") from rw.RerankTimeout("느리다")
+
+    monkeypatch.setattr(clause_search, "search", _timeout)
+    with _fake_worker(), _admin_app(monkeypatch, INSURANCE_CLAUSE_RERANK_ENABLED=True,
+                                    CLAUSE_RERANK_TIMEOUT_SECONDS=30.0) as c:
+        r = c.post("/api/admin/clause-search",
+                   json={"query": "치과치료", "scope_sha256s": ["a" * 64], "rerank": True})
+    assert r.status_code == 504
+    assert "시한" in r.json()["detail"]
+    #: ★「추론이 계속 돈다」는 사실을 응답이 말해야 한다. 안 말하면 재시도가 몰린다.
+    assert "끊을 수 없어" in r.json()["detail"]
+
+
+def test_워커가_바쁘면_503이다(monkeypatch):
+    from app.adapters import rerank_worker as rw
+    from app.core.usecases import clause_search
+
+    def _busy(**_kw):
+        raise clause_search.RerankUnavailable("busy") from rw.RerankBusy("앞선 요청이 계산 중")
+
+    monkeypatch.setattr(clause_search, "search", _busy)
+    with _fake_worker(), _admin_app(monkeypatch, INSURANCE_CLAUSE_RERANK_ENABLED=True) as c:
+        r = c.post("/api/admin/clause-search",
+                   json={"query": "치과치료", "scope_sha256s": ["a" * 64], "rerank": True})
+    assert r.status_code == 503
+    assert "바쁩니다" in r.json()["detail"]
+
+
+def test_시한이_응답_설정에_드러난다(monkeypatch):
+    from app.core.usecases import clause_search
+
+    monkeypatch.setattr(clause_search, "search", lambda **_kw: clause_search.ClauseSearchResult(
+        hits=[], reranked=False, provenance={}, dropped_incomplete=0))
+    with _admin_app(monkeypatch, CLAUSE_RERANK_TIMEOUT_SECONDS=12.5) as c:
+        body = c.post("/api/admin/clause-search",
+                      json={"query": "치과치료", "scope_sha256s": ["a" * 64]}).json()
+    assert body["settings"]["timeout_seconds"] == 12.5
+
+
+def test_준비상태가_워커를_만들지_않는다(monkeypatch):
+    """★준비 상태를 물었을 뿐인데 4B 무게추가 올라가면 곤란하다."""
+    from app.adapters import rerank_worker as rw
+    from app.obs import readiness
+
+    rw.reset_worker()
+    monkeypatch.setattr("app.core.config.get_settings",
+                        lambda: type("S", (), {
+                            "INSURANCE_CLAUSE_RERANK_ENABLED": True,
+                            "CLAUSE_RERANK_TIMEOUT_SECONDS": 30.0,
+                            "CLAUSE_RERANK_MAX_CANDIDATES": 40,
+                            "CLAUSE_RERANK_SCORE_BODY": "chunk"})())
+    state = readiness._clause_rerank_state()
+    assert state["enabled"] is True
+    assert state["worker"] is None, "조회가 워커를 띄우면 안 된다"
+    assert "아직 뜨지 않았습니다" in state["note"]
+    assert rw.peek_worker() is None

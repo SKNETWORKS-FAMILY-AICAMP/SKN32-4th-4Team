@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 프로젝트 루트: 이 파일은 app/core/config.py 이므로 parents[2] = 프로젝트 루트
@@ -83,6 +84,7 @@ class Settings(BaseSettings):
     # 비어 있으면 명시적으로 실패한다. SQLite DATABASE_URL이나 demo/file로 폴백하지 않는다.
     INSURANCE_PG_DSN: str = ""
     INSURANCE_ADMIN_PG_DSN: str = ""
+    CLAUSE_STORE: Literal["file", "pg"] = "file"
     AUTH_PERSISTENCE: Literal["sqlite", "postgres"] = "sqlite"
     OPS_PERSISTENCE: Literal["sqlite", "postgres"] = "sqlite"
     SQLITE_LEGACY_ENABLED: bool = True
@@ -113,6 +115,30 @@ class Settings(BaseSettings):
     #   부르면 "에이전트가 접속해서 쌓는다"는 것이 시연되지 않고, 라우터·검증·멱등을
     #   전부 건너뛴 채 파일만 늘어난다. 서버가 안 떠 있으면 **명시적으로 실패**한다(무폴백).
     CUSTOMER_BASE_URL: str = "http://127.0.0.1:8080"
+
+    # --- 전달 계층(Django BFF) 전환 스위치 ---
+    # 계획: docs/plans/2026-08-25_0955_전달계층_Django분리_계획.md
+    #
+    # ★언제든 FastAPI 단독으로 되돌릴 수 있어야 한다. 기본값이 그 상태(`direct`)다.
+    #   `direct` : 클라이언트 → FastAPI (지금 구조. L0 기준선)
+    #   `django` : 클라이언트 → Django 전달 계층 → FastAPI (L1)
+    #   구현이 없는 값으로 조용히 떨어지지 않게 Literal로 잠근다(무폴백).
+    DELIVERY_MODE: Literal["direct", "django"] = "direct"
+    DELIVERY_DJANGO_BASE_URL: str = "http://127.0.0.1:8000"
+
+    # ★벤치 전용 엔드포인트(`GET /_bench/noop`)는 **기본 비활성**이다.
+    #   프레임워크·전달 계층의 순수 오버헤드를 재려면 코어가 거의 0인 경로가 필요한데,
+    #   그런 경로를 운영 표면에 상시 노출할 이유는 없다.
+    BENCH_ENDPOINTS_ENABLED: bool = False
+
+    #: ★`CLAUSE_STORE` 는 예전에 `os.getenv(...).strip().lower()` 로 읽혔다(2026-08-25 이전).
+    #:   그래서 `CLAUSE_STORE=PG` 나 앞뒤 공백이 있어도 동작했다.
+    #:   Settings 필드로 옮기면서 그 관용을 **말없이 없애면** 기존 환경이 기동에서 깨진다.
+    #:   대소문자·공백만 흡수하고, 값 자체가 틀리면 Literal 이 그대로 막는다(무폴백).
+    @field_validator("CLAUSE_STORE", "DELIVERY_MODE", mode="before")
+    @classmethod
+    def _normalize_choice(cls, v):
+        return v.strip().lower() if isinstance(v, str) else v
 
     # --- 보험 조항 리랭킹 ---
     # 조항 임베딩 모델·revision·차원·접두사는 config/accepted_extraction.json의
@@ -158,6 +184,18 @@ class Settings(BaseSettings):
     CLAUSE_RERANK_MAX_LENGTH: int = 1536
     #: 채점 프롬프트에 넣는 본문 길이 상한(자). 조 전체는 3만 자까지 있다.
     CLAUSE_RERANK_SCORE_CHARS: int = 1200
+
+    #: ★리랭킹 시한(초). 넘으면 **504** 로 나간다.
+    #:   실측(2026-08-05 · RTX 4070 SUPER · 후보 20 · Qwen3-4B): 질의당 2.3초.
+    #:   30초는 그 열 배가 넘는 여유다 — 이보다 오래 걸리면 무언가 잘못된 것이다.
+    #:
+    #: ★★**시한이 지나도 추론은 안 멈춘다.** 파이썬 스레드는 강제 종료가 없고
+    #:   torch 추론은 중간에 끊기지 않는다. 시한은 「이 요청을 포기한다」는 뜻이지
+    #:   「계산을 멈춘다」가 아니다. 그동안 워커는 새 요청을 받지 않는다(503).
+    #:   진짜 취소가 필요하면 별도 프로세스로 띄워 죽여야 한다 — 아직 안 했다.
+    CLAUSE_RERANK_TIMEOUT_SECONDS: float = 30.0
+    #: 워커 대기열 길이. 차면 503 — 쌓아 두면 밖에서 안 보인다.
+    CLAUSE_RERANK_QUEUE_SIZE: int = 8
 
     # --- 음성 (Phase 11, STT/TTS) ---
     # GPU 미검출 환경(Codex 검토) — CPU + int8로 검증한 크기만 기본값으로 둔다.
@@ -208,6 +246,11 @@ class Settings(BaseSettings):
     # 업로드 크기 상한(모델 연산 DoS 표면 축소, Codex 지적). 초과분은 무폴백으로 ValidationErr.
     FACE_MAX_UPLOAD_BYTES: int = 8 * 1024 * 1024    # 얼굴 이미지 1장 상한(8MB)
     VOICE_MAX_UPLOAD_BYTES: int = 16 * 1024 * 1024  # STT 오디오 상한(16MB)
+    # 청구 증거 파일(진료비 영수증·진단서 스캔본) 1건 상한(16MB) — 코덱스 리뷰 지적으로 신설.
+    OBSERVATION_EVIDENCE_MAX_UPLOAD_BYTES: int = 16 * 1024 * 1024
+    # ★1건 상한만으로는 누적 저장량을 못 막는다(코덱스 지적 — 익명 공개 엔드포인트라
+    #   유니크 파일을 계속 올려 디스크를 채울 수 있음). 저장 전 디렉터리 총량을 잰다.
+    OBSERVATION_EVIDENCE_MAX_TOTAL_BYTES: int = 2 * 1024 * 1024 * 1024  # 2GB
     # 등록 다중 샷 개수 상한(파일별 상한만으로는 개수를 늘린 합산 DoS를 못 막음 — Codex 지적).
     FACE_MAX_ENROLL_IMAGES: int = 10                # 등록 요청당 이미지 최대 장수(기본 샷 3의 여유배)
 

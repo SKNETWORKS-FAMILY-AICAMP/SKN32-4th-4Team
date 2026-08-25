@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.auth.roles import require_admin
 from app.auth.store import get_auth_store
 from app.core.config import get_settings
-from app.db.models import KnowledgeGap, RunEvent
+from db.sqlite_legacy.models import KnowledgeGap, RunEvent
 from app.obs.store import get_ops_store
 from db.postgres.ops_repository import PgOpsStore
 
@@ -301,7 +301,7 @@ def admin_list_users(store=Depends(get_auth_store)) -> dict:
             "note": "최초 관리자 부트스트랩은 CLI 전용입니다: python -m scripts.manage promote <username>",
         }
     db = store
-    from app.db.models import FaceCredential, User
+    from db.sqlite_legacy.models import FaceCredential, User
 
     rows = db.query(User).order_by(User.id).all()
     face_ids = {c.user_id for c in db.query(FaceCredential).all()}
@@ -709,27 +709,40 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
                 detail=("조항 리랭킹이 꺼져 있습니다(INSURANCE_CLAUSE_RERANK_ENABLED=false). "
                         "끈 채로 재정렬한 척하지 않습니다."),
             )
+        from app.adapters import rerank_worker as rw
         from app.adapters.reranker import CrossEncoderReranker
 
-        #: ★생성이 `try` 밖에 있었다. 무게추 적재·설정 오류가 **500** 으로 나가
-        #:   「서버 버그」처럼 보였다(코덱스 지적). 리랭커를 못 쓰는 것은 503 이다.
-        _build = lambda: CrossEncoderReranker(
-            st.RERANKER_MODEL,
-            device=st.RERANKER_DEVICE,
-            batch_size=st.RERANKER_BATCH_SIZE,
-            #: ★조항 전용 절단값을 쓴다. 커머스 768 을 그대로 쓰면
-            #:   후보가 같은 앞부분만 남아 `constant scores` 로 멈추는 질의가 나온다.
-            max_length=st.CLAUSE_RERANK_MAX_LENGTH,
-            dtype=st.RERANKER_DTYPE,
-            trust_remote_code=st.RERANKER_TRUST_REMOTE_CODE,
-        )
+        #: ★**전용 워커에 맡긴다.** 앞서는 요청마다 모델을 새로 만들어 `to_thread` 로 돌렸다.
+        #:   그러면 무게추 적재(4B ≈ 9GB · 수십 초)가 요청 안에서 일어나고,
+        #:   겹치면 GPU 가 OOM 이다. 워커는 **한 번만** 적재해 자기 스레드에서 붙든다.
+        def _build():
+            return CrossEncoderReranker(
+                st.RERANKER_MODEL,
+                device=st.RERANKER_DEVICE,
+                batch_size=st.RERANKER_BATCH_SIZE,
+                #: ★조항 전용 절단값을 쓴다. 커머스 768 을 그대로 쓰면
+                #:   후보가 같은 앞부분만 남아 `constant scores` 로 멈추는 질의가 나온다.
+                max_length=st.CLAUSE_RERANK_MAX_LENGTH,
+                dtype=st.RERANKER_DTYPE,
+                trust_remote_code=st.RERANKER_TRUST_REMOTE_CODE,
+            )
+
         try:
-            reranker = _build()
+            worker = rw.get_worker(_build)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"리랭커를 준비하지 못했습니다: {type(exc).__name__}: {exc}",
             ) from exc
+
+        class _WorkerReranker:
+            """`rerank_hits` 가 부르는 모양 그대로, 안에서 워커에 맡긴다."""
+
+            def rerank(self, query, evidence, top_n=None):
+                return worker.rerank(query, evidence, top_n=top_n,
+                                     timeout=st.CLAUSE_RERANK_TIMEOUT_SECONDS)
+
+        reranker = _WorkerReranker()
 
     def _run():
         with get_conn() as conn:
@@ -758,6 +771,22 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except clause_search.RerankUnavailable as exc:
         #: ★벡터 순서로 되돌려 200 을 주지 않는다. 실패는 실패로 보인다.
+        #:   다만 **왜 실패했는지에 따라 코드를 가른다** — 시한 초과와 장애는 다른 일이다.
+        from app.adapters import rerank_worker as rw
+
+        cause = exc.__cause__
+        if isinstance(cause, rw.RerankTimeout):
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=(f"리랭킹이 시한({st.CLAUSE_RERANK_TIMEOUT_SECONDS:.0f}초) 안에 "
+                        f"끝나지 않았습니다. 추론은 중간에 끊을 수 없어 계속 돌고 있으며, "
+                        f"그동안 새 요청을 받지 않습니다."),
+            ) from exc
+        if isinstance(cause, rw.RerankBusy):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"리랭커가 바쁩니다: {cause}",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"리랭킹에 실패했습니다(원래 순서로 되돌리지 않습니다): {exc}",
@@ -777,7 +806,8 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         "dropped_unscorable": result.dropped_unscorable,
         "settings": {"score_body": st.CLAUSE_RERANK_SCORE_BODY,
                      "max_length": st.CLAUSE_RERANK_MAX_LENGTH,
-                     "rerank_enabled": st.INSURANCE_CLAUSE_RERANK_ENABLED},
+                     "rerank_enabled": st.INSURANCE_CLAUSE_RERANK_ENABLED,
+                     "timeout_seconds": st.CLAUSE_RERANK_TIMEOUT_SECONDS},
         "hits": [
             {
                 "clause_id": h.clause_id,

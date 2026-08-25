@@ -179,6 +179,12 @@ def check_readiness() -> dict[str, object]:
     if not clause.get("ready"):
         fail(clause.get("hint") or "활성 clause store가 승인 릴리스와 맞지 않습니다.")
 
+    #: ★리랭크 워커 상태를 **밖에서 보이게** 한다.
+    #:   적재 실패·시한초과·버려진 일감이 안 보이면 「느리다」로만 읽힌다.
+    #:   ★준비 조건에는 넣지 않는다 — 리랭킹은 꺼져 있는 것이 기본이고,
+    #:     꺼진 상태를 `ready:false` 로 만들면 늘 미준비라 아무도 안 본다.
+    out["clause_rerank"] = _clause_rerank_state()
+
     from app.core.candidate_fact_registry import check_candidate_fact_sources
 
     candidates = check_candidate_fact_sources()
@@ -221,6 +227,10 @@ def check_readiness() -> dict[str, object]:
             getattr(settings, "AUTH_PERSISTENCE", "sqlite") == "postgres",
             getattr(settings, "PRECHECK_PERSISTENCE", "off") == "postgres",
             getattr(settings, "OUTCOME_PERSISTENCE", "file") == "postgres",
+            #: ★코호트 조회(app/adapters/cohort_stats.py)도 같은 PgInsuranceRepository
+            #:   DSN을 쓴다(db/postgres/pg_insurance_cohort_stats.py). 빠지면 이것만
+            #:   postgres인 배포가 "준비됨"으로 잘못 보고된다(코덱스 리뷰 지적).
+            getattr(settings, "VERIFIED_COHORT_STORE", "file") == "postgres",
         )
     )
     if insurance_pg_required:
@@ -332,7 +342,7 @@ def _clause_index_state() -> dict[str, object]:
     #:     ② 시간 제한이 **없었다** — 락을 만나면 영원히 기다린다
     #:     ③ `pg` 마커가 없는 테스트 경로에서 **PG 를 요구했다**
     try:
-        from app.adapters import pgvector_clause_index as ix
+        from db.postgres import pgvector_clause_index as ix
         from db.postgres.pgvector_index import get_conn
 
         conn = get_conn()
@@ -361,3 +371,34 @@ def _clause_index_state() -> dict[str, object]:
         st["hint"] = ("승인 릴리스와 색인이 어긋납니다. "
                       "`python -m scripts.index.build_clause_index` 로 다시 적재하세요.")
     return st
+
+
+def _clause_rerank_state() -> dict[str, object]:
+    """리랭크 워커가 어떤 상태인가. **켜지 않았으면 그렇다고 말한다.**
+
+    ★워커를 여기서 **만들지 않는다.** 준비 상태를 물었을 뿐인데 4B 무게추가
+      올라가면 곤란하다 — 이미 떠 있는 것만 들여다본다.
+    """
+    from app.core.config import get_settings
+
+    st = get_settings()
+    state: dict[str, object] = {
+        "enabled": st.INSURANCE_CLAUSE_RERANK_ENABLED,
+        "timeout_seconds": st.CLAUSE_RERANK_TIMEOUT_SECONDS,
+        "max_candidates": st.CLAUSE_RERANK_MAX_CANDIDATES,
+        "score_body": st.CLAUSE_RERANK_SCORE_BODY,
+    }
+    if not st.INSURANCE_CLAUSE_RERANK_ENABLED:
+        state["worker"] = None
+        state["note"] = "꺼져 있습니다(INSURANCE_CLAUSE_RERANK_ENABLED=false)."
+        return state
+
+    from app.adapters import rerank_worker as rw
+
+    worker = rw.peek_worker()
+    if worker is None:
+        state["worker"] = None
+        state["note"] = "켜져 있으나 워커가 아직 뜨지 않았습니다(첫 요청에서 적재)."
+        return state
+    state["worker"] = worker.stats()
+    return state
