@@ -113,7 +113,7 @@ def store(
         decision = evaluate(payload)
 
     if backend_name() == "postgres":
-        from app.adapters import pg_demo_submission_store as pg
+        from db.postgres import pg_demo_submission_store as pg
 
         return pg.store(
             payload,
@@ -257,7 +257,7 @@ def _promoted_ids() -> set[str]:
 def pending(limit: int = 100) -> list[dict]:
     """검수 대기 목록 — 아직 승격되지 않은 합성 제출."""
     if backend_name() == "postgres":
-        from app.adapters import pg_demo_submission_store as pg
+        from db.postgres import pg_demo_submission_store as pg
 
         return pg.pending(limit)
     done = _promoted_ids()
@@ -289,7 +289,7 @@ def promote(submission_id: str, *, method: str, actor: str,
             raise ValidationErr(
                 "PostgreSQL 자동 정합성 검사는 제출 트랜잭션 안에서만 실행할 수 있습니다."
             )
-        from app.adapters import pg_demo_submission_store as pg
+        from db.postgres import pg_demo_submission_store as pg
 
         return pg.promote(submission_id, actor=actor, at=at)
     sid = (submission_id or "").strip()
@@ -341,7 +341,7 @@ def promote(submission_id: str, *, method: str, actor: str,
 def counts() -> dict:
     """대시보드용 요약 — 제출 몇 건 중 몇 건이 승격됐나."""
     if backend_name() == "postgres":
-        from app.adapters import pg_demo_submission_store as pg
+        from db.postgres import pg_demo_submission_store as pg
 
         return pg.counts()
     total = sum(1 for _ in _iter_submission_files())
@@ -352,7 +352,7 @@ def counts() -> dict:
 def reset() -> dict:
     """선택한 합성 백엔드만 비운다. 실제 트랙 경로는 알지 못한다."""
     if backend_name() == "postgres":
-        from app.adapters import pg_demo_submission_store as pg
+        from db.postgres import pg_demo_submission_store as pg
 
         return pg.reset()
     removed: list[str] = []

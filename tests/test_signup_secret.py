@@ -21,8 +21,8 @@ def test_require_secret_key_raises_without_key():
 
 def test_signup_preflight_no_user_created(monkeypatch):
     """SECRET_KEY 미설정 시 signup preflight가 유저 생성 전에 실패한다."""
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
     from app.routers import auth as auth_router
 
     # get_settings를 secret 없는 설정으로 대체

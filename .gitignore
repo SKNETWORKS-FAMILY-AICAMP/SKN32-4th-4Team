@@ -1,61 +1,208 @@
-# Hidden paths are private/local by default.  The ignore rule itself is the only exception.
-.*
-!.gitignore
-
-# Local secrets and environments
-.env
-.env.*
-# ★`.env.*` 가 `.env.example` 까지 막고 있었다. 그래서 팀 저장소에
-#   설정 예시가 하나도 없었다 — 받는 사람이 무엇을 채워야 할지 모른다.
-#   예시 파일은 비밀이 아니므로 예외로 연다(값이 아니라 **키와 설명**이다).
-!.env.example
-.venv/
-venv/
-
-# Python/test caches
 __pycache__/
-*.py[cod]
-.pytest_cache/
-.coverage
-htmlcov/
+*.pyc
+data/db/*.sqlite3
+data/db/*.sqlite3-*
+data/vector_store/
+.env
+.venv/
+data/pgdata/
 
-# Editors and operating systems
+# 생성물(실행 시 만들어지는 리포트 산출물) — docs/ 이동에 맞춘 경로
+docs/generated_reports/
+
+# 사용자 요구사항 원본 — 절대 커밋 금지
+# (이전엔 ignore 규칙 없이 add만 안 한 상태라 실수로 커밋될 위험이 있었다 → 명시적 보호)
+프로젝트설명.txt
+docs/프로젝트설명.txt
+
+# 작업 규칙 문서(로컬 전용)
+RULE.md
+
+# 워크스페이스 루트 .gitignore의 `**/plans/`·`**/reports/` 규칙이 이 프로젝트의
+# docs/ 하위까지 잡아가므로, 문서 폴더는 명시적으로 되살린다(추적 대상).
+!docs/plans/
+!docs/history/
+!docs/reports/
+
+# 파인튜닝 생성물(분할·평가 결과) — 재생성 가능
+data/finetune/
+
+# 사용자 개인 기획 자료(ChatGPT 대화 내보내기 등) — 공개 레포에 올리지 않는다.
+# 대화 사이드바에 다른 프로젝트명 등 무관한 개인정보가 함께 담기므로 추적 제외한다.
+docs/my_idea*.mhtml
+*.mhtml
+
+# 수집한 보험약관 원문 — 저작물이므로 저장소에 커밋하지 않는다(권리 확인 없는 재배포 금지).
+# 커밋되는 것은 메타데이터(fetch_manifest.jsonl)뿐이며, 원문은 각자 재수집한다.
+data/raw/insurance_terms/
+
+# ─────────────────────────────────────────────────────────────
+# 약관 파생물 — ★원문과 같은 저작물이다
+#
+# PDF 는 data/raw/insurance_terms/ 로 막아 뒀는데, 그것을 텍스트로 뽑은
+# 산출물은 안 막고 있었다. 형식만 바뀌었을 뿐 **내용은 약관 원문 그대로**다.
+#   data/structured/.../02aaee47b190.clauses.json
+#     "text": "제95조의 2) '중요한 내용'이란 보험료와 보장범위, 보험금 지급사유…"
+# 공개 저장소에 올리면 12개사 약관 전문을 재배포하는 것이 된다.
+# (CLAUDE.md §2 — "약관 원문은 저작물이다. data/raw/ 에만 두고 커밋하지 않는다")
+data/extracted/
+data/structured/
+data/raw/excluded/
+
+# 레거시 보관소 — 현행 프로젝트와 분리된 **압축본만** 추적한다.
+# 폴더 전체를 ignore 하면 활성 파일을 zip 으로 옮긴 커밋에서 zip 은 빠지고 삭제만
+# 전달되는 사고가 난다. README와 zip 이외의 loose 파일은 숨기되 압축본은 저장소에 남긴다.
+/legacy/*
+!/legacy/README.md
+!/legacy/*.zip
+
+# 외부 에이전트 보고 — 개인정보가 섞일 수 있다. 저장소에 올리지 않는다.
+data/external/
+# 코호트 이벤트 — 실제 청구 결과. 같은 이유.
+data/cohort/
+
+# 임시 측정 출력 — 실수로 커밋돼 있었다.
+_cov.txt
+_gap.txt
+
+# 용어 정의 구절 색인 — 약관 원문 조각이다. 저작물이므로 커밋하지 않는다.
+data/glossary/
+
+# 임베딩 평가셋 — 약관 원문 조각이다. 결과 지표만 커밋한다.
+data/eval/embed_bench.json
+
+# handoff 계약의 반출용 동결본(zip) — ★백업이 아니다.
+# 권위 있는 이력은 git 커밋이고, 이 zip 은 거기서 언제든 다시 만들 수 있다:
+#   git archive --format=zip -o out.zip <커밋> docs/handoff/
+# 폴더째 막지 않고 zip·manifest 만 좁게 제외한다 — 폴더 ignore 는 압축 해제본이나
+# 실수로 만든 파일까지 git status 에서 숨겨 버린다(코덱스 지적).
+# ★압축을 풀어 저장소 안에 두지 마라. 검색·IDE·AI 가 구버전을 현행 계약으로 읽는다.
+/backups/handoff/*.zip
+/backups/handoff/*.manifest.txt
+
+# ★약관 원문이 든 산출물은 커밋하지 않는다(CLAUDE.md §2 — 저작물).
+#   `data/exports/s5_clauses.parquet` 은 조항 211,131행 전체와 `text` 열을
+#   담고 있어 **팀 저장소에 올라갔다.** git add -A 로 쓸어 담은 실수다.
+#   같은 폴더의 나머지 산출물은 메타데이터만이라 남겨 둔다(전수 확인함).
+data/exports/*_clauses.parquet
+data/exports/**/*_clauses.parquet
+
+# ★코덱스 검수가 만든 샌드박스 잔재. 권한이 잠겨 있어 **관리자 권한 없이 못 지운다.**
+#   비어 있지만 git 이 열지 못해 `status` 마다 경고가 난다.
+#   지우려면: 관리자 PowerShell 에서
+#     takeown /f .pytest_tmp_probe_* /r /d y ; rmdir /s /q .pytest_tmp_probe_*
+.pytest_tmp_*/
+
+# IDE
 .idea/
-.vscode/
-.DS_Store
-Thumbs.db
 
-# Runtime databases, logs, models and generated artifacts
-*.sqlite3
-*.sqlite3-*
-*.db
-*.log
-*.onnx
-*.pt
-*.pth
-*.bin
-*.gguf
-artifacts/
-backups/
-legacy/
+# ★판정 모드는 **런타임 상태**다 — 커밋하지 않는다.
+#
+#   `config/precheck_mode.json` 은 「기계 대조까지만 된 문서도 판정에 쓸 것인가」를
+#   정한다. 관리 화면(`PUT /api/admin/precheck-mode`)과 스크린샷 스크립트가 쓰고,
+#   실측 2026-08-04 에 `changed_by` 가 `test` → `capadmin_fcfb12f4` 로 계속 바뀌었다.
+#
+#   커밋하면 **누군가의 로컬 조작이 다른 환경의 판정 범위가 된다.**
+#   시연용으로 켜 둔 자동승인 모드가 그대로 딸려 가는 식이다.
+#   환경마다 자기 값을 갖게 두고, 기본값은 코드(`identification_mode._DEFAULT`)가 정한다.
+config/precheck_mode.json
 
-# Internal documents and copyrighted/private/large data
-docs/
-# ★backend 브랜치는 백엔드 핸드오프 문서를 함께 싣는다.
-#   docs/ 를 통째로 막아 두면 계약서가 코드와 따로 놀게 된다 —
-#   실제로 이 브랜치 첫 커밋에서 문서 6개가 조용히 빠졌다.
-!docs/
-!docs/handoff/
-!docs/handoff/*.md
-data/*
-!data/raw/
-data/raw/*
-!data/raw/manifests/
-!data/raw/manifests/*.jsonl
+# ─────────────────────────────────────────────────────────────
+# ★2026-08-04 — `git add -A` 가 여기를 쓸어 담았다(커밋 전에 잡았다).
+#
+#   `data/extracted/`·`data/structured/` 는 "약관 파생물이라 저작물"이라고 막아 뒀는데
+#   그 뒤에 생긴 폴더들은 안 막혀 있었다. 실측: 스테이징 7,504건 중 **7,174건이 data/** 였다.
+#
+#   data/work/       s7 OCR 중간산출물. 4.15 GB · 6,130파일 (렌더 PNG·원격 전송 묶음)
+#   data/candidates/ ★**약관 원문 문구가 그대로 들어 있다.** 재배포가 된다:
+#                      "amount_formula": "처방전 1 건당 '「국민건강보험법」에서 정한 …"
+#   data/obs/        런타임 관측 로그. 환경마다 다르고 재현 대상이 아니다
+#   data/demo/submissions/  시연 중 생성되는 합성 제출물. 런타임 상태다
+#
+#   ★남기는 것은 `data/manifests/preprocess/` 다 — 해시뿐이고 D2 의 근거다.
+data/work/
+data/candidates/
+data/obs/
+data/demo/submissions/
 
-# Temporary files and archives
-*.bak
-*.backup
-*.tmp
-*.zip
-*~
+# ★같은 이유로 `data/eval/` 의 **큰 산출물**도 막는다(2026-08-04).
+#   스테이징에 382 MB 가 잡혔다. 안에 든 것이 무엇인지가 문제다 —
+#     ocr_shadow48/images        약관 PDF 를 **그림으로 렌더한 것**. 원본 그대로다
+#     ocr_shadow48/*.zip         위를 원격 GPU 로 보내던 전송 묶음
+#     struct_events/             S1·S2 사건 32,215건 — 조 제목·본문 조각이 실려 있다
+#     annex_*_s6/ · a1_gap_* · outside_clause_pages_s6.jsonl
+#                                조항·부록 본문이 들어 있다
+#   ★남기는 것은 **지표와 라벨**이다 — 사람이 찍은 라벨, 벤치 결과 요약, 후보 목록.
+#     그건 약관 원문이 아니라 우리가 만든 판단이다.
+data/eval/ocr_shadow48/
+data/eval/ocr_sota5/
+data/eval/struct_events/
+data/eval/annex_shadow_s6/
+data/eval/annex_precheck_diff_s6/
+data/eval/coverage_boundary_shards/
+data/eval/a1_gap_causes_s6.jsonl
+data/eval/a1_gap_causes_s6_review240.jsonl
+data/eval/outside_clause_pages_s6.jsonl
+data/eval/outside_clause_pages_s6_review200.jsonl
+data/eval/retrieval_probes.json
+data/eval/*_top20_rerank.json
+
+# ★★`data/exports/dataset/` — **모델팀 인계 데이터셋. 조항 본문 전체다.**
+#   `clauses.jsonl` 하나가 **233 MB** 이고 `text` 열에 약관 원문이 그대로 있다.
+#   앞서 같은 내용의 `*_clauses.parquet` 가 팀 저장소에 올라간 적이 있는데(위 규칙),
+#   이번엔 **확장자만 바뀐 같은 것**이 규칙을 비껴갔다.
+#   인계는 저장소가 아니라 별도 전달 경로로 한다.
+data/exports/dataset/
+
+# ★사람 검수용 HTML — 약관 표·조항 내용을 페이지에 그대로 박아 만든다.
+#   `table_review_20260803.html` 8 MB · 한글 81,713자 · `제N조` 332회.
+#   검수는 로컬에서 열어 보는 것이고 저장소에 남길 것이 아니다(CLAUDE.md §2).
+#   ★`docs/handoff/preprocess_viz.html` 은 남긴다 — 조항 인용이 0 이고 계약 산출물이다.
+docs/review/*.html
+
+# ★질병코드 카탈로그는 **약관 원문 조각을 담는다** — 커밋하지 않는다.
+#
+#   `data/exports/kcd_catalog.json` 의 `example.context` 는 그 코드가 나온
+#   약관 문장을 최대 160자씩 담는다(525개). 약관 원문은 저작물이고
+#   `data/raw/` 에만 둔다(CLAUDE.md §2). `data/extracted/`·`data/structured/`
+#   를 무시하는 것과 **같은 이유**다 — PDF 를 막아 놓고 그것을 뽑은 텍스트를
+#   커밋하면 막은 뜻이 없어진다.
+#
+#   ★생성물이라 언제든 다시 만든다: `python -m scripts.eval.kcd_catalog`
+#   없으면 API 가 503 + 실행할 명령을 알려 준다(조용히 빈 목록을 주지 않는다).
+data/exports/kcd_catalog.json
+
+# 파인튜닝 어댑터 바이너리 — 합성 데이터 산출물이고 66MB 다.
+# peft save_pretrained 가 베이스 토크나이저(2.3M줄)까지 복사한다. 로컬에만 둔다.
+artifacts/finetune/*/adapter/
+
+# ★평가용으로 조 전체 본문을 채워 넣은 후보셋은 **약관 원문 파생물**이다.
+#   `data/extracted/`·`data/structured/` 를 막아 둔 것과 같은 이유로 커밋하지 않는다
+#   (CLAUDE.md §2 — 약관 원문은 저작물이다).
+#
+#   ★2026-08-05 실제로 커밋될 뻔했다. 38.8MB · 조 전체 8,285쌍이 들어 있었고,
+#     origin 에 올라가기 직전에 잡았다. 지표만 담은 `rerank_results/*.json` 은
+#     약관 어휘 0건이라 그대로 둔다 — 막는 것은 **본문이 실린 것**뿐이다.
+#   재생성: scripts/eval/fill_fulltext.py 로 로컬 PG 에서 다시 채운다.
+data/eval/*fulltext*.json
+data/eval/*_top20_rerank_fulltext.json
+
+# 스캔 산출물 — 전처리 조사용 임시 출력이고 재생성된다(최대 949KB).
+scan_grid_ok.json
+scan_hits.json
+scan_line_hits.json
+scan_selfpay_pages.json
+scan_selfpay_tables.json
+backups/manifests_*/
+
+# ★판결문 원문 — 저작물·개인정보다. 약관 원문(CLAUDE.md §2)과 같이 취급한다.
+#   법령정보 Open API 로 재수집 가능하므로 저장소에 두지 않는다.
+#   구조화 산출물(쟁점·법리·결론)만 별도로 승인 후 커밋한다.
+data/legal/raw/
+
+# 한국소비자원 분쟁조정 사례집 PDF — 저작물. 재수집 가능하므로 저장소에 두지 않는다.
+data/legal/raw/kca/
+
+# 격리된 SQLite에는 비밀번호 해시·얼굴 임베딩·운영 이벤트가 들어 있다.
+# 파일명/확장자에 기대지 말고 보관소 전체를 커밋 대상에서 제외한다.
+/data/db/_quarantine/**

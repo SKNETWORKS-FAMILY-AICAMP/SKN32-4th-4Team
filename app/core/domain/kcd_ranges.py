@@ -261,6 +261,25 @@ def scan_clause(text: str, *, window: int = 160) -> list[CodeMention]:
         scope = _scope_at(pos)
         if scope == "exclude":
             return "exclude", ctx
+        # "정신 및 행동장애(F04~F99)를 보상하지 않습니다"처럼 코드가
+        # 면책 서술어보다 먼저 오는 문장도 흔하다. 현재 문장 끝까지만 앞을
+        # 내다봐 면책 문구가 있으면 그 코드의 성격을 면책으로 본다. 다음 문장의
+        # 선언까지 끌어오지 않도록 마침표 경계에서 반드시 자른다.
+        sentence_end = len(text)
+        for index in range(pos, len(text)):
+            char = text[index]
+            if char in ("。", "\n"):
+                sentence_end = index + 1
+                break
+            if char == ".":
+                # `N39.3`의 점은 문장 끝이 아니다. 양옆이 숫자인 점만 건너뛴다.
+                before_digit = index > 0 and text[index - 1].isdigit()
+                after_digit = index + 1 < len(text) and text[index + 1].isdigit()
+                if not (before_digit and after_digit):
+                    sentence_end = index + 1
+                    break
+        if _EXCLUDE.search(text[pos:min(sentence_end, pos + window)]):
+            return "exclude", ctx
         return "mention", ctx
 
     out: list[CodeMention] = []

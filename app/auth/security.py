@@ -18,7 +18,7 @@ from app.auth.store import get_auth_store
 from app.core.config import Settings, get_settings
 from app.core.config_validation import require_secret_key
 from app.core.errors import AuthErr
-from app.db.models import User
+from db.sqlite_legacy.models import User
 from db.postgres.auth_repository import PgAuthStore, PgUser
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")

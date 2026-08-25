@@ -25,7 +25,7 @@ def _open_auth_store():
         return PgAuthStore.from_settings()
     if not settings.SQLITE_LEGACY_ENABLED:
         raise RuntimeError("SQLite legacy persistence is disabled")
-    from app.db.database import SessionLocal
+    from db.sqlite_legacy.connection import SessionLocal
 
     return SessionLocal()
 
@@ -41,7 +41,7 @@ def _open_ops_store():
         return PgOpsStore.from_settings()
     if not settings.SQLITE_LEGACY_ENABLED:
         raise RuntimeError("SQLite legacy persistence is disabled")
-    from app.db.database import SessionLocal
+    from db.sqlite_legacy.connection import SessionLocal
 
     return SessionLocal()
 
@@ -103,10 +103,10 @@ def cmd_migrate() -> None:
             "말고 scripts/db/apply.py로 PostgreSQL 마이그레이션을 적용하세요."
         )
 
-    from app.db.database import Base, engine
+    from db.sqlite_legacy.connection import Base, engine
 
     # 현행 보험 모델만 Base에 등록되도록 import
-    import app.db.models  # noqa: F401
+    import db.sqlite_legacy.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     added = _add_missing_columns(engine)
@@ -168,7 +168,7 @@ def purge_gaps(days: int) -> int:
         if isinstance(store, PgOpsStore):
             return store.purge_knowledge_gaps(cutoff)
 
-        from app.db.models import KnowledgeGap
+        from db.sqlite_legacy.models import KnowledgeGap
 
         sqlite_cutoff = cutoff.replace(tzinfo=None)
         deleted = (
@@ -223,7 +223,7 @@ def reset_face(username: str) -> str:
                 else f"등록된 얼굴이 없습니다: {username}"
             )
 
-        from app.db.models import FaceCredential, User
+        from db.sqlite_legacy.models import FaceCredential, User
 
         user = db.query(User).filter(User.username == username).first()
         if user is None:

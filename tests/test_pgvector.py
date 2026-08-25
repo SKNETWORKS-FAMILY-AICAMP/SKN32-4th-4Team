@@ -9,11 +9,12 @@ def test_get_conn_uses_timeout_and_does_not_echo_dsn(monkeypatch):
     import psycopg
     from pgvector import psycopg as pgvector_psycopg
 
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres.pgvector_index import get_conn
     from app.core.errors import InfraError
 
     captured: dict[str, object] = {}
     sentinel = object()
+    monkeypatch.setattr("db.postgres.pool._pool_for", lambda *args, **kwargs: None)
 
     def connect_ok(dsn, **kwargs):
         captured.update(dsn=dsn, **kwargs)
@@ -50,7 +51,7 @@ def test_get_conn_closes_connection_when_vector_registration_fails(monkeypatch):
     import psycopg
     from pgvector import psycopg as pgvector_psycopg
 
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres.pgvector_index import get_conn
     from app.core.errors import InfraError
 
     class FakeConnection:
@@ -60,6 +61,7 @@ def test_get_conn_closes_connection_when_vector_registration_fails(monkeypatch):
             self.closed = True
 
     conn = FakeConnection()
+    monkeypatch.setattr("db.postgres.pool._pool_for", lambda *args, **kwargs: None)
     monkeypatch.setattr(psycopg, "connect", lambda *_args, **_kwargs: conn)
     monkeypatch.setattr(
         pgvector_psycopg,
@@ -76,7 +78,7 @@ def test_get_conn_closes_connection_when_vector_registration_fails(monkeypatch):
 
 @pytest.mark.pg
 def test_get_conn_failure_is_infra_error():
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres.pgvector_index import get_conn
     from app.core.errors import InfraError
 
     with pytest.raises(InfraError):

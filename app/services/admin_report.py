@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import ConfigError
-from app.db.models import KnowledgeGap, RunEvent
+from db.sqlite_legacy.models import KnowledgeGap, RunEvent
 from db.postgres.ops_repository import PgOpsStore
 
 def _register_fonts():

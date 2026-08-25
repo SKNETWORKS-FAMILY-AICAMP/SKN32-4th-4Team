@@ -33,7 +33,7 @@ def test_세대는_clause_tag_에서_파생된다():
 
 def test_릴리스를_바꾸면_모든_경로가_따라간다(tmp_path, monkeypatch):
     """★한 곳만 안 따라가면 그 경로가 옛 세대를 판정 근거로 쓴다."""
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     cfg = json.loads((release._FILE).read_text(encoding="utf-8"))
     cfg["clause_tag"] = "s99_fake-1.0"
@@ -120,7 +120,7 @@ def test_판정_한건_안에서_릴리스가_고정된다():
     세대는 새 것, 임베딩 프로필은 옛 것 — 그런 조합이 나오면
     "어느 약관 판으로 판정했나"를 답할 수 없다.
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     fake = release.AcceptedRelease(
         release_id="x", page_tag="", clause_tag="s99_t", document_count=0,
@@ -140,7 +140,7 @@ def test_판정_유스케이스가_릴리스를_고정한다(monkeypatch):
       문자열 검사는 구현을 조금만 바꿔도 거짓 실패를 내고,
       정작 중간 전환 경쟁은 못 잡는다(코덱스 라운드3 지적).
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
     from app.core.domain.precheck_result import PrecheckInput
     from app.core.usecases import precheck
 
@@ -236,7 +236,7 @@ def test_그래프_전체가_릴리스를_고정한다():
 
 def test_중첩_pinned_는_바깥_스냅샷을_물려받는다():
     """`precheck.run()` 이 그래프 안에서 불려도 같은 릴리스를 봐야 한다."""
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     outer = release.AcceptedRelease(
         release_id="o", page_tag="", clause_tag="s98_t", document_count=0,

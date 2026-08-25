@@ -87,11 +87,18 @@ def main() -> int:
     with _connect("postgres", args.host, args.port, args.user) as conn:
         databases = _databases(conn)
 
-    reports = {}
+    reports: dict[str, dict[str, Any]] = {}
+    skipped_databases: dict[str, str] = {}
     for database in databases:
-        reports[database] = _database_report(
-            database, host=args.host, port=args.port, user=args.user
-        )
+        try:
+            reports[database] = _database_report(
+                database, host=args.host, port=args.port, user=args.user
+            )
+        except psycopg.OperationalError as exc:
+            # A stale pg_database entry can remain after an interrupted test
+            # database cleanup. Keep the audit read-only and continue with the
+            # databases that are actually connectable.
+            skipped_databases[database] = str(exc).splitlines()[0]
 
     print(
         json.dumps(
@@ -101,6 +108,7 @@ def main() -> int:
                 "port": args.port,
                 "databases": databases,
                 "reports": reports,
+                "skipped_databases": skipped_databases,
             },
             ensure_ascii=False,
             indent=2,

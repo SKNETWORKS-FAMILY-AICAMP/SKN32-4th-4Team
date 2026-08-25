@@ -67,6 +67,8 @@ def test_production_persistence_gate_requires_postgres_and_disabled_sqlite(monke
         PRECHECK_PERSISTENCE = "postgres"
         OUTCOME_PERSISTENCE = "postgres"
         DEMO_STORE_BACKEND = "postgres"
+        CLAUSE_STORE = "pg"
+        VERIFIED_COHORT_STORE = "postgres"
         SQLITE_LEGACY_ENABLED = False
         DATABASE_URL = "postgresql+psycopg://runtime@db.example/insurance_real"
 
@@ -85,6 +87,8 @@ def test_persistence_gate_rejects_non_production_environment(monkeypatch):
         PRECHECK_PERSISTENCE = "postgres"
         OUTCOME_PERSISTENCE = "postgres"
         DEMO_STORE_BACKEND = "postgres"
+        CLAUSE_STORE = "pg"
+        VERIFIED_COHORT_STORE = "postgres"
         SQLITE_LEGACY_ENABLED = False
         DATABASE_URL = "postgresql+psycopg://runtime@db.example/insurance_real"
 
@@ -106,4 +110,5 @@ def test_production_env_template_is_postgres_only():
     assert "APP_ENV=production" in active
     assert any(line.startswith("DATABASE_URL=postgresql") for line in active)
     assert "SQLITE_LEGACY_ENABLED=false" in active
+    assert "CLAUSE_STORE=pg" in active
     assert not any(line.startswith("DATABASE_URL=sqlite") for line in active)

@@ -298,3 +298,4 @@ CREATE TABLE core.kcd_code (
 );
 COMMENT ON TABLE core.kcd_code IS
     '★적재원이 저장소에 없다. 통계청 KCD 표를 받아야 채워진다 — P0-d';
+

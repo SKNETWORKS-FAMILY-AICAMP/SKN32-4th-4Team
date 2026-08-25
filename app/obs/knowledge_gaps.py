@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.db.models import KnowledgeGap
+from db.sqlite_legacy.models import KnowledgeGap
 from app.obs.pii import mask_pii
 from app.obs.trace import get_trace_id
 from db.postgres.ops_repository import PgKnowledgeGap, PgOpsStore

@@ -179,3 +179,142 @@ def test_운영앱에서_관리자_인증으로_받는다():
 def test_무인증이면_401이다():
     r = TestClient(create_app("admin")).get("/api/admin/metrics")
     assert r.status_code == 401
+
+
+# ── 스크레이퍼 전용 경로 (2026-08-25) ──────────────────────────────────
+
+import contextlib
+
+
+@contextlib.contextmanager
+def _scrape_app(monkeypatch, token: str):
+    from app.core.config import get_settings
+
+    base = get_settings()
+
+    class _S:
+        def __getattr__(self, name):
+            if name == "METRICS_SCRAPE_TOKEN":
+                return token
+            return getattr(base, name)
+
+    monkeypatch.setattr("app.core.config.get_settings", lambda: _S())
+    yield TestClient(create_app("admin"))
+
+
+def test_토큰이_비면_경로가_아예_없다(monkeypatch):
+    """★「설정 안 했으니 다 열어 준다」가 가장 나쁜 기본값이다.
+
+    안 켰으면 404 — 무인증으로 새지 않는다.
+    """
+    with _scrape_app(monkeypatch, "") as c:
+        assert c.get("/metrics-scrape").status_code == 404
+
+
+def test_토큰_없이_요청하면_401(monkeypatch):
+    with _scrape_app(monkeypatch, "s3cret-token-value") as c:
+        r = c.get("/metrics-scrape")
+    assert r.status_code == 401
+    assert r.headers.get("www-authenticate") == "Bearer"
+
+
+def test_틀린_토큰은_401(monkeypatch):
+    with _scrape_app(monkeypatch, "s3cret-token-value") as c:
+        r = c.get("/metrics-scrape", headers={"X-Metrics-Token": "wrong"})
+    assert r.status_code == 401
+
+
+def test_헤더_토큰으로_받는다(monkeypatch):
+    with _scrape_app(monkeypatch, "s3cret-token-value") as c:
+        r = c.get("/metrics-scrape", headers={"X-Metrics-Token": "s3cret-token-value"})
+    assert r.status_code == 200
+    assert "clause_rerank_enabled" in r.text
+    _parse(r.text)
+
+
+def test_Bearer_로도_받는다(monkeypatch):
+    """Prometheus 의 authorization 설정이 Bearer 를 쓴다."""
+    with _scrape_app(monkeypatch, "s3cret-token-value") as c:
+        r = c.get("/metrics-scrape",
+                  headers={"Authorization": "Bearer s3cret-token-value"})
+    assert r.status_code == 200
+
+
+def test_스크레이프_경로는_로그인을_요구하지_않는다(monkeypatch):
+    """★관리자 라우터 안에 두면 Prometheus 가 못 긁는다 — 밖에 둔 이유다."""
+    with _scrape_app(monkeypatch, "s3cret-token-value") as c:
+        ok = c.get("/metrics-scrape", headers={"X-Metrics-Token": "s3cret-token-value"})
+        admin = c.get("/api/admin/metrics")     # 로그인 없이
+    assert ok.status_code == 200
+    assert admin.status_code == 401, "관리자 경로는 여전히 로그인을 요구해야 한다"
+
+
+def test_고객앱에는_스크레이프_경로가_없다(monkeypatch):
+    """★★운영 지표를 고객 프로세스에 두지 않는다."""
+    from app.core.config import get_settings
+
+    base = get_settings()
+
+    class _S:
+        def __getattr__(self, name):
+            if name == "METRICS_SCRAPE_TOKEN":
+                return "s3cret-token-value"
+            return getattr(base, name)
+
+    monkeypatch.setattr("app.core.config.get_settings", lambda: _S())
+    r = TestClient(create_app("customer")).get(
+        "/metrics-scrape", headers={"X-Metrics-Token": "s3cret-token-value"})
+    assert r.status_code == 404
+
+
+def test_토큰_비교가_상수시간이다():
+    """★`==` 는 앞자리부터 달라지는 지점이 응답 시간에 남는다(타이밍 공격)."""
+    import inspect
+
+    from app.routers import metrics_scrape as ms
+
+    src = inspect.getsource(ms.metrics_scrape)
+    assert "compare_digest" in src, "토큰 비교에 secrets.compare_digest 를 써야 한다"
+
+
+def test_워커_방식이_라벨로_나온다(monkeypatch):
+    """`process` 로 바꿔 놓고 안 바뀐 줄 아는 일이 없게 — 설정값을 그대로 낸다."""
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("CLAUSE_RERANK_WORKER", "process")
+    get_settings.cache_clear()
+    try:
+        assert 'clause_rerank_worker_mode{mode="process"} 1' in mx.render_metrics()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_죽인_횟수는_프로세스일_때만_낸다():
+    """★스레드일 때 0 으로 내면 안 된다.
+
+    「죽인 적 없다」와 「죽일 수 없는 방식이다」가 구분되지 않는다 —
+    운영자가 그래프를 보고 「시한이 잘 지켜지네」라고 잘못 읽는다.
+    """
+    from app.adapters import rerank_worker as rw
+
+    class _Thread:
+        def stats(self):
+            return {"alive": True, "loaded": True, "load_seconds": 1.0, "load_error": None,
+                    "submitted": 3, "completed": 3, "failed": 0, "timeouts": 0,
+                    "rejected_busy": 0, "abandoned_in_flight": 0,
+                    "busy_with_abandoned": False, "queue_depth": 0}
+
+    class _Process(_Thread):
+        def stats(self):
+            return {**super().stats(), "mode": "process", "starts": 2, "kills": 1}
+
+    for worker, expect in ((_Thread(), False), (_Process(), True)):
+        rw._WORKER = worker
+        try:
+            out = mx.render_metrics()
+        finally:
+            rw._WORKER = None
+        assert ("clause_rerank_worker_kills_total" in out) is expect, out[:200]
+        if expect:
+            assert "clause_rerank_worker_kills_total 1" in out
+            assert "clause_rerank_worker_starts_total 2" in out

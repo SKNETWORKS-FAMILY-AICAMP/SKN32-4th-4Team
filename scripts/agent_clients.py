@@ -9,8 +9,8 @@ import argparse
 import json
 import sys
 
-from app.adapters.pg_agent_access import PgAgentAccess
-from app.adapters.pg_insurance_repository import PgInsuranceAdminRepository
+from db.postgres.pg_agent_access import PgAgentAccess
+from db.postgres.pg_insurance_repository import PgInsuranceAdminRepository
 from app.core.config import get_settings
 from app.core.domain.agent_access import AGENT_SCOPES, generate_api_key, validate_scopes
 from app.core.errors import AppError

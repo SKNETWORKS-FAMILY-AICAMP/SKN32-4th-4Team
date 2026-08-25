@@ -14,7 +14,7 @@ from fastapi import Depends
 
 from app.auth.security import get_current_user
 from app.core.errors import ForbiddenErr, InfraError
-from app.db.models import User
+from db.sqlite_legacy.models import User
 from db.postgres.auth_repository import PgAuthStore
 
 ROLE_USER = "USER"
@@ -62,7 +62,7 @@ def change_role(db, username: str, role: str, *, actor: str) -> dict:
         가입한 누구나 관리자가 된다.
     """
     from app.core.errors import NotFoundErr, ValidationErr
-    from app.db.models import User as _User
+    from db.sqlite_legacy.models import User as _User
     from app.obs.events import record_event
 
     validate_role(role)

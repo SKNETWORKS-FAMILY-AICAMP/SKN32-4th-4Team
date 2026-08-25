@@ -710,25 +710,13 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
                         "끈 채로 재정렬한 척하지 않습니다."),
             )
         from app.adapters import rerank_worker as rw
-        from app.adapters.reranker import CrossEncoderReranker
 
         #: ★**전용 워커에 맡긴다.** 앞서는 요청마다 모델을 새로 만들어 `to_thread` 로 돌렸다.
         #:   그러면 무게추 적재(4B ≈ 9GB · 수십 초)가 요청 안에서 일어나고,
-        #:   겹치면 GPU 가 OOM 이다. 워커는 **한 번만** 적재해 자기 스레드에서 붙든다.
-        def _build():
-            return CrossEncoderReranker(
-                st.RERANKER_MODEL,
-                device=st.RERANKER_DEVICE,
-                batch_size=st.RERANKER_BATCH_SIZE,
-                #: ★조항 전용 절단값을 쓴다. 커머스 768 을 그대로 쓰면
-                #:   후보가 같은 앞부분만 남아 `constant scores` 로 멈추는 질의가 나온다.
-                max_length=st.CLAUSE_RERANK_MAX_LENGTH,
-                dtype=st.RERANKER_DTYPE,
-                trust_remote_code=st.RERANKER_TRUST_REMOTE_CODE,
-            )
-
+        #:   겹치면 GPU 가 OOM 이다. 워커는 **한 번만** 적재해 붙든다.
+        #:   방식은 `CLAUSE_RERANK_WORKER` 가 고른다(thread | process).
         try:
-            worker = rw.get_worker(_build)
+            worker = rw.build_worker_from_settings()
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -774,7 +762,26 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         #:   다만 **왜 실패했는지에 따라 코드를 가른다** — 시한 초과와 장애는 다른 일이다.
         from app.adapters import rerank_worker as rw
 
+        from app.adapters.rerank_process import (
+            ProcessRerankTimeout,
+            ProcessRerankUnavailable,
+        )
+
         cause = exc.__cause__
+        if isinstance(cause, ProcessRerankTimeout):
+            #: ★프로세스 워커는 **실제로 죽였다.** 그 사실을 그대로 말한다 —
+            #:   스레드 워커와 달리 「아직 돌고 있다」가 아니다.
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=(f"리랭킹이 시한({st.CLAUSE_RERANK_TIMEOUT_SECONDS:.0f}초)을 넘겨 "
+                        f"작업 프로세스를 종료했습니다. 계산은 실제로 멈췄고, "
+                        f"다음 요청에서 무게추를 다시 적재합니다."),
+            ) from exc
+        if isinstance(cause, ProcessRerankUnavailable):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"리랭크 작업 프로세스를 쓸 수 없습니다: {cause}",
+            ) from exc
         if isinstance(cause, rw.RerankTimeout):
             raise HTTPException(
                 status_code=status.HTTP_504_GATEWAY_TIMEOUT,
@@ -828,20 +835,12 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
 
 @router.get("/metrics")
 def admin_metrics() -> Response:
-    """Prometheus 텍스트 형식 메트릭. 라우터 전역 `require_admin` 으로 보호된다.
+    """Prometheus 텍스트 형식 메트릭 — **관리자 로그인**으로 본다.
 
-    ★**고객 앱(:8080)에는 실리지 않는다.** 운영 지표를 무인증으로 노출하지 않는다.
-
-    ★★**스크레이퍼 인증이 숙제로 남는다.** 이 경로는 관리자 로그인을 요구하므로
-      Prometheus 가 그냥은 못 긁는다. 실제로 붙이려면 둘 중 하나가 필요하다 —
-
-        · 스크레이프 전용 토큰(관리자 계정과 분리)
-        · 사내망에만 열리는 **별도 포트**로 뺀다
-
-      지금은 「보호된 채로 사람이 확인할 수 있다」까지다. 무인증으로 여는 편이
-      편하지만, 이 저장소는 무인증 노출 표면을 늘리지 않는 쪽을 택해 왔다.
-
+    ★고객 앱(:8080)에는 실리지 않는다. 운영 지표를 무인증으로 노출하지 않는다.
     ★긁는 요청은 싸야 한다 — 프로세스 안 수치만 낸다. DB 를 세지 않는다.
+
+    스크레이퍼(Prometheus)는 로그인을 못 하므로 `/metrics-scrape` 를 쓴다.
     """
     from app.obs.metrics import CONTENT_TYPE, render_metrics
 

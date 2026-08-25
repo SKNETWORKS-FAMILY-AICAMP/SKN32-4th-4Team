@@ -10,7 +10,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.db.models import RunEvent
+from db.sqlite_legacy.models import RunEvent
 from app.obs.trace import get_trace_id
 from db.postgres.auth_repository import PgAuthStore
 from db.postgres.ops_repository import PgOpsStore

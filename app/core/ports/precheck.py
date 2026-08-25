@@ -216,3 +216,27 @@ class ClauseSourcePort(Protocol):
     def stats(self, sha256: str) -> dict: ...
 
     def search(self, sha256: str, query: str, *, limit: int = 8) -> Sequence[ClauseRow]: ...
+
+
+@runtime_checkable
+class RelatedClausePort(Protocol):
+    """의미검색으로 **읽어 볼 만한 조항**을 찾는다.
+
+    ★★**판정 근거를 주는 포트가 아니다.** `ClauseSourcePort` 와 나눠 둔 이유가 그것이다.
+
+      · `ClauseSourcePort.load_clauses` → 질병기호가 **실제로 적힌** 조항을 찾는 재료.
+        여기서 나온 것만 `citations` 가 되고, 판정을 바꾼다.
+      · `RelatedClausePort.find` → 벡터 유사도가 고른 조항. **유사도는 근거가 아니다.**
+        사람이 읽을 참고 자료로만 나가고(`related_clauses`), 판정은 건드리지 않는다.
+
+      두 포트를 하나로 합치면 조립 지점이 실수로 벡터 검색을 판정 재료로 꽂을 수 있다.
+      타입으로 막는다.
+
+    ★범위는 **약관 한 벌**로 가둔다(`sha256`). 전역으로 열면 2019년 가입자에게
+      2024년 조항이 참고로 붙는다 — 참고라도 그건 틀린 참고다.
+
+    ★못 찾으면 빈 목록, 못 하면 **예외**다. 둘을 같게 만들지 않는다 —
+      호출부가 「관련 조항 없음」과 「검색 실패」를 구별해야 한다(CLAUDE.md §0).
+    """
+
+    def find(self, sha256: str, query: str, *, limit: int = 5) -> Sequence[ClauseRow]: ...

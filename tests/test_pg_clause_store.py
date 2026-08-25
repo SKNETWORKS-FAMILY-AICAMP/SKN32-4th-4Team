@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.adapters import pg_clause_store
+from db.postgres import pg_clause_store
 from app.core.ports.precheck import ClauseSourcePort
 
 
@@ -64,7 +64,7 @@ def test_승인_프로필이_있으면_pg_를_고른다(monkeypatch):
 
 
 def _conn_or_skip():
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres.pgvector_index import get_conn
 
     try:
         return get_conn()
@@ -82,7 +82,7 @@ def _sha_with_current_index(conn):
 
     ★없으면 **사유를 적어** 건너뛴다. 조용한 스킵을 만들지 않는다(CLAUDE.md §3).
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     with conn.cursor() as cur:
         cur.execute(
@@ -111,7 +111,7 @@ def test_없는_약관은_조용히_빈_결과를_주지_않는다():
 
 @pytest.mark.pg
 def test_적재된_약관을_읽고_찾는다():
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     conn = _conn_or_skip()
     ix.ensure_schema(conn)
@@ -183,7 +183,7 @@ def test_짧은_질의가_긴_조각에서_찾아진다():
     `word_similarity(질의, 본문)` 은 질의가 본문의 **어느 부분과** 맞는지를 잰다.
     검색이 조용히 0건을 돌려주면 판정은 근거 없이 기권한다 — 고장이 안 보인다.
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     conn = _conn_or_skip()
     sha = _sha_with_current_index(conn)
@@ -205,7 +205,7 @@ def test_현황이_조회_결과와_어긋나지_않는다():
     때문이다. 실측(2026-08-02): 발생 156,946 중 **91.4%가 본문 없음**.
     현황이 조회 결과와 어긋나면 판정이 근거 없이 기권한다.
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     conn = _conn_or_skip()
     sha = _sha_with_current_index(conn)

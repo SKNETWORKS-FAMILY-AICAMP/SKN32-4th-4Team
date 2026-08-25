@@ -73,6 +73,7 @@ class EvidenceTier(str, Enum):
 
     POLICY_CLAUSE = "policy_clause"       # 약관 원문 — 유일하게 판정 근거가 된다
     EXTERNAL_REPORT = "external_report"   # 외부 에이전트가 준 사례 — 참고만
+    RETRIEVED_CLAUSE = "retrieved_clause"  # 의미검색으로 찾은 조항 — **참고만**
     STATISTICS = "statistics"             # 승인율 등 집계 — 참고만
 
 
@@ -85,6 +86,9 @@ class PrecheckInput:
     kcd_codes: tuple[str, ...]
     product_name: str | None = None
     client_ref: str | None = None
+    #: 증상·진단명 등 자유 서술. **판정에는 쓰지 않는다** — 참고 조항을 찾는 질의로만 쓴다.
+    #:   비어 있으면 「보상하는 사항」을 묻는 고정 질의로 대신한다.
+    condition_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -126,7 +130,19 @@ class AppliedPolicyInfo:
     sha256: str = ""
     date_confidence: str = "exact"
     generation_confidence: str = ""
-    parse_status: str = "ok"
+    #: 조항 구조화 상태. `"ok"` 가 아니면 판정 근거로 쓰지 않는다.
+    #:
+    #: ★`None` 은 **"모른다"** 다. `"ok"` 도 아니고 실패도 아니다 —
+    #:   `app/core/ports/precheck.py:143` 과 `eligibility.check()` 가 쓰는 규약과 같다.
+    #:   PG 조항 색인은 문서 파싱 상태를 저장하지 않아 실제로 `None` 이 온다
+    #:   (`db/postgres/pg_clause_store.py:241`).
+    #:
+    #: ★★2026-08-25 이전에는 `str` 이라 `None` 이 들어오면 **응답 직렬화가 터졌다** —
+    #:   `CLAUSE_STORE=pg` 로 켜면 `POST /v1/prechecks` 가 전부 500 이었다.
+    #:   "모른다"를 담을 자리가 없어서 정직한 값이 오류가 됐다.
+    #:   → `docs/reports/debugs/2026-08-25_1120_CLAUSE_STORE_pg로_켜면_판정API가_전부_500이다.md`
+    #:   ★`"ok"` 로 메우지 않는다. 그건 원래 고친 결함으로 되돌아가는 것이다.
+    parse_status: str | None = "ok"
 
 
 @dataclass(frozen=True)
@@ -156,6 +172,16 @@ class PrecheckOutcome:
     per_code: list[CodeVerdict] = field(default_factory=list)
     citations: list[CitationRef] = field(default_factory=list)
     candidates: list[AppliedPolicyInfo] = field(default_factory=list)
+
+    #: ★★**참고 조항 — 판정 근거가 아니다.**
+    #:   `citations` 는 질병기호가 실제로 적힌 조항이고(기계 대조로 확인된다),
+    #:   여기는 의미검색이 「읽어 볼 만하다」고 고른 조항이다. 유사도는 근거가 아니다.
+    #:   그래서 필드를 나누고 급(`EvidenceTier.RETRIEVED_CLAUSE`)도 따로 준다 —
+    #:   한 목록에 섞으면 화면이 둘을 같은 무게로 보여 준다.
+    related_clauses: list[CitationRef] = field(default_factory=list)
+    #: 참고 조항 검색이 어떻게 됐나. `""`=안 함 · `"ok"` · `"failed: ..."`.
+    #:   ★실패를 빈 목록으로 숨기지 않는다 — 「관련 조항이 없다」와 구별돼야 한다.
+    related_search: str = ""
 
     rule_engine_version: str = ""
     extractor: str = ""

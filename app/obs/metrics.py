@@ -89,6 +89,12 @@ def _clause_rerank(m: Metrics) -> None:
     m.add("clause_rerank_max_candidates", st.CLAUSE_RERANK_MAX_CANDIDATES,
           kind="gauge", help_="리랭커에 넣는 후보 상한")
 
+    #: ★어느 방식으로 도는가. **설정값을 라벨로** 낸다 — 워커가 아직 없어도 보여야
+    #:   「무엇이 켜져 있는지」를 안다. `process` 로 바꿔 놓고 안 바뀐 줄 아는 일이 없게.
+    m.add("clause_rerank_worker_mode", 1, kind="gauge",
+          help_="리랭크 워커 방식(라벨로 구분). thread=취소 불가 · process=시한에 죽인다",
+          labels={"mode": st.CLAUSE_RERANK_WORKER})
+
     #: ★**워커를 만들지 않는다.** 스크레이프가 4B 무게추를 올리면 안 된다.
     worker = rw.peek_worker()
     if worker is None:
@@ -118,6 +124,14 @@ def _clause_rerank(m: Metrics) -> None:
     #:   추론을 강제로 끊을 수 없어 생기는 상태라, **밖에서 보여야** 원인을 안다.
     m.add("clause_rerank_busy_with_abandoned", bool(s.get("busy_with_abandoned")),
           kind="gauge", help_="시한 초과 일감이 아직 계산 중인가(1=그렇다, 새 요청 503)")
+
+    #: ★프로세스 워커에서만 뜻이 있는 값 둘. **스레드일 땐 아예 안 낸다** —
+    #:   0 으로 내면 「죽인 적 없다」와 「죽일 수 없는 방식이다」가 구분되지 않는다.
+    if s.get("mode") == "process":
+        m.add("clause_rerank_worker_starts_total", s.get("starts", 0), kind="counter",
+              help_="자식 프로세스를 띄운 누적 횟수. 늘면 그만큼 무게추를 다시 올렸다")
+        m.add("clause_rerank_worker_kills_total", s.get("kills", 0), kind="counter",
+              help_="시한 초과·정리로 자식을 죽인 누적 횟수")
 
     lat = s.get("latency_ms") or {}
     for q in ("p50", "p95"):

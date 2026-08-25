@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from app.adapters.clause_query_embedder import ClauseQueryEmbedder
-from app.adapters.pgvector_clause_index import ClauseHit
+from db.postgres.pgvector_clause_index import ClauseHit
 from app.core.errors import InfraError, ValidationErr
 from app.core.usecases import clause_search
 
@@ -202,7 +202,7 @@ def test_채점할_본문이_빈_후보는_빼고_센다(patched):
 
     한 건 때문에 요청 전체를 503 으로 떨어뜨리지도 않는다 — 빼고, 센다.
     """
-    from app.adapters.pgvector_clause_index import ClauseHit
+    from db.postgres.pgvector_clause_index import ClauseHit
 
     def _h(no, chunk, full="조 전체"):
         return ClauseHit(content_hash=f"h{no}", chunk_ix=0, text=chunk, distance=0.4,

@@ -19,7 +19,7 @@ def get_auth_store() -> Iterator[object]:
         raise RuntimeError("SQLite legacy persistence is disabled")
 
     # PostgreSQL 전용 프로세스에서는 legacy 모듈과 엔진을 구성하지 않는다.
-    from app.db.database import SessionLocal
+    from db.sqlite_legacy.connection import SessionLocal
 
     db = SessionLocal()
     try:

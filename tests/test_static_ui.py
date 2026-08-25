@@ -142,3 +142,29 @@ def test_보험_클라이언트가_약관범위를_상병코드로_제출하지_
     assert "SINGLE_KCD_CODE.test(code)" in js
     assert "약관의 코드 범위" in js
     assert "C30~C39 같은 약관 범위는 선택할 수 없고" in html
+
+
+#: 입력창에 붙은 `outline: none` 뒤에 **같은 선택자**를 겨눈 `:focus-visible` 대체
+#:   규칙이 없으면 걸린다. `re.escape` 로 선택자 안의 `.` 을 리터럴로 고정한다.
+_UNGUARDED_OUTLINE_NONE = re.compile(
+    r"([.\w -]+):focus\s*\{[^}]*outline:\s*none")
+
+
+def test_입력창_포커스가_키보드_사용자에게_보인다():
+    """실측 2026-08-25 — `.control:focus`·`.composer input:focus` 가 `outline: none`
+    을 걸어 두고 대체 표시가 없었다. `.control:focus`의 `box-shadow` 대체값은
+    alpha `.045`(거의 투명)라 키보드로 Tab 이동해도 어디에 포커스가 있는지 안 보였다.
+    버튼(`button:focus-visible`)엔 이미 3px outline이 있어 입력창만 예외였다.
+
+    `outline: none` 인 `:focus` 규칙이 있으면 같은 선택자의 `:focus-visible` 규칙이
+    outline 을 다시 켜는지 확인한다 — 새로 추가되는 입력 요소도 같은 함정에 빠지면
+    잡는다.
+    """
+    html = (_STATIC / "insurance.html").read_text(encoding="utf-8")
+    for selector in _UNGUARDED_OUTLINE_NONE.findall(html):
+        fv_pattern = re.compile(
+            re.escape(selector) + r":focus-visible\s*\{[^}]*outline:\s*(?!none)\S")
+        assert fv_pattern.search(html), (
+            f"{selector}:focus 가 outline: none 인데 "
+            f"{selector}:focus-visible 대체 규칙이 없다 — 키보드 포커스가 안 보인다"
+        )

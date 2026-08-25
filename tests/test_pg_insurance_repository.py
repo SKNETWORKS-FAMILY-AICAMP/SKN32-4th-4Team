@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.adapters.pg_insurance_repository import (
+from db.postgres.pg_insurance_repository import (
     PgInsuranceRepository,
     _postgres_error,
 )

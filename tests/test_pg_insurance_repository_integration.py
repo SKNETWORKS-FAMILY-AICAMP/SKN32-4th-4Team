@@ -15,11 +15,11 @@ from fastapi.testclient import TestClient
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from app.adapters.pg_insurance_repository import (
+from db.postgres.pg_insurance_repository import (
     PgInsuranceAdminRepository,
     PgInsuranceRepository,
 )
-from app.adapters.pg_agent_access import PgAgentAccess
+from db.postgres.pg_agent_access import PgAgentAccess
 from app.core.errors import ConflictErr, ValidationErr
 from app.core.domain.insurance import Verdict
 from app.core.domain.precheck_result import (

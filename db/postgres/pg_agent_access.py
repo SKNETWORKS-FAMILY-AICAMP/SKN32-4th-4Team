@@ -22,6 +22,7 @@ from app.core.domain.agent_access import (
     validate_scopes,
 )
 from app.core.errors import AuthErr, ConflictErr, InfraError, ValidationErr
+from db.postgres.pool import connection
 
 
 class PgAgentAccess:
@@ -36,7 +37,7 @@ class PgAgentAccess:
         import psycopg
 
         try:
-            conn = psycopg.connect(self._dsn, connect_timeout=5)
+            conn = connection(self._dsn)
             conn.execute("SET statement_timeout = '10s'")
             conn.execute("SET lock_timeout = '3s'")
             return conn

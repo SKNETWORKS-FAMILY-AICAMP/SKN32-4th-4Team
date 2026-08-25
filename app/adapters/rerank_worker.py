@@ -240,6 +240,46 @@ _WORKER: RerankWorker | None = None
 _WORKER_LOCK = threading.Lock()
 
 
+def build_worker_from_settings():
+    """설정이 고른 방식으로 워커를 만든다 — 프로세스에 하나만 둔다.
+
+    ★`process` 는 자식에 **설정 묶음(spec)** 만 넘긴다. 리랭커 객체 자체를
+      넘길 수는 없다 — 프로세스 경계를 못 넘는다.
+    """
+    from app.core.config import get_settings
+
+    st = get_settings()
+    spec = {
+        "model": st.RERANKER_MODEL,
+        "device": st.RERANKER_DEVICE,
+        "batch_size": st.RERANKER_BATCH_SIZE,
+        "max_length": st.CLAUSE_RERANK_MAX_LENGTH,
+        "dtype": st.RERANKER_DTYPE,
+        "trust_remote_code": st.RERANKER_TRUST_REMOTE_CODE,
+    }
+    if st.CLAUSE_RERANK_WORKER == "process":
+        from app.adapters.rerank_process import RerankProcessWorker
+
+        global _WORKER
+        with _WORKER_LOCK:
+            if _WORKER is None:
+                w = RerankProcessWorker(spec)
+                w.start()
+                _WORKER = w
+            return _WORKER
+
+    from app.adapters.reranker import CrossEncoderReranker
+
+    def _build():
+        return CrossEncoderReranker(
+            spec["model"], device=spec["device"], batch_size=spec["batch_size"],
+            max_length=spec["max_length"], dtype=spec["dtype"],
+            trust_remote_code=spec["trust_remote_code"],
+        )
+
+    return get_worker(_build)
+
+
 def get_worker(build_reranker=None) -> RerankWorker:
     """프로세스 전역 워커. 없으면 만들어 띄운다.
 

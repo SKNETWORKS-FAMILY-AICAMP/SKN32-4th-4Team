@@ -40,8 +40,8 @@ def _mkuser(client) -> tuple[str, str]:
 
 
 def _set_role_direct(username: str, role: str) -> None:
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
 
     db = SessionLocal()
     try:
@@ -64,8 +64,8 @@ def test_가입은_언제나_일반_사용자로_만들어진다(client):
     """★화면의 '계정 만들기' 가 관리자를 만들면 그건 권한 상승이다."""
     u, _ = _mkuser(client)
 
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
 
     db = SessionLocal()
     try:
@@ -126,8 +126,8 @@ def test_알_수_없는_역할은_거부한다(client, admin):
 # ── ★잠금 방지 ───────────────────────────────────────────────────────────
 def test_마지막_관리자는_강등할_수_없다(client):
     """★이걸 허용하면 아무도 대시보드에 못 들어간다 — CLI 로만 복구 가능해진다."""
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
 
     db = SessionLocal()
     try:
@@ -197,8 +197,8 @@ def test_얼굴_해제로_잠금을_풀_수_있다(client):
     """
     from scripts.manage import reset_face
 
-    from app.db.database import SessionLocal
-    from app.db.models import FaceCredential, User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import FaceCredential, User
 
     u, p = _mkuser(client)
     db = SessionLocal()

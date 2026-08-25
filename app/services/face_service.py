@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import AuthErr, ForbiddenErr, ValidationErr
-from app.db.models import FaceCredential, User
+from db.sqlite_legacy.models import FaceCredential, User
 from app.ml.face import (
     analyze_face,
     average_embeddings,

@@ -103,7 +103,7 @@ insurance://schemas/precheck-v1   응답 스키마
 
 요약하면:
 - **핵심은 API 키 + 클라이언트 레지스트리 + 데모 에이전트**다. 이건 A2A 없이도 된다
-- `app/routers/a2a.py` ★**아직 없다** 는 **이름만 A2A인 커머스 잔재**다. 재사용 기반이 못 된다
+- `app/routers/a2a.py` 는 **이름만 A2A인 커머스 잔재**다. 재사용 기반이 못 된다
 - 넣는다면 **`coverage-precheck` skill 하나만**, Task 없이 direct Message, 3~5일 timebox
 
 ---
@@ -163,10 +163,3 @@ runtime 역할은 client·audit 원장을 수정하거나 지울 수 없고, 등
 | `tests/test_graph.py` | 재시도·기권 경로 테스트 |
 
 실제 DNS·TLS 종료·WAF·키 전달 및 원격 MCP/A2A는 이 버전에 포함하지 않는다.
-
----
-
-## ★대조 결과 (2026-08-25)
-
-`app/routers/a2a.py` 는 **저장소에 존재하지 않는다.** 이 계약의 A2A 경로는
-아직 구현되지 않았다. 나머지 경로 참조 10곳은 실제 파일과 일치한다.

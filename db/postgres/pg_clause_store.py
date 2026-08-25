@@ -44,7 +44,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from db.postgres import pgvector_clause_index as ix
-from app.core.errors import InfraError
+from app.core.errors import ArtifactMissing, InfraError
 from app.core.ports.precheck import ClauseRow
 
 #: trigram 유사도 하한. 낮추면 무관한 조항이 근거로 붙는다.
@@ -98,6 +98,13 @@ def _rows_to_clauses(rows) -> list[ClauseRow]:
         #: ★게이트 값이 없으면 `None` — 공통 게이트가 "모른다"로 판정한다.
         gate = dict(zip(("citation_eligible", "chunk_type", "is_statute", "parse_status"),
                         row[8:12])) if len(row) >= 12 else {}
+        #: ★수록 순번. **없으면 `None` 그대로 둔다** — `occurrence_id` 가 빈 문자열이 되고
+        #:   인용 검증이 기권한다. 그게 맞는 동작이다(순서를 지어내면 식별자가 거짓이 된다).
+        #:   2026-08-25 이전에는 이 값을 아예 읽지 않아 **pg 경로 판정이 전건 기권**했다.
+        #:   → `docs/reports/debugs/2026-08-25_1400_pg조항색인에_수록순번이_없어_인용검증이_전건_실패한다.md`
+        ordinal = row[12] if len(row) >= 13 else None
+        #: ★종류. 기본값 `"clause"` 로 두면 부록이 조항으로 둔갑한다(위 SELECT 주석).
+        source_kind = row[13] if len(row) >= 14 else "clause"
         out.append(
             ClauseRow(
                 sha256=sha,
@@ -116,6 +123,8 @@ def _rows_to_clauses(rows) -> list[ClauseRow]:
                 #:   PG 가 eligibility 필드를 아직 저장하지 않으므로 "모른다"가 되고,
                 #:   그러면 **못 쓴다**로 나온다 — 그게 정직한 상태다.
                 release_id=rid,
+                ordinal=ordinal,
+                source_kind=source_kind,
                 **_gate(qno, text, gate),
             )
         )
@@ -164,7 +173,16 @@ def load_clauses(sha256: str, *, usable_only: bool = True) -> list[ClauseRow]:
                 """
                 SELECT o.content_hash, ct.text,
                        o.sha256, o.qualified_no, o.section, o.title, o.page_from, o.page_to,
-                       o.citation_eligible, o.chunk_type, o.is_statute, o.parse_status
+                       o.citation_eligible, o.chunk_type, o.is_statute, o.parse_status,
+                       --: ★수록 순번. `occurrence_id` 가 이 값으로 만들어진다.
+                       --:   없으면 인용 검증이 "정확히 한 행"을 특정하지 못해 기권한다.
+                       o.ordinal,
+                       --: ★★**종류를 반드시 읽는다.** 안 읽으면 `ClauseRow` 기본값 `"clause"` 가 붙어
+                       --:   **부록이 조항으로 둔갑한다.** `occurrence_id` 에 종류가 들어가므로
+                       --:   부록 1번이 조항 1번과 같은 식별자가 되고, 인용 검증은 중복 키를
+                       --:   「못 쓰는 것」으로 표시해 그 조항을 근거에서 버린다.
+                       --:   실제로 그랬다 — `tests/test_clause_store_parity.py` 가 잡았다(2026-08-25).
+                       o.source_kind
                 FROM policy_clause_occurrence o
                 JOIN policy_clause_content ct ON ct.content_hash = o.content_hash
                 WHERE o.sha256 = %s
@@ -180,7 +198,8 @@ def load_clauses(sha256: str, *, usable_only: bool = True) -> list[ClauseRow]:
     if not fetched:
         #: ★"적재 안 됨"과 "인용 불가라 일부러 뺐음"은 **다른 사실**이다.
         #:   섞어 말하면 팀이 적재를 다시 돌리는 헛수고를 한다.
-        raise InfraError(
+        #: ★위와 같은 이유로 `ArtifactMissing` 이다(적재 전 ≠ 저장소 장애).
+        raise ArtifactMissing(
             f"이 약관의 조항 본문이 색인에 없습니다: {sha256[:12]}. "
             "인용 불가(citation_eligible=false)로 제외됐거나 아직 적재 전입니다. "
             "GET /v1/support-manifest 로 대상 여부를 확인하세요."
@@ -211,7 +230,13 @@ def stats(sha256: str) -> dict:
                 """
                 SELECT count(*) FILTER (WHERE c.h IS NOT NULL),
                        count(DISTINCT c.h),
-                       count(*)
+                       count(*),
+                       --: ★둘 다 NULL 을 무시한다. 그래서
+                       --:   variants=0 → 값이 하나도 없다(모름)
+                       --:   variants=1 → min() 이 그 값
+                       --:   variants>1 → 문서 안에서 값이 갈린다(아래에서 거부)
+                       count(DISTINCT o.parse_status),
+                       min(o.parse_status)
                 FROM policy_clause_occurrence o
                 LEFT JOIN LATERAL (
                     SELECT k.content_hash AS h FROM policy_clause_chunk k
@@ -223,11 +248,38 @@ def stats(sha256: str) -> dict:
                 """,
                 (ix.current_embed_model(), sha256, ix.current_generation()),
             )
-            usable, uniq, recorded = cur.fetchone()
+            usable, uniq, recorded, ps_variants, ps_value = cur.fetchone()
     except Exception as exc:  # noqa: BLE001
         raise InfraError(f"조항 현황을 읽지 못했습니다: {exc}") from exc
     if not recorded:
-        raise InfraError(f"이 약관의 조항 기록이 없습니다: {sha256[:12]}")
+        #: ★**장애가 아니라 사실**이다 — 판정 유스케이스가 기권으로 바꾼다(200).
+        #:   전에는 `InfraError` 라 503 이 나갔고, 같은 상황에서 파일 저장소는 200 기권이었다.
+        raise ArtifactMissing(f"이 약관의 조항 기록이 없습니다: {sha256[:12]}")
+
+    #: ★★**PG 에도 그 값이 있었다(2026-08-25 정정).**
+    #:
+    #:   아래 주석은 "PG 에는 그 값이 없다"고 단정했는데 **틀렸다** —
+    #:   `policy_clause_occurrence.parse_status` 컬럼이 있고 활성 세대에는 채워져 있다.
+    #:   실측(mall_vec, 2026-08-25): s6 발생 210,733행 중 190,155행에 값이 있고,
+    #:   **문서 1,314건 전부**가 단일 값(`'ok'`)으로 일치한다 —
+    #:   값이 하나도 없는 문서 0건 · 값이 갈리는 문서 0건.
+    #:   (값이 비어 있는 20,578행은 임베딩이 없는 행이다. 세대 `s5-mixed` 는 전량 비어 있다.)
+    #:
+    #:   그동안 이걸 `None` 으로 고정한 탓에 **`CLAUSE_STORE=pg` 판정이 전건 기권**했다
+    #:   (게이트가 "파싱 상태를 모른다"로 모든 조항을 인용 불가로 처리).
+    #:   → `docs/reports/debugs/2026-08-25_1120_CLAUSE_STORE_pg로_켜면_판정API가_전부_500이다.md`
+    #:
+    #: ★그래도 **지어내지는 않는다**(§0). 값이 없으면 `None`(모름) 그대로 두고,
+    #:   한 문서 안에서 값이 **갈리면 고르지 않는다** — 그것도 "모름"이다.
+    #:   하나를 고르면 어느 쪽이 맞는지 확인한 적 없이 판정 근거가 된다.
+    if ps_variants == 1:
+        parse_status, note = ps_value, ""
+    elif ps_variants == 0:
+        parse_status, note = None, "이 세대의 색인에 문서 파싱 상태가 비어 있다(모름)"
+    else:
+        parse_status = None
+        note = f"문서 안에서 파싱 상태가 {ps_variants}가지로 갈린다 — 고르지 않는다(모름)"
+
     return {
         #: 조회 가능한 조항 수. `load_clauses()` 와 **같은 기준**이다.
         "clauses": usable,
@@ -235,12 +287,12 @@ def stats(sha256: str) -> dict:
         #: ★기록은 있으나 본문이 없는 것. 숨기지 않는다.
         "recorded_occurrences": recorded,
         "missing_bodies": recorded - usable,
-        #: ★★`parse_status: "ok"` 를 **지어내고 있었다**(코덱스 지적).
-        #:   PG 에는 그 값이 없다. 없는 것을 "ok" 로 채우면
-        #:   호출부가 "이 문서는 파싱됐다"고 믿는다 — 확인한 적이 없는데.
-        "parse_status": None,
-        "parse_status_note": "PG 색인은 문서 파싱 상태를 저장하지 않는다(모름)",
-        "eligibility_fields_stored": False,
+        #: ★한때 `"ok"` 를 **지어냈고**(코덱스 지적), 그 뒤엔 반대로 **항상 `None`** 이었다.
+        #:   둘 다 틀렸다 — 지금은 색인에 실제로 있는 값을 읽고, 없으면 없다고 한다(위 주석).
+        "parse_status": parse_status,
+        "parse_status_note": note,
+        #: 이 문서에 대해 게이트 값을 실제로 읽어 왔는가.
+        "eligibility_fields_stored": parse_status is not None,
         "source": "pg/index_a",
     }
 

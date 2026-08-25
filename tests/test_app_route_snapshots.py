@@ -40,6 +40,7 @@ _COMMON = frozenset(
         ("POST", "/v1/chat"),
         ("POST", "/v1/demo/observations"),
         ("POST", "/v1/observations"),
+        ("POST", "/v1/observations/evidence"),
         ("POST", "/v1/prechecks"),
         ("PUT", "/api/face/backend"),
         ("DELETE", "/api/face/register"),
@@ -56,8 +57,14 @@ _ADMIN = frozenset(
         ("GET", "/api/admin/demo/simulation"),
         ("GET", "/api/admin/events"),
         ("GET", "/api/admin/index"),
+        #: ★관리자 **로그인 밖**에 있는 유일한 경로다. Prometheus 가 긁어야 해서
+        #:   `/api/admin/*` 아래에 못 둔다 — 그쪽 의존성을 타면 401 이다.
+        #:   대신 전용 토큰이 있어야 열리고(`METRICS_SCRAPE_TOKEN`),
+        #:   토큰을 안 정하면 **404** 다. 고객 앱에는 안 실린다.
+        ("GET", "/metrics-scrape"),
         ("GET", "/api/admin/kcd-codes"),
         ("GET", "/api/admin/knowledge-gaps"),
+        ("GET", "/api/admin/metrics"),
         ("GET", "/api/admin/precheck-mode"),
         ("GET", "/api/admin/report"),
         ("GET", "/api/admin/users"),

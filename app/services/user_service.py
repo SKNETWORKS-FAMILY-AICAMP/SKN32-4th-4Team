@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth.security import hash_password, verify_password
 from app.core.errors import AuthErr, ValidationErr
-from app.db.models import User
+from db.sqlite_legacy.models import User
 from db.postgres.auth_repository import PgAuthStore, PgUser
 
 

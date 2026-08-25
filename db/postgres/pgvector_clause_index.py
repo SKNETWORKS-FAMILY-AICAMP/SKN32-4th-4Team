@@ -706,11 +706,83 @@ def upsert_chunks(conn, rows, *, model: str | None = None) -> int:
     return n
 
 
+def assign_ordinals(conn, *, generation: str, sha256s: list[str] | None = None) -> int:
+    """발생행에 **수록 순번**을 매긴다. 문서·종류별 결정적 순위. **멱등**하다.
+
+    ★**왜 여기 있나** — `occurrence_id`(= `릴리스:sha256:source_kind:순번`)가 이 값으로
+      만들어진다. 비어 있으면 인용 검증이 "정확히 한 행"을 특정하지 못해 **기권**하고,
+      겹치면 그 키를 「못 쓰는 것」으로 표시해 근거에서 **버린다.**
+      즉 이 표에 행을 넣는 쪽이 **유일성을 책임져야 한다** — 호출자에게 맡기면 깨진다.
+
+    ★★**호출자가 준 번호를 쓰지 않는다(2026-08-25).**
+
+        조항 JSON 의 `ordinal` 을 그대로 넣어 봤다가 깨졌다. 발생행은 JSON 등장과
+        **1:1 이 아니다** — `ON CONFLICT` 키로 **합쳐지기** 때문이다. 합쳐진 행에
+        어느 번호를 줄지 고르는 순간 **다른 행이 이미 쓰는 번호와 겹친다.**
+        실제로 한 문서에 `…:clause:1` 이 둘이었다
+        (`tests/test_clause_store_parity.py::test_수록_식별자는_문서_안에서_유일하다`).
+
+        그래서 **표에 실제로 남은 행을 기준으로** 순위를 매긴다.
+        정렬 키 `(page_from, qualified_no, content_hash)` 는 `(sha256, generation)` 안에서
+        유일하다 — `ON CONFLICT` 키와 같은 조합이기 때문이다. 그래서 실행마다 같은 값이다.
+
+    ★`source_kind` 로 나눠 매긴다. `occurrence_id` 에 종류가 들어가므로
+      조항·부록·승인fact 가 서로 번호를 다투지 않는다.
+
+    ★문서 단위로 돌린다 — 21만 행을 한 문장으로 갱신하면 `statement_timeout` 에 걸리고
+      (실측 2026-08-25), 공유 DB 에서 긴 잠금을 잡게 된다.
+
+    Args:
+        sha256s: 대상 문서. `None` 이면 **그 세대 전체**.
+
+    Returns:
+        값이 실제로 바뀐 행 수.
+    """
+    with conn.cursor() as cur:
+        if sha256s is None:
+            cur.execute(
+                "SELECT DISTINCT sha256 FROM policy_clause_occurrence "
+                "WHERE index_generation = %s",
+                (generation,),
+            )
+            targets = [r[0] for r in cur.fetchall()]
+        else:
+            targets = sorted(set(sha256s))
+
+    changed = 0
+    for sha in targets:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE policy_clause_occurrence o
+                   SET ordinal = r.rn - 1
+                  FROM (SELECT ctid,
+                               row_number() OVER (
+                                   PARTITION BY source_kind
+                                   ORDER BY page_from, qualified_no, content_hash) AS rn
+                          FROM policy_clause_occurrence
+                         WHERE index_generation = %s AND sha256 = %s) r
+                 WHERE o.ctid = r.ctid
+                   --: 이미 맞으면 건드리지 않는다(멱등·불필요한 WAL 방지)
+                   AND o.ordinal IS DISTINCT FROM r.rn - 1
+                """,
+                (generation, sha),
+            )
+            changed += cur.rowcount
+        conn.commit()
+    return changed
+
+
 def upsert_occurrences(conn, rows, *, generation: str | None = None) -> int:
     """조항이 **어느 문서 어디에** 실렸는지. 같은 자리는 한 번만.
 
     ★`rows` 는 `(hash, sha, insurer, qualified_no, section, title, page_from, page_to)`
       또는 뒤에 `source_kind` 를 하나 더 붙인 9튜플.
+
+    ★★**넣은 뒤 수록 순번을 매긴다(2026-08-25).** 순번이 없으면 `occurrence_id` 가 비고,
+      그러면 **인용 검증이 전건 기권**한다 — `CLAUSE_STORE=pg` 판정이 통째로 죽는다.
+      호출자가 잊을 수 있는 일이 아니므로 **여기서 책임진다**(`assign_ordinals` 주석 참조).
+      건드린 문서만 다시 매기므로 비용은 그 문서 몫뿐이고, 멱등하다.
     """
     #: ★import 시점 기본값을 두지 않는다(코덱스). 부를 때 정한다.
     generation = generation or current_generation()
@@ -739,6 +811,10 @@ def upsert_occurrences(conn, rows, *, generation: str | None = None) -> int:
             )
             n += cur.rowcount
     conn.commit()
+    #: ★넣은 문서만 다시 매긴다. 세대 전체를 훑으면 남의 문서까지 잠근다.
+    touched = {r[1] for r in rows if len(r) > 1 and r[1]}
+    if touched:
+        assign_ordinals(conn, generation=generation, sha256s=sorted(touched))
     return n
 
 

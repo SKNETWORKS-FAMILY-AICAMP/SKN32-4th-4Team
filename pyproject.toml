@@ -12,6 +12,12 @@ testpaths = ["tests"]
 #:   "요구사항에 매핑된 테스트가 수집 불가"라는 **거짓 실패** 11건이 난다.
 #:   필터는 CI 명령줄에만 둔다(.github/workflows/ci.yml).
 addopts = "-q"
+#: ★pytest 가 만든 임시 디렉터리를 **수집 대상에서 뺀다**(2026-08-25).
+#:   전달 계층 작업 중 `TEMP` 를 `tests/delivery/` 아래로 돌려 돌린 실행이 있었고,
+#:   그때 만들어진 `pytest-of-<user>/` 가 **권한 때문에 지워지지도, 읽히지도 않는다**
+#:   (`PermissionError: [WinError 5]`). 그대로 두면 **회귀검사 수집 자체가 죽는다.**
+#:   ★재발 방지는 "리포 안으로 TEMP 를 돌리지 않는 것"이다. 이 줄은 이미 생긴 것을 막는 안전망이다.
+norecursedirs = ["pytest-of-*", ".git", "*.egg", "build", "dist"]
 markers = [
     "llm: 실제 LLM 호출이 필요한 테스트 (기본 CI에서 제외)",
     "ml: 무거운 로컬 ML 모델 로드가 필요한 테스트 (KoELECTRA/임베딩, 기본 CI에서 제외)",
@@ -21,4 +27,9 @@ markers = [
     "mcp: MCP stdio 서브프로세스 왕복이 필요한 테스트 (기본 CI에서 제외)",
     "pg: 실 PostgreSQL+pgvector 연결이 필요한 테스트 (기본 CI에서 제외)",
     "legacy_data: 레거시(v3 커머스) 데이터셋이 있어야 도는 테스트 (압축 격리됨, 기본 CI에서 제외)",
+    #: ★전달 계층(Django BFF) 전환 작업 전용. `tests/delivery/` 에만 붙인다.
+    #:   진행 중인 전환 작업이라 **기존 회귀검사와 분리해서 돌린다**:
+    #:       pytest tests/delivery -m delivery
+    #:   기본 CI에서 제외한다(.github/workflows/ci.yml).
+    "delivery: 전달 계층 전환 작업 전용 테스트 (기본 CI에서 제외)",
 ]

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.adapters import pgvector_clause_index as ix
+from db.postgres import pgvector_clause_index as ix
 from app.core.errors import InfraError
 
 
@@ -154,7 +154,7 @@ def test_검색_경로가_이_검사를_실제로_부른다():
     """
     import inspect
 
-    from app.adapters import pg_clause_store as st
+    from db.postgres import pg_clause_store as st
 
     for fn in (ix.search, st.search):
         assert "ensure_index_matches_release" in inspect.getsource(fn), (

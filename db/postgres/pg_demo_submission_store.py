@@ -37,9 +37,10 @@ def _dsn() -> str:
 
 def _connect():
     import psycopg
+    from db.postgres.pool import connection
 
     try:
-        conn = psycopg.connect(_dsn(), connect_timeout=5)
+        conn = connection(_dsn())
         conn.execute("SET statement_timeout = '10s'")
         conn.execute("SET lock_timeout = '3s'")
         return conn

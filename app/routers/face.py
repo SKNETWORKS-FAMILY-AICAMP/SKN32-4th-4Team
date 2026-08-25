@@ -13,7 +13,7 @@ from app.auth.security import get_current_user
 from app.auth.store import get_auth_store
 from app.core.config import get_settings
 from app.core.errors import ValidationErr
-from app.db.models import User
+from db.sqlite_legacy.models import User
 from db.postgres.auth_repository import PgAuthStore, PgUser
 from app.ml import face as face_ml
 from app.routers._uploads import read_capped
@@ -108,7 +108,7 @@ def face_unregister(
     if isinstance(store, PgAuthStore):
         store.delete_face(user.id)
     else:
-        from app.db.models import FaceCredential
+        from db.sqlite_legacy.models import FaceCredential
 
         cred = store.query(FaceCredential).filter(FaceCredential.user_id == user.id).first()
         if cred is not None:
