@@ -824,3 +824,25 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         ],
         "_주의": "근거 후보입니다. 보장 여부 판정이 아닙니다 — 판정은 /v1/prechecks 가 합니다.",
     }
+
+
+@router.get("/metrics")
+def admin_metrics() -> Response:
+    """Prometheus 텍스트 형식 메트릭. 라우터 전역 `require_admin` 으로 보호된다.
+
+    ★**고객 앱(:8080)에는 실리지 않는다.** 운영 지표를 무인증으로 노출하지 않는다.
+
+    ★★**스크레이퍼 인증이 숙제로 남는다.** 이 경로는 관리자 로그인을 요구하므로
+      Prometheus 가 그냥은 못 긁는다. 실제로 붙이려면 둘 중 하나가 필요하다 —
+
+        · 스크레이프 전용 토큰(관리자 계정과 분리)
+        · 사내망에만 열리는 **별도 포트**로 뺀다
+
+      지금은 「보호된 채로 사람이 확인할 수 있다」까지다. 무인증으로 여는 편이
+      편하지만, 이 저장소는 무인증 노출 표면을 늘리지 않는 쪽을 택해 왔다.
+
+    ★긁는 요청은 싸야 한다 — 프로세스 안 수치만 낸다. DB 를 세지 않는다.
+    """
+    from app.obs.metrics import CONTENT_TYPE, render_metrics
+
+    return Response(content=render_metrics(), media_type=CONTENT_TYPE)
