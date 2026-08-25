@@ -1,8 +1,0 @@
-# PDF 수집·추출·OCR 후보 준비
-# 승인 s5/s6 manifest의 extractor 버전과 맞춘다.
-PyMuPDF==1.28.0
-pypdf==6.14.2
-beautifulsoup4>=4.12,<5
-playwright>=1.50,<2
-Pillow==12.3.0
-orjson==3.12.0

@@ -1,8 +1,0 @@
-# 선택 제품 기능: 음성 STT/TTS·얼굴 2차 인증
-faster-whisper==1.2.1
-pyttsx3==2.99
-insightface==0.7.3
-onnxruntime-directml==1.24.4; sys_platform == "win32"
-onnxruntime==1.24.4; sys_platform != "win32"
-opencv-python==4.10.0.84
-gdown==6.1.0
