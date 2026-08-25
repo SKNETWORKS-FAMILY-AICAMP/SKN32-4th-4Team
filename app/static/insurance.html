@@ -174,12 +174,13 @@
   }
   .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
   .reset-chat-btn {
-    display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
-    border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; height: 34px; padding: 0 16px;
+    border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted);
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-    box-shadow: var(--shadow); transition: color .15s ease, transform .15s ease;
+    box-shadow: var(--shadow); font-size: 13px; font-weight: 650; white-space: nowrap;
+    cursor: pointer; transition: color .15s ease, background .15s ease;
   }
-  .reset-chat-btn:hover { color: #fff; transform: rotate(-24deg); }
+  .reset-chat-btn:hover { color: #fff; background: var(--active-pill); }
   .session-chip {
     display: flex; gap: 12px; padding: 6px 14px; border-radius: 999px;
     background: var(--surface); border: 1px solid var(--border);
@@ -372,9 +373,7 @@
     <header class="chat-topbar">
       <div class="topbar-left">
         <div class="service-status"><span class="status-dot" aria-hidden="true"></span>상담 서비스 이용 가능</div>
-        <button type="button" class="reset-chat-btn" id="resetChatBtn" aria-label="대화 초기화" title="대화 초기화">
-          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h2"/><path d="M16 19h-2"/><path d="M2 12v-2"/><path d="M2 16v5.286a.71.71 0 0 0 1.212.502l1.149-1.149"/><path d="M20 19a2 2 0 0 0 2-2v-1"/><path d="M22 10v2"/><path d="M22 6V5a2 2 0 0 0-2-2"/><path d="M4 3a2 2 0 0 0-2 2v1"/><path d="M8 19h2"/><path d="M8 3h2"/></svg>
-        </button>
+        <button type="button" class="reset-chat-btn" id="resetChatBtn">대화 초기화</button>
       </div>
       <div class="session-chip" aria-label="현재 보험 정보">
         <span><strong id="sessionInsurer">미등록</strong></span>
