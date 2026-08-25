@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.adapters import pgvector_clause_index as ix
+from db.postgres import pgvector_clause_index as ix
 
 #: 토큰 대신 **어절 수**로 세는 가짜 토크나이저. 모델 없이 규칙만 검사한다.
 def _count(text: str) -> int:
@@ -95,7 +95,7 @@ def test_검색결과는_어느_문서_어디인지를_들고_다닌다():
 
 
 def _conn_or_skip():
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres.pgvector_index import get_conn
 
     try:
         return get_conn()
@@ -179,3 +179,81 @@ def test_반쪽으로_남은_조항은_완료로_치지_않는다():
         cur.execute("DELETE FROM policy_clause_content WHERE content_hash = %s", (h,))
     conn.commit()
     conn.close()
+
+
+# ── drop_incomplete 이 고아를 만들지 않는다 (2026-08-25) ──────────────────
+
+@pytest.mark.pg
+def test_정리가_발생이_가리키는_본문을_지우지_않는다():
+    """★실측으로 규명된 결함의 회귀 시험(고아 발생 38,326행).
+
+    `drop_incomplete()` 가 「벡터 없는 본문」을 지우면서 `occurrence` 는 안 지웠다.
+    재임베딩으로 모델 이름이 바뀌면 옛 해시의 조각이 «현재 모델»에 없어
+    본문이 반쪽으로 보이는데, 그 본문을 가리키던 옛 세대 발생은 그대로 남는다.
+
+    ★**임시 스키마에 격리해서 돌린다.** 이 함수는 저장소 전체를 훑으므로
+      그냥 부르면 운영 데이터를 지운다 — 실제로 조각 43,064개를 지운 적이 있다.
+      `search_path` 를 옮긴 뒤 **정말 옮겨졌는지 먼저 확인**하고 나서만 진행한다.
+    """
+    conn = _conn_or_skip()
+    schema = "t_drop_incomplete_guard"
+    with conn.cursor() as cur:
+        cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        cur.execute(f'CREATE SCHEMA "{schema}"')
+    conn.commit()
+    try:
+        #: ★`public` 을 뒤에 둬야 한다 — `vector` 확장 타입이 거기 있다.
+        #:   임시 스키마만 두면 `type "vector" does not exist` 로 죽는다.
+        #:   **테이블은 앞선 임시 스키마에 만들어지고**, 타입만 public 에서 찾는다.
+        with conn.cursor() as cur:
+            cur.execute(f'SET search_path TO "{schema}", public')
+        ix.ensure_schema(conn)
+
+        #: ★★안전 확인 — 임시 스키마의 빈 테이블을 보고 있는가.
+        #:   운영 테이블(발생 30만행대)에 붙어 있으면 **여기서 멈춘다.**
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM policy_clause_occurrence")
+            n = cur.fetchone()[0]
+        assert n == 0, f"임시 스키마가 아니라 운영 테이블을 보고 있다(발생 {n:,}행) — 중단"
+
+        vec = [0.0] * ix.embed_dim()
+        vec[0] = 1.0
+        model = ix.current_embed_model()
+
+        keep = "해시_발생이_가리킨다"   # 벡터 없음 + 발생 있음 → 남아야 한다
+        gone = "해시_아무도_안_쓴다"     # 벡터 없음 + 발생 없음 → 지워도 된다
+        ix.upsert_content(conn, [(keep, "본문A", 1), (gone, "본문B", 1)])
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO policy_clause_occurrence"
+                " (content_hash, sha256, insurer, qualified_no, section, title,"
+                "  page_from, page_to, index_generation, source_kind)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (keep, "a" * 64, "삼성화재", "제1조", "보통약관", "t", 1, 2, "s-old", "clause"),
+            )
+        conn.commit()
+
+        result = ix.drop_incomplete(conn)
+
+        #: 반환이 dict 이고 무슨 일이 있었는지 말한다(앞서는 int 하나였다).
+        assert set(result) == {"chunks_deleted", "content_deleted",
+                               "content_kept", "orphans_before"}
+        assert result["content_deleted"] == 1, "아무도 안 쓰는 본문은 지운다"
+        assert result["content_kept"] == 1, "발생이 가리키는 본문은 남기고 센다"
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM policy_clause_content WHERE content_hash=%s", (keep,))
+            assert cur.fetchone()[0] == 1, "★지우면 그 발생이 고아가 된다"
+            cur.execute("SELECT count(*) FROM policy_clause_content WHERE content_hash=%s", (gone,))
+            assert cur.fetchone()[0] == 0
+            #: 이 정리가 고아를 **하나도** 만들지 않았는지 직접 센다.
+            cur.execute(
+                "SELECT count(*) FROM policy_clause_occurrence o WHERE NOT EXISTS ("
+                "  SELECT 1 FROM policy_clause_content t WHERE t.content_hash=o.content_hash)")
+            assert cur.fetchone()[0] == 0, "정리가 고아를 만들었다"
+        assert model  # 승인 프로필이 비면 위 단언들의 뜻이 달라진다
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("SET search_path TO public")
+            cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        conn.commit()

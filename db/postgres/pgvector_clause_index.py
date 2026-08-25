@@ -578,7 +578,7 @@ def existing_hashes(conn, *, model: str | None = None) -> set[str]:
         return {r[0] for r in cur.fetchall()}
 
 
-def drop_incomplete(conn) -> int:
+def drop_incomplete(conn) -> dict:
     """미완성으로 남은 조각을 지운다. **다시 넣기 위해서다.**
 
     ★남겨 두면 검색에 반쪽짜리 본문이 근거로 올라온다.
@@ -586,6 +586,27 @@ def drop_incomplete(conn) -> int:
     ★**저장소 전체를 훑는 정리 작업이다.** 적재 스크립트 시작 지점에서만 부른다.
       테스트에서 부르면 남의 적재 결과까지 날린다 —
       실제로 테스트가 조각 43,064개를 지웠다(2026-08-02).
+
+    ★★**고아를 만들지 않는다** (2026-08-25 실측으로 규명).
+
+        여기 마지막 문장이 「벡터 없는 본문」을 지우면서 **`occurrence` 는 안 지웠다.**
+        그래서 발생만 남고 본문이 사라진 행이 **38,326개** 쌓여 있었다
+        (고유 해시 15,469 · 문서 1,104 · 전부 게이트 NULL · 벡터 0건).
+
+        재임베딩으로 모델 이름이 바뀌면 옛 해시의 조각이 «현재 모델»에 없다.
+        그러면 본문이 「반쪽」으로 보여 지워지는데, 그 본문을 가리키던
+        옛 세대 발생은 그대로 남는다. 그게 고아의 정체였다.
+
+        **본문을 지우기 전에 그 해시를 가리키는 발생이 있는지 본다.**
+        · 가리키는 발생이 **없으면** 지운다 — 아무도 안 쓰는 반쪽이다.
+        · 가리키는 발생이 **있으면 남긴다.** 지우면 그 발생이 고아가 된다.
+          대신 **몇 건을 남겼는지 세어 돌려준다** — 조용히 넘기지 않는다(CLAUDE.md §3).
+
+    돌려주는 것 (앞서는 `int` 하나였다 — 무엇이 일어났는지 알 수 없었다)
+        ``chunks_deleted``   지운 조각 해시 수
+        ``content_deleted``  지운 본문 행 수(가리키는 발생이 없던 것)
+        ``content_kept``     ★본문이 반쪽이지만 **발생이 가리켜서 남긴** 행 수
+        ``orphans_before``   실행 전부터 있던 고아 발생 행 수(이 함수가 만든 것이 아니다)
     """
     done = existing_hashes(conn)
     with conn.cursor() as cur:
@@ -600,13 +621,40 @@ def drop_incomplete(conn) -> int:
                         "WHERE content_hash = ANY(%s) AND embed_model = %s",
                         (bad, current_embed_model()))
         n = len(bad)
-        #: 본문만 있고 조각이 없는 것도 지운다(반대 방향의 반쪽).
+
+        #: 들어오기 전부터 있던 고아. 이 함수가 만든 것과 구분해 보고한다.
         cur.execute(
-            "DELETE FROM policy_clause_content ct WHERE NOT EXISTS ("
-            "  SELECT 1 FROM policy_clause_chunk ck WHERE ck.content_hash = ct.content_hash)"
+            "SELECT count(*) FROM policy_clause_occurrence o WHERE NOT EXISTS ("
+            "  SELECT 1 FROM policy_clause_content t WHERE t.content_hash = o.content_hash)"
         )
+        orphans_before = cur.fetchone()[0]
+
+        #: 본문만 있고 조각이 없는 것 — **가리키는 발생이 없을 때만** 지운다.
+        cur.execute(
+            "DELETE FROM policy_clause_content ct"
+            " WHERE NOT EXISTS ("
+            "   SELECT 1 FROM policy_clause_chunk ck WHERE ck.content_hash = ct.content_hash)"
+            " AND NOT EXISTS ("
+            "   SELECT 1 FROM policy_clause_occurrence o WHERE o.content_hash = ct.content_hash)"
+        )
+        content_deleted = cur.rowcount
+
+        #: 반쪽이지만 발생이 가리켜서 남긴 것 — 지웠다면 고아가 됐을 행들이다.
+        cur.execute(
+            "SELECT count(*) FROM policy_clause_content ct"
+            " WHERE NOT EXISTS ("
+            "   SELECT 1 FROM policy_clause_chunk ck WHERE ck.content_hash = ct.content_hash)"
+            " AND EXISTS ("
+            "   SELECT 1 FROM policy_clause_occurrence o WHERE o.content_hash = ct.content_hash)"
+        )
+        content_kept = cur.fetchone()[0]
     conn.commit()
-    return n
+    return {
+        "chunks_deleted": n,
+        "content_deleted": content_deleted,
+        "content_kept": content_kept,
+        "orphans_before": orphans_before,
+    }
 
 
 def upsert_content(conn, rows) -> int:
