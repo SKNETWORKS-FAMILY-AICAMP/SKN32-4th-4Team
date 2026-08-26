@@ -3,30 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#c9d2c6">
+<meta name="theme-color" content="#ffffff">
 <title>보장 확인 상세 — {{BRAND}}</title>
 <link rel="stylesheet" href="/static/style.css">
 <style>
   :root {
-    /* insurance.html과 같은 다크 글래스 톤 — 파티클 배경 위에 뜨는 카드들이라 맞춘다. */
+    /* insurance.html과 같은 화이트 글래스 톤 — 파티클 배경 위에 뜨는 카드들이라 맞춘다. */
     --accent: #1c1c18;
     --on-accent: #ffffff;
-    --active-pill: rgba(255, 255, 255, 0.14);
-    --border: rgba(255, 255, 255, 0.14);
-    --background: #050505;
-    --surface: rgba(255, 255, 255, 0.08);
-    --surface-soft: rgba(255, 255, 255, 0.05);
-    --text: #f3f2ee;
-    --muted: rgba(255, 255, 255, 0.6);
-    --success: #4f9d78;
-    --success-bg: rgba(79, 157, 120, 0.18);
-    --warning: #d9843f;
-    --warning-bg: rgba(217, 132, 63, 0.18);
-    --danger: #e28288;
-    --danger-bg: rgba(226, 130, 136, 0.18);
-    --info: #8fa2e8;
-    --info-bg: rgba(143, 162, 232, 0.18);
-    --shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    --active-pill: rgba(0, 0, 0, 0.06);
+    --border: rgba(0, 0, 0, 0.1);
+    --background: #ffffff;
+    --surface: rgba(0, 0, 0, 0.035);
+    --surface-soft: rgba(0, 0, 0, 0.02);
+    --text: #1c1c18;
+    --muted: rgba(0, 0, 0, 0.55);
+    --success: #2f8a5b;
+    --success-bg: rgba(47, 138, 91, 0.12);
+    --warning: #b5651d;
+    --warning-bg: rgba(181, 101, 29, 0.12);
+    --danger: #c0392b;
+    --danger-bg: rgba(192, 57, 43, 0.12);
+    --info: #4a69bd;
+    --info-bg: rgba(74, 105, 189, 0.12);
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
     --radius: 20px;
     --glass-blur: blur(16px);
   }
@@ -34,10 +34,10 @@
   [hidden] { display: none !important; }
   .icon { width: 16px; height: 16px; flex: none; vertical-align: -3px; }
 
-  #particleCanvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; background: #050505; }
+  #particleCanvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; background: #ffffff; }
   .bg-vignette {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background: radial-gradient(120% 100% at 50% 45%, transparent 35%, rgba(0,0,0,.55) 100%);
+    background: radial-gradient(120% 100% at 50% 45%, transparent 35%, rgba(255,255,255,.6) 100%);
   }
 
   body {
@@ -95,9 +95,9 @@
     width: 100%; height: 42px; padding: 0 12px; border: 1px solid var(--border);
     border-radius: 10px; background: var(--surface-soft); color: var(--text);
   }
-  .row input::placeholder { color: rgba(255, 255, 255, 0.32); }
-  .row input:focus, .row select:focus { outline: none; border-color: rgba(255, 255, 255, 0.4); }
-  .row select option { background: #1a1a1a; color: #fff; }
+  .row input::placeholder { color: rgba(0, 0, 0, 0.32); }
+  .row input:focus, .row select:focus { outline: none; border-color: rgba(0, 0, 0, 0.4); }
+  .row select option { background: #ffffff; color: #1c1c18; }
 
   /* 결과 선택 — 네이티브 <select>는 열었을 때 브라우저 기본 UI라 다크 글래스 톤을 못 입힌다.
      그래서 트리거 버튼 + 커스텀 목록으로 대체하고, 실제 값은 숨긴 <select>에 동기화해 둔다. */
@@ -109,13 +109,13 @@
     font: inherit; font-size: 14.5px; cursor: pointer; text-align: left;
   }
   .select-trigger:hover { background: var(--active-pill); }
-  .select-trigger:focus-visible { outline: none; border-color: rgba(255, 255, 255, 0.4); }
+  .select-trigger:focus-visible { outline: none; border-color: rgba(0, 0, 0, 0.4); }
   .select-trigger .chevron { width: 16px; height: 16px; color: var(--muted); transition: transform .15s ease; }
   .select-wrap.is-open .select-trigger .chevron { transform: rotate(180deg); }
   .select-panel {
     position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; right: 0;
     margin: 0; padding: 6px; list-style: none;
-    background: #17171a; border: 1px solid var(--border); border-radius: 12px;
+    background: #ffffff; border: 1px solid var(--border); border-radius: 12px;
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
     box-shadow: var(--shadow);
   }
@@ -124,7 +124,7 @@
     padding: 9px 10px; border-radius: 8px; font-size: 13.5px; color: var(--text); cursor: pointer;
   }
   .select-panel li:hover, .select-panel li.is-active { background: var(--active-pill); }
-  .select-panel li[aria-selected="true"] { color: var(--on-accent); font-weight: 650; }
+  .select-panel li[aria-selected="true"] { color: var(--accent); font-weight: 650; }
 
   .small { font-size: 12.5px; }
   .muted { color: var(--muted); }

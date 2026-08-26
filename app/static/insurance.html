@@ -3,30 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#c9d2c6">
+<meta name="theme-color" content="#ffffff">
 <title>올바른 보험비서</title>
 <style>
   :root {
-    /* ★파티클 배경(검은 화면) 위에 뜨는 페이지라 전체를 다크 글래스 톤으로 맞춘다.
-       버튼(--accent)은 그대로 검게 둔다 — 옅은 테두리 링 하나로도 검은 배경 위에서
-       충분히 구분된다(참고 이미지의 "Subscribe" 필 버튼과 같은 원리). */
+    /* ★파티클 배경(흰 화면 + 빨간 점) 위에 뜨는 페이지라 전체를 화이트 글래스 톤으로 맞춘다.
+       버튼(--accent)은 그대로 검게 둔다 — 흰 배경 위에서도 충분히 구분된다. */
     --accent: #1c1c18;
     --accent-dark: #000000;
     --on-accent: #ffffff;
-    --active-pill: rgba(255, 255, 255, 0.14);
-    --border: rgba(255, 255, 255, 0.14);
-    --background: #050505;
-    --surface: rgba(255, 255, 255, 0.08);
-    --surface-soft: rgba(255, 255, 255, 0.05);
-    --text: #f3f2ee;
-    --muted: rgba(255, 255, 255, 0.6);
-    --success: #4f9d78;
-    --success-bg: rgba(79, 157, 120, 0.18);
-    --warning: #d9843f;
-    --warning-bg: rgba(217, 132, 63, 0.18);
-    --danger: #e28288;
-    --danger-bg: rgba(226, 130, 136, 0.18);
-    --shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    --active-pill: rgba(0, 0, 0, 0.06);
+    --border: rgba(0, 0, 0, 0.1);
+    --background: #ffffff;
+    --surface: rgba(0, 0, 0, 0.035);
+    --surface-soft: rgba(0, 0, 0, 0.02);
+    --text: #1c1c18;
+    --muted: rgba(0, 0, 0, 0.55);
+    --success: #2f8a5b;
+    --success-bg: rgba(47, 138, 91, 0.12);
+    --warning: #b5651d;
+    --warning-bg: rgba(181, 101, 29, 0.12);
+    --danger: #c0392b;
+    --danger-bg: rgba(192, 57, 43, 0.12);
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
     --radius: 20px;
     --glass-blur: blur(16px);
   }
@@ -52,11 +51,11 @@
   .icon { width: 17px; height: 17px; flex: none; }
 
   #particleCanvas {
-    position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; background: #050505;
+    position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; background: #ffffff;
   }
   .bg-vignette {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background: radial-gradient(120% 100% at 50% 45%, transparent 35%, rgba(0,0,0,.55) 100%);
+    background: radial-gradient(120% 100% at 50% 45%, transparent 35%, rgba(255,255,255,.6) 100%);
   }
   .app-shell { position: relative; z-index: 1; height: 100dvh; overflow: hidden; }
 
@@ -112,16 +111,16 @@
     color: var(--text);
     transition: border-color .15s, box-shadow .15s;
   }
-  .control::placeholder { color: rgba(255, 255, 255, 0.32); }
-  .control:focus { border-color: rgba(255, 255, 255, 0.4); outline: none; }
+  .control::placeholder { color: rgba(0, 0, 0, 0.32); }
+  .control:focus { border-color: rgba(0, 0, 0, 0.4); outline: none; }
   select.control {
     appearance: none;
     padding-right: 40px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%231c1c18' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
   }
-  select.control option { background: #1a1a1a; color: #fff; }
+  select.control option { background: #ffffff; color: #1c1c18; }
   .precheck-block { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); white-space: normal; }
   .precheck-title { margin: 0 0 4px; font-size: 13px; }
   .precheck-help { margin: 0 0 11px; color: var(--muted); font-size: 11.5px; }
@@ -180,7 +179,7 @@
     box-shadow: var(--shadow); font-size: 13px; font-weight: 650; white-space: nowrap;
     cursor: pointer; transition: color .15s ease, background .15s ease;
   }
-  .reset-chat-btn:hover { color: #fff; background: var(--active-pill); }
+  .reset-chat-btn:hover { color: var(--text); background: var(--active-pill); }
   .session-chip {
     display: flex; gap: 12px; padding: 6px 14px; border-radius: 999px;
     background: var(--surface); border: 1px solid var(--border);
@@ -192,32 +191,31 @@
   .chat-scroll {
     flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
     padding: 12px clamp(20px, 8vw, 160px) 16px;
-    transition: background-color .3s ease, backdrop-filter .3s ease;
   }
-  /* ★채팅이 시작되면(메시지가 생기면) 검은 반투명 유리 패널을 깔아 —
-     원래 디자인(말풍선 없는 어시스턴트 텍스트)의 가독성을 지킨다.
-     비어있는 환영 화면일 때만 파티클이 아무 여과 없이 그대로 비친다. */
-  body.has-chat .chat-scroll {
-    background: rgba(5, 5, 5, 0.55);
-    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
-  }
+  /* ★채팅 중에도 뒤 파티클이 계속 그대로 살아있게 둔다 — 화면 전체를 덮는
+     반투명 패널은 쓰지 않는다. 대신 메시지 하나하나가 자기 카드(유리 배경)를
+     들고 다녀서, 텍스트 가독성은 카드가 책임지고 파티클은 카드 밖에서 계속 움직인다. */
 
   .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; }
   .empty-mark {
     width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;
-    border-radius: 22px; color: #fff; margin-bottom: 18px;
-    background: rgba(255,255,255,.08);
-    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 22px; color: var(--on-accent); margin-bottom: 18px;
+    background: linear-gradient(135deg, #3a3a34, var(--accent));
     -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-    box-shadow: 0 16px 40px rgba(0,0,0,.4);
+    box-shadow: 0 16px 40px rgba(0,0,0,.18);
   }
   .empty-mark .icon { width: 30px; height: 30px; }
-  .empty-state h2 { margin: 0; font-size: 21px; color: #fff; }
-  .empty-state p { margin: 8px 0 0; color: rgba(255,255,255,.7); font-size: 13.5px; max-width: 380px; }
+  .empty-state h2 { margin: 0; font-size: 21px; color: var(--text); }
+  .empty-state p { margin: 8px 0 0; color: var(--muted); font-size: 13.5px; max-width: 380px; }
 
   .chatlog { display: flex; flex-direction: column; gap: 18px; max-width: 720px; margin: 0 auto; }
   .msg { max-width: 88%; font-size: 14.5px; white-space: pre-wrap; word-break: keep-all; line-height: 1.6; }
-  .msg.bot { align-self: flex-start; color: var(--text); }
+  .msg.bot {
+    align-self: flex-start; padding: 13px 16px; border-radius: 6px 20px 20px 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow); color: var(--text);
+  }
   .msg.me {
     align-self: flex-end; padding: 13px 16px; border-radius: 20px 6px 20px 20px;
     background: var(--surface); border: 1px solid var(--border);
@@ -244,7 +242,7 @@
   .quick-prompts::-webkit-scrollbar { display: none; }
   .quick-wrap.is-scrollable::after {
     position: absolute; top: 0; right: 0; bottom: 10px; width: 46px;
-    background: linear-gradient(to right, rgba(201,210,198,0), var(--background) 75%);
+    background: linear-gradient(to right, rgba(255,255,255,0), var(--background) 75%);
     pointer-events: none; content: "";
   }
   .chip-btn {
@@ -252,7 +250,7 @@
     background: var(--surface); color: var(--muted); font-size: 12px;
     -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   }
-  .chip-btn:hover { background: rgba(255,255,255,.14); color: var(--text); }
+  .chip-btn:hover { background: rgba(0,0,0,.06); color: var(--text); }
 
   .composer-wrap { flex: none; padding: 0 20px calc(20px + env(safe-area-inset-bottom)); }
   .composer {
@@ -265,7 +263,7 @@
   .composer input {
     min-width: 0; flex: 1; height: 40px; border: 0; background: transparent; color: var(--text);
   }
-  .composer input::placeholder { color: rgba(255,255,255,.32); }
+  .composer input::placeholder { color: rgba(0,0,0,.32); }
   .composer input:focus { outline: none; }
   .send-btn {
     width: 40px; height: 40px; flex: none; border: 0; border-radius: 50%;

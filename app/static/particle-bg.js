@@ -90,6 +90,8 @@ float sparkleNoise(vec3 seed, float time) {
   return 0.7 + finalBrightness * 1.3;
 }
 
+const vec3 POINT_COLOR = vec3(0.09, 0.32, 0.82);
+
 void main() {
   vec2 cxy = 2.0 * gl_PointCoord - 1.0;
   float sdf = length(cxy) - 0.5;
@@ -106,7 +108,7 @@ void main() {
     * clamp(smoothstep(-0.5, 0.25, vPosY), 0.0, 1.0)
     * uOpacity * revealMask * uRevealProgress * sparkleBrightness;
 
-  fragColor = vec4(vec3(1.0), alpha);
+  fragColor = vec4(POINT_COLOR, alpha);
 }
 `;
 
@@ -252,7 +254,7 @@ export function initParticleBackground(canvas, opts = {}) {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
-  gl.clearColor(0, 0, 0, 1);
+  gl.clearColor(1, 1, 1, 1);
 
   function frame(now) {
     if (disposed) return;
