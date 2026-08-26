@@ -161,6 +161,9 @@ function createCombo(input, source, { onPick, onOpen } = {}) {
   function open() {
     if (input.disabled) return;
     list.hidden = false;
+    //: ★★목록과 설명풍선은 **같은 자리**에 뜬다(입력칸 바로 아래).
+    //:   목록이 열리면 풍선이 보험사 이름들을 덮어 버린다(실측 2026-08-26).
+    //:   지금 필요한 것은 고를 목록이지 설명이 아니다 — 열려 있는 동안 풍선을 접는다.
     input.setAttribute('aria-expanded', 'true');
     render();
     if (onOpen) onOpen();
@@ -170,12 +173,14 @@ function createCombo(input, source, { onPick, onOpen } = {}) {
     list.hidden = true;
     input.setAttribute('aria-expanded', 'false');
     input.removeAttribute('aria-activedescendant');
+    input.removeAttribute('data-combo-active');
     active = -1;
   }
 
   function pick(value) {
     input.value = value;
     close();
+    input.removeAttribute('data-combo-active');
     //: 값이 바뀌었으니 기존 배선(`input` 리스너)이 그대로 돌게 한다.
     input.dispatchEvent(new Event('input', { bubbles: true }));
     if (onPick) onPick(value);
@@ -186,6 +191,13 @@ function createCombo(input, source, { onPick, onOpen } = {}) {
     if (!items.length) return;
     if (list.hidden) open();
     active = (active + step + items.length) % items.length;
+    //: ★★「지금 목록에서 하나를 짚고 있다」를 **속성으로 내건다.**
+    //:   `stopImmediatePropagation` 은 **나중에 등록된** 리스너만 막는다.
+    //:   채팅창의 전송 리스너가 먼저 등록돼 있어서, 목록에서 Enter 로 고르면
+    //:   치던 말이 그대로 질문으로 날아갔다(실측 2026-08-26: 「의료」를 치고
+    //:   「의료비」를 골랐더니 「의료」가 전송됐다).
+    //:   등록 순서에 기대지 않고, 물어보면 답할 수 있게 만든다.
+    input.setAttribute('data-combo-active', '');
     render();
     const el = list.children[active];
     if (el) {
@@ -202,7 +214,12 @@ function createCombo(input, source, { onPick, onOpen } = {}) {
     if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
     else if (e.key === 'Enter' && !list.hidden && active >= 0) {
+      //: ★★`preventDefault` 만으로는 **같은 요소의 다른 리스너**가 안 멈춘다.
+      //:   실측 2026-08-26: 채팅창에 「의료」를 치고 목록에서 Enter 로 「의료비」를 골랐더니
+      //:   고르기와 동시에 **치던 「의료」가 질문으로 전송**됐다.
+      //:   고르는 Enter 와 보내는 Enter 는 다른 동작이다 — 여기서 끊는다.
       e.preventDefault();
+      e.stopImmediatePropagation();
       pick(visible()[active].value);
     } else if (e.key === 'Escape' && !list.hidden) { e.stopPropagation(); close(); }
   });
@@ -210,7 +227,11 @@ function createCombo(input, source, { onPick, onOpen } = {}) {
   //: 목록을 채우는 쪽이 바뀌면 그리는 쪽이 알아서 따라간다.
   new MutationObserver(() => { if (!list.hidden) render(); }).observe(source, { childList: true });
 
-  return { open, close, render };
+  //: ★값을 **코드가** 바꿀 때는 `input` 이벤트가 안 난다 — 목록이 옛 결과인 채로
+  //:   열려 있게 된다(실측 2026-08-26: 채팅을 보낸 뒤 「맞는 후보가 없습니다」가
+  //:   빈 입력창 위에 그대로 떠 있었다). 그래서 밖에서 닫을 수 있게 걸어 둔다.
+  input._combo = { open, close, render };
+  return input._combo;
 }
 
 /* ── 날짜 기본값 ────────────────────────────────────────────────────
@@ -254,6 +275,19 @@ function syncEnrolledPlaceholder() {
   $('enrolledTip').setAttribute('data-tip', start
     ? `비워 두면 이 상품의 판매개시일 ${formatYmd(start)} 로 계산합니다.\n실제 가입일과 다르면 적용 약관과 판정이 달라집니다.`
     : '실제 보험을 계약한 날짜입니다.\n상품을 고르면 그 상품의 판매개시일을 기본값으로 씁니다.');
+}
+
+//: ★제보 칸의 예시 날짜도 화면에 박혀 있었다(`예) 20260810`). 오늘 기준으로 만든다 —
+//:   가만 두면 시간이 지날수록 엉뚱한 날짜를 예시로 보여 준다.
+function syncObservationPlaceholders() {
+  const d = new Date();
+  const shift = (days) => {
+    const x = new Date(d.getTime() - days * 86400000);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${x.getFullYear()}${p(x.getMonth() + 1)}${p(x.getDate())}`;
+  };
+  $('obClaimed').placeholder = `예) ${shift(16)}`;
+  $('obDecided').placeholder = `예) ${shift(8)}`;
 }
 
 function syncIncidentPlaceholder() {
@@ -330,6 +364,84 @@ async function loadServiceStatus() {
     '',
     '서비스가 도는지만 나타냅니다. 판정의 정확성을 보증하지 않습니다.',
   ].join('\n'));
+}
+
+/* ── 설명풍선 ──────────────────────────────────────────────────────
+ *
+ * ★★**커서를 따라다닌다.** 요소에 붙여 두면 자리를 두고 다른 것과 부딪힌다 —
+ *   입력칸 아래 선택 목록을 덮었고(보험사 이름이 안 보였다), 옆·위로 비켜 세우니
+ *   `.side-panel-inner` 의 스크롤 영역에 잘렸다. 자리를 고정하는 한 반복된다.
+ *
+ * ★풍선은 **하나뿐이다**(`#tipBubble`). 요소마다 만들면 수가 늘고, `position: fixed`
+ *   덕에 어떤 스크롤 영역에도 잘리지 않는다.
+ *
+ * ★키보드에는 커서가 없다. 그때는 요소 **아래**에 붙인다 — 화면 밖으로 나가면 위로.
+ */
+const TIP_GAP = 16;
+
+function _tipEl() { return $('tipBubble'); }
+
+function _placeTip(x, y) {
+  const el = _tipEl();
+  const r = el.getBoundingClientRect();
+  //: 화면 밖으로 나가지 않게 가둔다. 커서 오른쪽·아래가 기본, 자리가 없으면 반대편.
+  let left = x + TIP_GAP;
+  if (left + r.width > window.innerWidth - 8) left = Math.max(8, x - TIP_GAP - r.width);
+  let top = y + TIP_GAP;
+  if (top + r.height > window.innerHeight - 8) top = Math.max(8, y - TIP_GAP - r.height);
+  el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+}
+
+function hideTip() {
+  const el = _tipEl();
+  el.classList.remove('is-on');
+  el.setAttribute('aria-hidden', 'true');
+}
+
+function showTip(text, x, y) {
+  if (!text) return hideTip();
+  const el = _tipEl();
+  el.textContent = text;
+  el.setAttribute('aria-hidden', 'false');
+  el.classList.add('is-on');
+  _placeTip(x, y);
+}
+
+//: 커서가 없을 때(키보드) — 요소 아래에 붙인다.
+function showTipFor(host) {
+  const text = host.getAttribute('data-tip');
+  if (!text) return hideTip();
+  const r = host.getBoundingClientRect();
+  showTip(text, r.left + r.width / 2 - TIP_GAP, r.bottom - TIP_GAP);
+}
+
+function initTips() {
+  //: ★★`[data-tip]` 은 화면이 도는 중에도 늘어난다(등록 버튼의 안내가 바뀐다).
+  //:   그래서 요소마다 붙이지 않고 **문서에 한 번** 붙여 위임한다.
+  document.addEventListener('pointermove', (e) => {
+    //: 손가락은 커서가 아니다 — 터치로는 풍선을 띄우지 않는다(누르면 바로 동작해야 한다).
+    if (e.pointerType === 'touch') return hideTip();
+    const host = e.target.closest?.('[data-tip]');
+    if (!host || host.hasAttribute('inert')) return hideTip();
+    //: ★선택 목록이 열려 있으면 그 위에 겹치지 않게 비켜 있다 — 커서를 따라가므로
+    //:   목록을 가릴 일이 없지만, 목록 안으로 커서가 들어가면 설명은 필요 없다.
+    if (e.target.closest?.('.combo-list')) return hideTip();
+    showTip(host.getAttribute('data-tip'), e.clientX, e.clientY);
+  }, { passive: true });
+
+  document.addEventListener('pointerleave', hideTip, true);
+  document.addEventListener('pointerdown', hideTip, true);
+  window.addEventListener('scroll', hideTip, true);
+  window.addEventListener('blur', hideTip);
+
+  //: 키보드로 옮겨 다닐 때도 같은 설명을 준다.
+  document.addEventListener('focusin', (e) => {
+    const host = e.target.closest?.('[data-tip]');
+    //: ★마우스로 눌러서 잡힌 포커스에는 띄우지 않는다 — 그때는 이미 무엇을 할지 안다.
+    if (host && e.target.matches(':focus-visible')) showTipFor(host);
+    else hideTip();
+  });
+  document.addEventListener('focusout', hideTip);
 }
 
 function updateSessionCard() {
@@ -484,16 +596,33 @@ function updateRegisterState() {
   //:   (`applyDateDefaults`). 단 계약일 기본값은 **상품을 골라야** 생기므로,
   //:   상품도 계약일도 없으면 여전히 막는다 — 없는 값을 지어내지 않기 위해서다.
   const ymd = (v) => /^\d{8}$/.test(v);
+  //: ★★**비운 것**과 **덜 쓴 것**은 다르다.
+  //:   비우면 기본값으로 채우지만, 「2020」처럼 쓰다 만 값은 채우지 않는다.
+  //:   실측 2026-08-26 — 예전에는 `ymd(enrolled) || selectedSaleStart()` 라서
+  //:   상품만 골라 두면 「2020」이어도 버튼이 켜졌다. 그리고 누르면
+  //:   `pattern` 검사에 걸려 **아무 일도 일어나지 않았다**(422 조차 안 났다).
+  //:   눌리는데 아무 일도 없는 것이 가장 나쁘다.
   const enrolled = $('enrolled').value.trim();
-  const enrolledOk = ymd(enrolled) || Boolean(selectedSaleStart());
+  const enrolledOk = enrolled === '' ? Boolean(selectedSaleStart()) : ymd(enrolled);
   const incidentRaw = $('incident').value.trim();
-  const incidentOk = ymd(incidentRaw) || incidentRaw === '';
+  const incidentOk = incidentRaw === '' || ymd(incidentRaw);
   const ready = $('consent').checked
     && $('insurer').value.trim()
     && enrolledOk
     && incidentOk
     && $('codes').value.trim();
   $('go').disabled = !ready;
+
+  //: ★막을 때는 **이유를 말한다.** 버튼이 회색인 것만으로는 무엇이 모자란지 모른다.
+  const why = [];
+  if (!$('insurer').value.trim()) why.push('보험사');
+  if (!enrolledOk) why.push(enrolled === '' ? '계약일(또는 상품 선택)' : '계약일 8자리');
+  if (!incidentOk) why.push('진료일 8자리');
+  if (!$('codes').value.trim()) why.push('질병코드');
+  if (!$('consent').checked) why.push('확인 동의');
+  $('go').setAttribute('data-tip', ready
+    ? '입력한 보험정보로 보장 여부를 확인합니다.\n결과는 오른쪽 「보장 확인 상세」에 나옵니다.'
+    : `아직 넣어야 할 것 — ${why.join(' · ')}`);
 }
 
 /* ── 상품명 자동완성 ───────────────────────────────────────────────
@@ -1181,6 +1310,8 @@ async function sendChat(text) {
   const msg = (text ?? $('chatIn').value).trim();
   if (!msg) return;
   $('chatIn').value = '';
+  //: 보냈으면 고를 것이 없다 — 열려 있던 목록을 닫는다(옛 결과가 남지 않게).
+  $('chatIn')._combo?.close();
   bubble('me', esc(msg));
 
   const productLine = productLineFromChat(msg);
@@ -1221,12 +1352,18 @@ async function sendChat(text) {
 
   if (body.found && body.quotes.length) {
     html += `<div class="small muted" style="margin-top:8px">정의 구절 ${body.total_passages}개 · 보험사 ${body.insurers.length}곳</div>`;
+    //: ★★인용 원문은 **접어 둔다.** 약관 표를 그대로 옮긴 것이라 한 건이 수십 줄이고,
+    //:   세 건만 붙어도 답변이 화면 밖으로 밀려난다(실측 2026-08-26).
+    //:   ★그래도 **어디서 온 인용인지는 접기 전에 보인다** — 보험사·문서·쪽수는
+    //:   접힌 상태에서도 그대로 읽힌다. 근거의 출처를 클릭해야 알 수 있게 두면 안 된다.
     html += body.quotes.map((q) => `
-      <div class="cite">
-        <div class="small muted">${esc(q.insurer)} · ${esc(q.title)}${q.kind === 'appendix' ? ' (붙임 정의표)' : ''}</div>
+      <details class="cite cite-fold">
+        <summary>
+          <span class="small muted">${esc(q.insurer)} · ${esc(q.title)}${q.kind === 'appendix' ? ' (붙임 정의표)' : ''}</span>
+          <span class="loc">${esc(q.locator)}</span>
+        </summary>
         <div class="quote">${esc(q.quote)}</div>
-        <div class="loc">${esc(q.locator)}</div>
-      </div>`).join('');
+      </details>`).join('');
   }
 
   //: ★경고를 접지 않는다. 특히 "보장 여부는 판정하지 않습니다".
@@ -1367,7 +1504,12 @@ document.addEventListener('keydown', (e) => {
 $('resetChatBtn').addEventListener('click', resetChat);
 $('obGo').addEventListener('click', submitObservation);
 $('chatGo').addEventListener('click', () => sendChat());
-$('chatIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+$('chatIn').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  //: ★목록에서 하나를 짚고 있는 중이면 이 Enter 는 **고르는 Enter** 다. 보내지 않는다.
+  if (e.currentTarget.hasAttribute('data-combo-active')) return;
+  sendChat();
+});
 document.querySelectorAll('.chip-btn').forEach((b) =>
   b.addEventListener('click', () => sendChat(b.dataset.q)));
 $('codeListOpen').addEventListener('click', () => {
@@ -1385,6 +1527,7 @@ window.addEventListener('resize', markQuickScrollable);
 //: ★폭이 바뀌면 「덮개인가 한 칸인가」가 달라진다 — 막는 범위도 따라 바꾼다.
 window.addEventListener('resize', syncInertLayers);
 
+initTips();
 document.querySelectorAll('.scroll-soft').forEach(markScrollingWhileScrolled);
 //: 기본 드롭다운 대신 입력칸 바로 아래에 우리 목록을 붙인다.
 createCombo($('insurer'), $('insurers'));
@@ -1397,6 +1540,7 @@ createCombo($('productName'), $('products'), {
 });
 syncIncidentPlaceholder();
 syncEnrolledPlaceholder();
+syncObservationPlaceholders();
 syncInertLayers();
 loadServiceStatus();
 setPanelOpen(!isNarrow(), { focus: false });
