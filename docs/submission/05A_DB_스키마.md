@@ -110,13 +110,47 @@ CREATE TABLE policy_clause_occurrence (       -- 어느 문서 · 몇 쪽 · 인
     chunk_type        text,
     is_statute        boolean,
     parse_status      text,
-    index_generation  text    NOT NULL DEFAULT 's5-mixed',  -- ★§2-2
+    index_generation  text    NOT NULL DEFAULT 's5-mixed',  -- ★§2-2 · ★★기본값 주의(§2-3)
     source_kind       text    NOT NULL DEFAULT 'clause',    -- clause / annex / s7_fact
     PRIMARY KEY (content_hash, sha256, qualified_no, page_from, index_generation)
 );
 CREATE INDEX policy_clause_occurrence_gen ON policy_clause_occurrence (index_generation);
 CREATE INDEX policy_clause_occurrence_sha ON policy_clause_occurrence (sha256);
+
+-- ★★참조 무결성 (2026-08-26 신설). 그 전에는 **외래키가 0개**였다.
+ALTER TABLE policy_clause_chunk
+    ADD CONSTRAINT policy_clause_chunk_content_fk
+    FOREIGN KEY (content_hash) REFERENCES policy_clause_content(content_hash)
+    ON DELETE RESTRICT;
+ALTER TABLE policy_clause_occurrence
+    ADD CONSTRAINT policy_clause_occurrence_content_fk
+    FOREIGN KEY (content_hash) REFERENCES policy_clause_content(content_hash)
+    ON DELETE RESTRICT;
 ```
+
+### ★2-0. 이 DDL 이 사는 곳은 **`mall_vec`** 이다
+
+이 문서 앞부분의 `core`·`app`·`ops` 는 `insurance_real` 의 스키마이고,
+위 `policy_clause_*` 셋은 **다른 DB(`mall_vec`)의 `public` 스키마**다.
+둘은 **원장 ↔ 파생 색인** 관계로 설계돼 있으나
+**지금은 잇는 적재 경로가 없다**(`scripts/index/` 어디에도 `core.*` 를 읽는 코드가 0건).
+→ [개념 스키마 리포트](../reports/2026-08-26_0100_개념스키마가_비어_있어_근거있는_판정이_저장되지_않는다.md)
+
+### ★2-0-1. 외래키를 «왜 이제야» 세웠나 — 못 세우고 있었다
+
+제약이 없으니 조각·발생이 본문 없이 들어가도 아무도 안 막았고, **고아 발생이
+45,816행** 쌓여 있었다. 그 상태로는 FK 생성 자체가 실패한다.
+2026-08-26 에 —
+
+1. 산출물에 없는 낡은 발생 **13,527행** 정리(백업 후)
+2. 미임베딩 **42,205조각** 적재 → `occurrence → content` 위반 5,791 → **0**
+3. `s5-mixed` 세대 은퇴 — 발생행 **158,186** 만 제거(본문·청크는 그대로)
+
+를 거쳐 위반이 0이 된 뒤에 세웠다.
+
+★`CASCADE` 가 아니라 **`RESTRICT`** 다. `CASCADE` 면 본문 한 줄을 지울 때 그 벡터가
+  조용히 함께 사라진다 — 검색 결과가 줄어드는데 아무도 모른다. 막고 사람이 보게 한다.
+★**지우는 순서**: 자식 먼저, 부모 나중(조각·발생 → 본문).
 
 ### 2-1. ★`embed_model` 을 **기본키에** 넣은 이유 — 안 넣으면 조용히 샌다
 
@@ -145,13 +179,25 @@ SELECT source_kind,      count(*) FROM policy_clause_occurrence
 SELECT embed_model,      count(*) FROM policy_clause_chunk GROUP BY 1;
 ```
 
-| 테이블 | 행 |
-|---|---:|
-| `policy_clause_occurrence` **전체** | **368,919** |
-| ├ `index_generation = 's6'` ← ★현재 검색 세대 | **210,733** |
-| └ `index_generation = 's5-mixed'` ← 이전 세대 | 158,186 |
-| `policy_clause_content` | **64,607** |
-| `policy_clause_chunk` | **122,772** |
+| 테이블 | 행 (2026-08-26 실측) | 이전 판(2026-08-04) |
+|---|---:|---:|
+| `policy_clause_occurrence` **전체** | **197,206** | 368,919 |
+| ├ `index_generation = 's6'` ← 현재 검색 세대 | **197,206** | 210,733 |
+| └ `index_generation = 's5-mixed'` ← ★**은퇴함** | **0** | 158,186 |
+| `policy_clause_content` | **69,137** | 64,607 |
+| `policy_clause_chunk` | **164,977** | 122,772 |
+| ★고아 발생(청크 없음) | **6** | 45,816 |
+
+**무엇이 바뀌었나** — 낡은 발생 13,527 정리 · 미임베딩 42,205조각 적재 ·
+`s5-mixed` 158,186 은퇴. **인용 가능 189,890 은 그 내내 불변**이고
+판정 동등성도 은퇴 전후 100건 불일치 0이다.
+
+### ★2-3. `index_generation` 기본값이 **죽은 값을 가리킨다**
+
+DDL 의 `DEFAULT 's5-mixed'` 는 이제 **0행짜리 세대**다. 기본값으로 들어간 새 행은
+아무도 안 읽는다. 적재 경로는 세대를 **명시해서** 넘기므로 지금 문제는 없지만,
+직접 INSERT 하면 조용히 사라지는 행이 된다. 기본값을 없애거나 현행 세대로 바꿔야 한다.
+★**이 문서에 적어 두고 아직 안 고쳤다.**
 
 **`s6` 발생 210,733의 내역**
 
