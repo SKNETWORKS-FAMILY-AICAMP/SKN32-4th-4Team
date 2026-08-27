@@ -11,6 +11,7 @@
 |:---:|:---:|:---:|:---:|:---:|
 | 김지혜 | 서유현 | 송채영 | 정재희 | 최연우 |
 |<a href="https://github.com/kimji9663"><img src="https://img.shields.io/badge/kimji9663-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/cls15rn"><img src="https://img.shields.io/badge/cls15rn-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/changlike"><img src="https://img.shields.io/badge/changlike-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/jjh430"><img src="https://img.shields.io/badge/jjh430-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/roroblack"><img src="https://img.shields.io/badge/roroblack-181717?style=for-the-badge&logo=github&logoColor=white"></a>|
+|     |       | 데이터 처리 및 검수 <br> 산출물 제작 |      |       |
 <br/>
 
 ## 2. WBS
