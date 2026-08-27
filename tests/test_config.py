@@ -6,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.core.config_validation import (
@@ -36,6 +37,21 @@ def test_config_module_contains_settings_only():
 def test_default_provider_is_local():
     s = Settings(_env_file=None)
     assert s.LLM_PROVIDER == "local"
+
+
+def test_chat_cost_guard_settings_have_safe_defaults_and_reject_negative_values():
+    settings = Settings(_env_file=None)
+    assert settings.CHAT_RATE_LIMIT_PER_MINUTE == 20
+    assert settings.CHAT_LLM_MAX_CALLS_PER_MINUTE == 60
+    assert settings.CHAT_LLM_CACHE_TTL_SECONDS == 30
+    assert settings.CHAT_TRUST_FORWARDED_FOR is False
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, CHAT_RATE_LIMIT_PER_MINUTE=-1)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, CHAT_LLM_MAX_CALLS_PER_MINUTE=-1)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, CHAT_LLM_CACHE_TTL_SECONDS=-1)
 
 
 def test_readiness_keys():

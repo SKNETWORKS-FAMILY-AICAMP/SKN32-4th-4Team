@@ -49,6 +49,10 @@ _SET = _ROOT / "data" / "eval" / "embed_bench.json"
 #:     다만 fp16 가중치의 **1 ULP 변화가 코사인 거리 4.65e-10** 로 계산되므로,
 #:     "정말 한 비트만 다른" 경우는 무변화로 분류된다. 그건 의도한 동작이다 —
 #:     재려는 것은 **뒷부분이 표현을 의미 있게 바꿨는가**이지 비트 동일성이 아니다.
+#: 배치 기본값. ★`repro()` 와 여기가 갈라지면 "재현 명령"이 재현되지 않는다.
+#:   그래서 상수 하나를 둘이 함께 본다.
+_DEFAULT_BATCH = 16
+
 _BLIND_EPS = 1e-9
 
 _OUT = _ROOT / "data" / "eval" / "embed_bench_results"
@@ -351,6 +355,11 @@ def run(model_id: str, *, q_prefix: str, d_prefix: str, batch: int, device: str,
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "",
         "dim": dim,
         "dtype": dtype,
+        #: ★★**배치를 남긴다.** 안 남겨서 실제로 대가를 치렀다(2026-08-26) —
+        #:   4bit 값이 배치에 따라 갈리는데(0.5416@16 → 0.5352@4) 저장된 21건 어디에도
+        #:   `batch` 가 없어, "원 측정은 배치 16" 이 **기록이 아니라 기본값에서 온 추정**이었다.
+        #:   조건으로 말할 값은 조건으로 저장해야 한다.
+        "batch": batch,
         "max_seq_length": max_len,
         "load_sec": round(load_s, 1),
         "corpus": len(corpus),
@@ -421,6 +430,8 @@ def run(model_id: str, *, q_prefix: str, d_prefix: str, batch: int, device: str,
         #:   조건이 달라졌는데 `probes_device` 로는 안 드러났다(코덱스 지적).
         old["probes_gpu"] = res.get("gpu", "")
         old["probes_gpu_matches_original"] = (res.get("gpu") == old.get("gpu"))
+        #: ★탐침 재측정의 배치는 원 측정의 배치와 다를 수 있다. 덮어쓰지 않고 따로 남긴다.
+        old["probes_batch"] = batch
         old["probes_device"] = dev
         old["probes_dtype"] = dtype
         old["probes_dtype_matches_original"] = (dtype == old.get("dtype"))
@@ -597,6 +608,11 @@ def repro_commands(md: bool = False) -> None:
         #: ★배포 설정을 바꿔 잰 것은 `--max-seq` 가 있어야 같은 값이 나온다.
         if " (max_seq=" in d["model"]:
             cmd += f" --max-seq {d['max_seq_length']}"
+        #: ★기록이 있고 기본값과 다를 때만 붙인다.
+        #:   기존 21건에는 `batch` 가 없다 — 없는 것을 기본값으로 **채우지 않는다.**
+        #:   채우면 "기록된 값"과 "추정한 값"이 출력에서 구별되지 않는다.
+        if d.get("batch") is not None and d["batch"] != _DEFAULT_BATCH:
+            cmd += f" --batch {d['batch']}"
         lines.append((cmd + " --purge", d["model"], d.get("dtype")))
     if md:
         print("```bash")
@@ -721,7 +737,7 @@ def main(argv=None) -> int:
     ap.add_argument("--model")
     #: ★64 로 두었더니 32K 문맥 모델(granite)이 어텐션 마스크에서 CUDA OOM 났다.
     #:   조각이 448토큰이라 배치를 키워도 얻는 게 적다.
-    ap.add_argument("--batch", type=int, default=16)
+    ap.add_argument("--batch", type=int, default=_DEFAULT_BATCH)
     ap.add_argument("--no-fp16", action="store_true", help="fp32 로 잰다(대조용)")
     #: ★8B·12B 를 12GB GPU 에서 재려면 이것이 필요하다.
     #: ★배포 설정의 길이 제한을 올려 본다. 모델 교체 없이 고쳐지는지 확인용.
@@ -750,7 +766,22 @@ def main(argv=None) -> int:
     #: ★`--compare` 와 `--report` 가 함께 쓴다. 빈 문자열이면 전부(섞인다 — 권장 안 함).
     ap.add_argument("--dtype", default="float16",
                     help="대상 정밀도. float16(기본) | 4bit | \"\"(전부·섞임)")
+    ap.add_argument("--set", default="",
+                    help="평가셋 경로(기본 data/eval/embed_bench.json, s5 고정) — "
+                         "s6/holdout 처럼 다른 세트로 재려면 지정한다")
+    ap.add_argument("--results-dir", default="",
+                    help="결과 저장 경로(기본 data/eval/embed_bench_results) — "
+                         "--set 을 바꾸면 **반드시 같이 바꾼다**, 안 그러면 s5 결과를 덮어쓴다")
     a = ap.parse_args(argv)
+
+    #: ★★`--set`/`--results-dir` 를 주면 전역 경로를 다시 묶는다. 안 주면
+    #:   기존 s5 하드코딩 경로 그대로라 하위호환이 100% 유지된다.
+    if a.set or a.results_dir:
+        global _SET, _OUT
+        if a.set:
+            _SET = pathlib.Path(a.set)
+        if a.results_dir:
+            _OUT = pathlib.Path(a.results_dir)
 
     if a.list:
         print("★측정하지 않는 것:")

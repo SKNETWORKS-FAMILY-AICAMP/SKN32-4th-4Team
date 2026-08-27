@@ -13,8 +13,8 @@ from app.auth.security import get_current_user
 from app.auth.store import get_auth_store
 from app.core.config import get_settings
 from app.core.errors import ValidationErr
-from app.db.models import User
-from db.postgres.auth_repository import PgAuthStore, PgUser
+from app.auth.user_types import AuthUser
+from db.postgres.auth_repository import PgAuthStore
 from app.ml import face as face_ml
 from app.routers._uploads import read_capped
 from app.services import face_service
@@ -34,7 +34,7 @@ class FaceRegisterResponse(BaseModel):
 
 @router.get("/status", response_model=FaceStatusResponse)
 def face_status(
-    user: User | PgUser = Depends(get_current_user), store=Depends(get_auth_store)
+    user: AuthUser = Depends(get_current_user), store=Depends(get_auth_store)
 ) -> FaceStatusResponse:
     return FaceStatusResponse(registered=face_service.has_face(store, user.id))
 
@@ -42,7 +42,7 @@ def face_status(
 @router.post("/register", response_model=FaceRegisterResponse)
 async def face_register(
     images: list[UploadFile] = File(...),
-    user: User | PgUser = Depends(get_current_user),
+    user: AuthUser = Depends(get_current_user),
     store=Depends(get_auth_store),
 ) -> FaceRegisterResponse:
     """다중 이미지 등록(여러 샷을 품질 게이팅 후 임베딩 평균). 단일 샷도 허용."""
@@ -103,12 +103,12 @@ async def face_benchmark(
 
 @router.delete("/register", response_model=FaceStatusResponse)
 def face_unregister(
-    user: User | PgUser = Depends(get_current_user), store=Depends(get_auth_store)
+    user: AuthUser = Depends(get_current_user), store=Depends(get_auth_store)
 ) -> FaceStatusResponse:
     if isinstance(store, PgAuthStore):
         store.delete_face(user.id)
     else:
-        from app.db.models import FaceCredential
+        from db.sqlite_legacy.models import FaceCredential
 
         cred = store.query(FaceCredential).filter(FaceCredential.user_id == user.id).first()
         if cred is not None:

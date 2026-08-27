@@ -31,11 +31,23 @@ def test_git_info_does_not_treat_stderr_warning_as_changed_path(monkeypatch):
     assert report["changed_paths"] == ["app/main.py"]
 
 
-def test_migration_info_has_expected_latest_and_sha256():
+def test_migration_numbering_is_sound():
+    """★**개수를 박지 않는다** (2026-08-27 정정).
+
+    앞 판은 `count == 19` 와 `latest == EXPECTED_LATEST` 를 걸어 뒀다.
+    마이그레이션을 하나 더할 때마다 시험이 깨진다 — 그러면 사람은
+    **시험을 고치는 대신 기능을 되돌리기 쉽다.** 오늘 020 을 더하고 실제로 깨졌다.
+
+    ★재야 할 것은 「몇 번까지인가」가 아니라 **번호가 성한가**다 —
+      빠진 번호도 겹친 번호도 없어야 한다. 그건 개수와 무관하게 늘 참이어야 한다.
+    """
     report = verify_release._migration_info()
 
-    assert report["count"] == 16
-    assert report["latest"] == verify_release.EXPECTED_LATEST
+    assert report["count"] > 0
+    assert report["latest"], "마이그레이션을 하나도 못 찾았다"
+    assert report["numbering_faults"] == [], (
+        f"마이그레이션 번호가 성하지 않다: {report['numbering_faults']}"
+    )
     assert report["latest_matches"] is True
     assert all(len(item["sha256"]) == 64 for item in report["files"])
 

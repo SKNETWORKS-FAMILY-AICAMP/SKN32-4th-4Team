@@ -62,6 +62,20 @@ def check_meta(meta: dict) -> str:
     return prof.key
 
 
+def _drop_alias_only_vectors(hashes, seqs, nchunks, texts, vecs, alias_only):
+    """대표 문서 어디에도 없는 별칭 전용 벡터 행을 같은 인덱스로 제거한다."""
+    if not alias_only:
+        return hashes, seqs, nchunks, texts, vecs
+    keep = [i for i, content_hash in enumerate(hashes) if content_hash not in alias_only]
+    return (
+        [hashes[i] for i in keep],
+        [seqs[i] for i in keep],
+        [nchunks[i] for i in keep],
+        [texts[i] for i in keep],
+        vecs[keep],
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True, help="meta.json·chunks.jsonl·vectors.npz 가 든 폴더")
@@ -73,10 +87,13 @@ def main(argv: list[str] | None = None) -> int:
 
     import numpy as np
 
-    from app.adapters import pgvector_clause_index as ix
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres import pgvector_clause_index as ix
+    from db.postgres.pgvector_index import get_conn
+    from app.adapters.document_content_aliases import load as load_content_aliases
+    from app.adapters.document_content_aliases import prune_occurrences
 
     src = pathlib.Path(a.src)
+    aliases = load_content_aliases()
     meta = json.loads((src / "meta.json").read_text(encoding="utf-8"))
     model_key = check_meta(meta)
     print(f"승인 프로필과 일치 · 프로필 키 = {model_key}", flush=True)
@@ -134,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"매니페스트 sha {len(sha_by12):,}", flush=True)
     bodies: dict[str, str] = {}
     occ: list[tuple] = []
+    alias_content_hashes: set[str] = set()
+    skipped_alias_docs = 0
     tag = __import__("app.core.release", fromlist=["x"]).current().clause_tag
     want = set(hashes)
     for p in sorted((_ROOT / "data" / "structured").glob(f"*/{tag}/*.clauses.json")):
@@ -151,6 +170,14 @@ def main(argv: list[str] | None = None) -> int:
             #:   파일 경로와 PG 경로가 **다른 답**을 준다(§0).
             _fail(f"64자 sha256 을 찾지 못했습니다: {sha12} "
                   f"(매니페스트에 없습니다). 매니페스트를 갱신하세요.")
+        if sha in aliases:
+            skipped_alias_docs += 1
+            alias_content_hashes.update(
+                c.get("content_hash")
+                for c in (d.get("clauses") or [])
+                if c.get("content_hash")
+            )
+            continue
         insurer = d.get("insurer") or p.parent.parent.name
         for c in (d.get("clauses") or []):
             h = c.get("content_hash")
@@ -182,10 +209,20 @@ def main(argv: list[str] | None = None) -> int:
                          "parse_status": d.get("parse_status")}))
     print(f"본문 {len(bodies):,} · 발생 {len(occ):,} (세대 {gen})", flush=True)
     missing = want - set(bodies)
-    if missing:
+    alias_only = missing & alias_content_hashes
+    unexpected_missing = missing - alias_content_hashes
+    if unexpected_missing:
         #: ★조용히 넘기지 않는다. 본문 없는 조각은 인용할 수 없다.
-        _fail(f"벡터는 있는데 본문을 못 찾은 조항 {len(missing):,}건. "
+        _fail(f"벡터는 있는데 본문을 못 찾은 조항 {len(unexpected_missing):,}건. "
               f"산출물 태그({tag})가 벡터를 만든 것과 다릅니까?")
+    if alias_only:
+        hashes, seqs, nchunks, texts, vecs = _drop_alias_only_vectors(
+            hashes, seqs, nchunks, texts, vecs, alias_only
+        )
+    print(
+        f"문서 별칭 제외 {skipped_alias_docs:,}건 · 별칭 전용 조항 {len(alias_only):,}건",
+        flush=True,
+    )
 
     if a.dry_run:
         print("dry-run — 쓰지 않았습니다.", flush=True)
@@ -202,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
             print("옛 조각 테이블 드롭", flush=True)
         ix.ensure_schema(conn)
         conn.commit()
+        removed_aliases = prune_occurrences(conn, aliases, generation=gen)
+        print(f"기존 별칭 발생 정리 {removed_aliases:,}행", flush=True)
 
         n = 0
         for i in range(0, len(texts), a.batch):

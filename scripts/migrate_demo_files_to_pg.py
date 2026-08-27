@@ -10,7 +10,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from app.adapters import pg_demo_submission_store as pg
+from db.postgres import pg_demo_submission_store as pg
 
 ROOT = Path(__file__).resolve().parents[1]
 SUBMISSIONS = ROOT / "data" / "demo" / "submissions"

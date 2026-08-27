@@ -75,7 +75,7 @@ def _payload(*, outcome="paid", code="S72.0"):
 @pytest.mark.pg
 def test_pg_자동정합성_승격과_멱등성이_원자적으로_동작한다(pg_demo):
     from app.adapters import demo_submission_store as store
-    from app.adapters.pg_demo_submission_store import fetch_cohort
+    from db.postgres.pg_demo_submission_store import fetch_cohort
     from app.core.domain.insurance import KcdCode
     from app.core.domain.synthetic_validation import RULE_VERSION
 

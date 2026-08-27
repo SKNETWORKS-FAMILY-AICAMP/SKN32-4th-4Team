@@ -66,8 +66,8 @@ _APPENDIX_STOP = re.compile(r"\n제\s*\d+\s*관\s|\n부\s*칙\s*\n")
 _PROBE_STRIP = re.compile(r"[\s>\]\)】_\-]")
 
 
-def _clause_passages(path: pathlib.Path) -> list[dict]:
-    doc = json.loads(path.read_text(encoding="utf-8"))
+def _clause_passages(path: pathlib.Path, *, doc: dict | None = None) -> list[dict]:
+    doc = doc or json.loads(path.read_text(encoding="utf-8"))
     src = doc.get("source") or {}
     sha = src.get("sha256") or doc.get("sha256") or ""
     insurer = src.get("insurer") or ""
@@ -161,15 +161,29 @@ def _appendix_passage(sha12: str) -> dict | None:
 
 
 def main() -> int:
+    from app.adapters.document_content_aliases import ensure_canonicals_present
+    from app.adapters.document_content_aliases import load as load_content_aliases
+
     files = sorted(_STRUCT.glob("*/s5_*/*.clauses.json"))
     if not files:
         print("s5 조항 산출물이 없습니다. 먼저 전처리를 돌리세요.", file=sys.stderr)
         return 2
 
+    aliases = load_content_aliases()
     rows: list[dict] = []
     n_clause = n_appendix = n_pointer_only = n_lost = 0
+    n_docs = n_skip_alias = 0
+    seen_shas: set[str] = set()
     for p in files:
-        got = _clause_passages(p)
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        src = doc.get("source") or {}
+        sha = src.get("sha256") or doc.get("sha256") or ""
+        seen_shas.add(sha)
+        if sha in aliases:
+            n_skip_alias += 1
+            continue
+        n_docs += 1
+        got = _clause_passages(p, doc=doc)
         real = [g for g in got if g.get("kind")]
 
         #: ★참조뿐인 조항이 있는지 **먼저** 본다.
@@ -193,6 +207,8 @@ def main() -> int:
                 #: ★못 찾은 것을 **센다.** 이것이 용어 설명이 답하지 못하는 범위다.
                 n_lost += 1
 
+    ensure_canonicals_present(aliases, seen_shas, context="용어 색인 S5 세대")
+
     _OUT.parent.mkdir(parents=True, exist_ok=True)
     with _OUT.open("w", encoding="utf-8") as f:
         for r in rows:
@@ -200,7 +216,9 @@ def main() -> int:
 
     meta = {
         "built_from": "s5",
-        "documents": len(files),
+        "source_documents": len(files),
+        "documents": n_docs,
+        "content_alias_documents_skipped": n_skip_alias,
         "clause_passages": n_clause,
         "appendix_passages": n_appendix,
         "documents_with_pointer_only": n_pointer_only,

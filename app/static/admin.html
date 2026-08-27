@@ -1144,6 +1144,16 @@
     .logged-out-gate p:first-child { font-size: 17px; font-weight: 700; color: var(--text); margin: 0 0 8px; }
     .logged-out-gate-sub { margin: 0; font-size: 13px; line-height: 1.6; }
 
+    /* 모바일 임시 완화: 화면 담당(최연우) 설계 확인 전까지 최소 폭 강제만 해제한다.
+       전체 반응형 재설계가 아니라, 375px 같은 좁은 화면에서 body가 1080px로
+       고정돼 로그인 패널까지 통째로 넘치던 것만 없앤다. 1080px 이상에서는
+       이 규칙이 전혀 적용되지 않으므로 기존 데스크톱 레이아웃은 그대로다.
+       docs/handoff/23_관리자화면_모바일_가로넘침_확인요청.md 참고 — 확정 설계 아님. */
+    @media (max-width: 1079px) {
+      body { min-width: 0; }
+      .login-panel-inner { max-width: 100%; }
+    }
+
     /* 인쇄: 네비/로그인/버튼을 숨기고 대시보드 데이터만 깔끔히 인쇄 */
     @media print {
       body { min-width: 0; background: #fff; }
@@ -1466,6 +1476,36 @@
             </div>
 
             <p class="sim-note" id="modeNote"></p>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="llmProviderTitle">
+          <header class="panel-header">
+            <div>
+              <h2 id="llmProviderTitle" class="panel-title">LLM 프로바이더</h2>
+              <p class="panel-subtitle">
+                판정 설명문을 생성하는 LLM을 바꿉니다. <code>.env</code> 기본값을
+                덮어쓰되, "기본값"으로 되돌리면 다시 <code>.env</code>를 씁니다.
+              </p>
+            </div>
+
+            <span id="llmProviderBadge" class="status-badge status-unknown">확인 중</span>
+          </header>
+
+          <div class="sim-body">
+            <label class="mode-switch">
+              프로바이더
+              <select id="llmProviderSelect">
+                <option value="">기본값(.env)</option>
+                <option value="local">local(로컬 Gemma)</option>
+                <option value="openai">openai</option>
+                <option value="gemini">gemini</option>
+              </select>
+            </label>
+
+            <p class="mode-desc" id="llmProviderDesc">-</p>
+
+            <p class="sim-note" id="llmProviderNote"></p>
           </div>
         </section>
 

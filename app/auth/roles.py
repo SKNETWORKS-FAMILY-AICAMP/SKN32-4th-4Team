@@ -14,7 +14,7 @@ from fastapi import Depends
 
 from app.auth.security import get_current_user
 from app.core.errors import ForbiddenErr, InfraError
-from app.db.models import User
+from app.auth.user_types import AuthUser
 from db.postgres.auth_repository import PgAuthStore
 
 ROLE_USER = "USER"
@@ -29,7 +29,7 @@ def validate_role(role: str | None) -> str:
     return role
 
 
-def require_admin(user: User = Depends(get_current_user)) -> User:
+def require_admin(user: AuthUser = Depends(get_current_user)) -> AuthUser:
     """ADMIN만 통과. 미인증은 get_current_user가 401, USER는 여기서 403.
 
     라우터 단위 의존성으로 걸어 **fail-closed**를 강제한다(엔드포인트마다 붙이면 누락된다).
@@ -62,7 +62,7 @@ def change_role(db, username: str, role: str, *, actor: str) -> dict:
         가입한 누구나 관리자가 된다.
     """
     from app.core.errors import NotFoundErr, ValidationErr
-    from app.db.models import User as _User
+    from db.sqlite_legacy.models import User as _User
     from app.obs.events import record_event
 
     validate_role(role)

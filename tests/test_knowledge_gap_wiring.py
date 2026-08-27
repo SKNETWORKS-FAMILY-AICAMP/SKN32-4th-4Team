@@ -23,8 +23,8 @@ from app.core.domain.precheck_result import PrecheckOutcome
 
 
 def _gaps(client):
-    from app.db.database import SessionLocal
-    from app.db.models import KnowledgeGap
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import KnowledgeGap
 
     db = SessionLocal()
     try:

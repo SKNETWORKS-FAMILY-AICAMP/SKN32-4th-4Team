@@ -11,6 +11,7 @@ from openai import OpenAI
 
 from app.core.config import Settings, get_settings
 from app.core.config_validation import has_google_key, has_openai_key
+from app.core.domain import llm_provider_override
 from app.core.errors import ConfigError
 
 
@@ -22,7 +23,7 @@ def get_chat_client(settings: Settings | None = None) -> OpenAI:
     - gemini: OpenAI 호환 클라이언트가 아니므로 `get_langchain_chat`을 사용
     """
     settings = settings or get_settings()
-    provider = settings.LLM_PROVIDER
+    provider = llm_provider_override.current() or settings.LLM_PROVIDER
 
     if provider == "local":
         if not (settings.LOCAL_BASE_URL and settings.LOCAL_BASE_URL.strip()):
@@ -58,7 +59,7 @@ def get_langchain_chat(settings: Settings | None = None):
     키 없으면 ConfigError (폴백 없음).
     """
     settings = settings or get_settings()
-    provider = settings.LLM_PROVIDER
+    provider = llm_provider_override.current() or settings.LLM_PROVIDER
 
     def _require(value: str | None, name: str) -> str:
         if not (value and value.strip()):
@@ -114,7 +115,8 @@ def get_gemini_client(settings: Settings | None = None):
     return genai.Client(
         api_key=settings.GOOGLE_API_KEY,
         http_options=types.HttpOptions(
-            timeout=int(settings.LLM_REQUEST_TIMEOUT_SECONDS * 1000)
+            timeout=int(settings.LLM_REQUEST_TIMEOUT_SECONDS * 1000),
+            retry_options=types.HttpRetryOptions(attempts=0),
         ),
     )
 
@@ -122,7 +124,7 @@ def get_gemini_client(settings: Settings | None = None):
 def get_active_model(settings: Settings | None = None) -> str:
     """현재 프로바이더의 채팅 모델명을 반환한다."""
     settings = settings or get_settings()
-    provider = settings.LLM_PROVIDER
+    provider = llm_provider_override.current() or settings.LLM_PROVIDER
     if provider == "local":
         return settings.LOCAL_MODEL
     if provider == "openai":

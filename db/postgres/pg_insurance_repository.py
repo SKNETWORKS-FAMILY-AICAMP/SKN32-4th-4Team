@@ -849,7 +849,18 @@ class PgInsuranceRepository:
             return {
                 "backend": "postgres",
                 "database": database,
-                "ready": not missing and latest == "016_runtime_ownership_and_grants.sql",
+                #: ★★**마지막 마이그레이션 이름을 박지 않는다** (2026-08-26).
+                #:
+                #:   `latest == "016_runtime_ownership_and_grants.sql"` 로 굳어 있었다.
+                #:   그래서 017·018·019 를 더하자 **`ready=false`** 가 됐다 —
+                #:   스키마가 더 최신인데 「준비 안 됨」이라고 답한 것이다.
+                #:   마이그레이션을 더할 때마다 이 줄과 시험을 같이 고쳐야 했고,
+                #:   안 고치면 **운영이 「준비 안 됨」으로 막힌다.**
+                #:
+                #:   재는 것은 「필요한 테이블이 다 있나」다. 그것은 `missing` 이 이미 답한다.
+                #:   ledger 는 **「적용 기록이 있는가」**만 본다 — 몇 번까지인지는
+                #:   여기서 판정할 일이 아니다(적용기가 checksum 으로 이미 지킨다).
+                "ready": not missing and bool(latest),
                 "missing_tables": missing,
                 "migration_latest": latest,
             }
@@ -966,9 +977,18 @@ class PgInsuranceRepository:
         source_kind: str,
         ordinal: int,
         quote: str,
+        content_hash: str = "",
     ) -> InsuranceClauseReference:
         if source_kind not in {"clause", "annex"} or ordinal < 0 or not quote:
             raise ValidationErr("occurrence source_kind/ordinal/quote가 유효하지 않습니다.")
+        if not content_hash.strip():
+            #: ★★**내용 해시 없이는 조회하지 않는다** (2026-08-27).
+            #:   자리(`ordinal`)만 맞춰 조회하면 그 자리가 밀렸을 때 **다른 조항**이 나온다.
+            #:   실측: 색인 순번과 core 순번의 자리 일치가 62.51% 뿐이었다.
+            raise ValidationErr(
+                "인용 occurrence 에 content_hash 가 없습니다 — 자리만으로는 "
+                "그 자리가 밀렸는지 확인할 수 없습니다."
+            )
         conn = self._connect()
         try:
             rows = conn.execute(
@@ -980,8 +1000,15 @@ class PgInsuranceRepository:
                 "JOIN core.document_extraction de "
                 "ON de.id=pc.document_extraction_id "
                 "JOIN core.clause_content cc ON cc.content_hash=pc.content_hash "
+                #: ★★`pc.ordinal` 은 **산출물이 매긴 순번**이고, 넘어온 값도
+                #:   이제 산출물 순번(`source_ordinal`)이다 — 같은 체계다(2026-08-27).
+                #:   ★거기에 `content_hash` 를 **함께** 본다. 자리가 밀렸으면 여기서 걸린다.
+                #:     한 문서 안에 같은 내용이 두 번 실리는 자리가 2,789개 있어
+                #:     해시 단독으로는 모호하다 — 자리와 내용을 둘 다 봐야 유일해진다.
+                #:   ★`position(quote in body)>0` 는 그대로 둔다. 세 번째 방어선이다.
+                #:     다만 짧고 흔한 인용문이면 약하다(코덱스 지적) — 유일성은 위 둘이 낸다.
                 "WHERE pc.policy_version_id=%s AND d.sha256=%s "
-                "AND pc.source_kind=%s AND pc.ordinal=%s "
+                "AND pc.source_kind=%s AND pc.ordinal=%s AND pc.content_hash=%s "
                 "AND pc.citeable=true AND de.approval='accepted' "
                 "AND position(%s in cc.body)>0 ORDER BY pc.id",
                 (
@@ -989,6 +1016,7 @@ class PgInsuranceRepository:
                     document_sha256,
                     source_kind,
                     ordinal,
+                    content_hash,
                     quote,
                 ),
             ).fetchall()

@@ -104,8 +104,9 @@ def _token_counter(profile: dict | None = None):
 
 
 def main(argv: list[str] | None = None) -> int:
-    from app.adapters import pgvector_clause_index as ix
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres import pgvector_clause_index as ix
+    from db.postgres.pgvector_index import get_conn
+    from app.adapters.document_content_aliases import load as load_content_aliases
 
     ap = argparse.ArgumentParser(description="인덱스 A 적재")
     ap.add_argument("--limit", type=int, default=0, help="문서 수 제한(맛보기)")
@@ -132,13 +133,21 @@ def main(argv: list[str] | None = None) -> int:
     args.resolved_tag = tag
     note = "  ★승인 릴리스가 아니라 지정한 세대를 읽는다(--clause-tag)" if args.clause_tag else ""
     print(f"[세대] 조항 산출 {tag}{note}", flush=True)
-    texts, occurrences, report = _collect(args.limit or None, args.ignore_citation_gate, tag)
+    #: 수집과 적재가 **같은 별칭 스냅샷**을 쓴다. 두 단계 사이에 원장이 바뀌어
+    #: 서로 다른 문서 집합을 읽고 지우는 경쟁 상태를 만들지 않는다.
+    aliases = load_content_aliases()
+    texts, occurrences, demotions, report = _collect(
+        args.limit or None,
+        args.ignore_citation_gate,
+        tag,
+        aliases=aliases,
+    )
     print(report, flush=True)
-    return _load(conn, texts, occurrences, args)
+    return _load(conn, texts, occurrences, args, aliases=aliases, demotions=demotions)
 
 
-def _collect(limit, ignore_gate: bool, tag: str):
-    """조항 JSON → `(내용 dict, 발생 list, 보고 문자열)`.
+def _collect(limit, ignore_gate: bool, tag: str, *, aliases=None):
+    """조항 JSON → `(내용 dict, 발생 list, 강등 list, 보고 문자열)` — **4개**.
 
     ★**한 곳에서만 모은다.** 분산 적재(`shard_embed`)도 이 함수를 쓴다 —
       수집 규칙을 두 벌 두면 게이트 하나가 달라져도 아무도 모른다.
@@ -148,12 +157,33 @@ def _collect(limit, ignore_gate: bool, tag: str):
     texts: dict[str, str] = {}
     occurrences: list[tuple] = []
     n_docs = n_skip_doc = n_clause = n_skip_clause = 0
+    n_skip_alias = 0
     n_skip_cite = 0     # citation_eligible=false 로 건너뛴 **조항**
+    #: 게이트에 걸린 조항 — **새로 넣지 않고** 기존 행만 강등한다(위 주석).
+    demotions: list[tuple[str, str, dict]] = []
     n_annex = n_skip_annex = 0   # 부록(별표·붙임·분류표)
+    seen_shas: set[str] = set()
+    selected_docs = 0
 
     from app.core.domain import eligibility
+    if aliases is None:
+        from app.adapters.document_content_aliases import load as load_content_aliases
 
-    for p, doc in _iter_docs(limit, tag):
+        aliases = load_content_aliases()
+
+    #: 별칭을 제외한 뒤 ``--limit``을 센다. 먼저 파일을 잘라 버리면 맛보기 실행에서
+    #: 별칭이 한 자리를 차지해 요청한 문서 수보다 적게 적재된다. 전체 SHA를 끝까지
+    #: 보면서 대표본이 같은 세대에 실제로 있는지도 확인한다.
+    for p, doc in _iter_docs(None, tag):
+        src = doc.get("source") or {}
+        sha = src.get("sha256") or doc.get("sha256") or ""
+        seen_shas.add(sha)
+        if sha in aliases:
+            n_skip_alias += 1
+            continue
+        if limit and selected_docs >= limit:
+            continue
+        selected_docs += 1
         status = doc.get("parse_status") or "unknown"
         if status != "ok":
             #: ★추출이 의심스러운 문서의 조항은 판정 근거가 될 수 없다.
@@ -177,8 +207,6 @@ def _collect(limit, ignore_gate: bool, tag: str):
         #:   실측: 문서 게이트 897조항(0.42%) → 조항 게이트 168,523(93.95%),
         #:   「보상하지 않는 사항」 조항이 0 → 2,224개.
         n_docs += 1
-        src = doc.get("source") or {}
-        sha = src.get("sha256") or ""
         insurer = src.get("insurer") or ""
         for c in doc.get("clauses") or []:
             #: ★조항 단위 게이트. 구조 모순이 걸린 조항만 뺀다.
@@ -189,17 +217,45 @@ def _collect(limit, ignore_gate: bool, tag: str):
             #:     그대로 인용하면 "특별약관 제651조(고지의무위반…)" 같은 근거가 나간다.
             #: ★★**공통 게이트 하나로 판정한다.** 부분 조건을 여기 또 쓰면
             #:   저장소와 규칙이 갈린다 — 그게 애초의 문제였다(코덱스).
-            if not ignore_gate and not eligibility.check(c, parse_status=status).usable:
-                n_skip_cite += 1
-                continue
+            verdict = eligibility.check(c, parse_status=status)
             h = c.get("content_hash") or ""
             body = c.get("text") or ""
+            loc = c.get("locator") or {}
+            #: ★★**게이트 값을 함께 싣는다** (2026-08-26, 코덱스 교차검증에서 잡힘).
+            #:
+            #:   앞서는 9튜플만 넘겨 게이트를 **하나도 안 실었다.** 그러면
+            #:   `upsert_occurrences` 가 `gate={}` 로 받아 네 필드를 NULL 로 쓴다.
+            #:   `COALESCE` 수정 뒤에는 NULL 이 기존 값을 못 덮으므로,
+            #:   **DB 에 남은 옛 값이 영원히 현재 값 행세를 한다.**
+            gate = {
+                "citation_eligible": bool(verdict.usable),
+                "chunk_type": c.get("chunk_type"),
+                "is_statute": c.get("statute") if c.get("statute") is not None
+                              else c.get("is_statute"),
+                "parse_status": status,
+            }
+
+            #: ★★**게이트에 걸린 조항을 «강등» 대상으로 모은다** (2026-08-26).
+            #:
+            #:   앞서는 여기서 그냥 `continue` 해서 발생 자체를 안 보냈다. 그래서 어떤 조항이
+            #:   인용 가능(True)이었다가 **불가로 바뀌면 DB 는 그 사실을 못 듣는다** —
+            #:   옛 `True` 와 옛 청크가 그대로 남고, 판정 경로(`load_clauses`)는
+            #:   그 `True` 를 현재 값으로 읽어 **인용 불가가 된 조항을 근거로 쓴다.**
+            #:   (코덱스 실측: 현행 스냅샷에는 그런 행이 0/189,305 — 아직 안 터졌을 뿐이다.)
+            #:
+            #: ★★**새로 넣지는 않는다.** 넣으면 청크 없는 발생행이 늘어 그게 곧 고아다.
+            #:   이미 DB 에 있는 행만 **강등**한다(`demote_occurrences`) —
+            #:   고치려는 것은 「없는 사실을 추가」가 아니라 「낡은 사실을 갱신」이다.
+            if not ignore_gate and not verdict.usable:
+                n_skip_cite += 1
+                if h:
+                    demotions.append((h, sha, gate))
+                continue
             if not h or not body.strip():
                 n_skip_clause += 1
                 continue
             n_clause += 1
             texts.setdefault(h, body)
-            loc = c.get("locator") or {}
             occurrences.append(
                 (
                     h,
@@ -211,6 +267,13 @@ def _collect(limit, ignore_gate: bool, tag: str):
                     int(loc.get("page_from") or c.get("page_from") or 0),
                     int(loc.get("page_to") or c.get("page_to") or 0),
                     "clause",
+                    gate,
+                    #: ★★산출물이 매긴 **원래** 순번. `occurrence_id` 가 이걸 쓴다.
+                    #:   DB 의 `ordinal` 은 색인에 든 행만 다시 매긴 **검색용** 번호라
+                    #:   게이트 판정이 바뀌면 따라 바뀐다 — 영구 식별자로 못 쓴다
+                    #:   (2026-08-27 실측: core 와 자리 일치 62.51%, 인용 저장 30% 실패).
+                    #:   ★없으면 `None` 을 그대로 보낸다. 0 으로 때우면 다른 조항을 가리킨다.
+                    c.get("ordinal"),
                 )
             )
 
@@ -239,20 +302,65 @@ def _collect(limit, ignore_gate: bool, tag: str):
                 int(loc.get("page_from") or 0),
                 int(loc.get("page_to") or 0),
                 "annex",
+                #: ★부록도 게이트를 싣는다. 값을 **지어내지 않는다** —
+                #:   부록 산출물에 `citation_eligible` 이 없으면 `None`(=모른다)이다.
+                #:   `parse_status` 는 문서 값이라 확실하므로 함께 싣는다.
+                {"citation_eligible": a.get("citation_eligible"),
+                 "chunk_type": a.get("chunk_type"),
+                 "is_statute": a.get("statute") if a.get("statute") is not None
+                               else a.get("is_statute"),
+                 "parse_status": status},
+                #: ★부록도 산출물 순번을 그대로 싣는다(위 조항과 같은 이유).
+                a.get("ordinal"),
             ))
 
-    return texts, occurrences, (
+    from app.adapters.document_content_aliases import ensure_canonicals_present
+
+    ensure_canonicals_present(aliases, seen_shas, context=f"조항 세대 {tag}")
+
+    #: ★★**반환 개수가 늘 때마다 호출부가 깨진다.** 두 번 겪었다 —
+    #:   태그를 필수 인자로 만들 때 한 번, `demotions` 를 더할 때 한 번
+    #:   (2026-08-26 `shard_embed.py` 가 `ValueError` 로 죽어 있었다).
+    #:   호출부가 **개수를 세야 하는 구조**라서 그렇다.
+    #:   → 다음에 손댈 때 `NamedTuple` 로 바꾸고 호출부를 속성 접근으로 옮긴다.
+    #:     그러면 필드를 더해도 기존 호출부가 그대로 돈다.
+    return texts, occurrences, demotions, (
         f"[모음] 적재 대상 문서 {n_docs:,} · "
-        f"건너뜀: 문서 parse_status {n_skip_doc:,} · 조항 citation_eligible {n_skip_cite:,} · "
+        f"건너뜀: 문서 content_alias {n_skip_alias:,} · parse_status {n_skip_doc:,} · "
+        f"조항 citation_eligible {n_skip_cite:,} · "
         f"조항 등장 {n_clause:,} + 부록 {n_annex:,} → 고유 {len(texts):,} "
         f"(내용/해시 없음: 조항 {n_skip_clause:,} · 부록 {n_skip_annex:,})"
         + ("  ★인용 게이트를 껐다(--ignore-citation-gate)" if ignore_gate else "")
     )
 
 
-def _load(conn, texts, occurrences, args):
+def _write_occurrences(conn, occurrences, generation: str) -> None:
+    """발생을 쓴다 — **청크가 실제로 있는 해시에만.**
+
+    ★고아를 «만들지 않는» 유일한 방법이다. 청크 없는 해시에 발생을 쓰면
+      그 순간 고아가 된다(전수 실측 2026-08-26: 고아의 70%가 이 원인).
+
+    ★★**못 쓴 것을 반드시 보고한다.** 조용히 빼면 분모가 줄어 커버리지가
+      실제보다 좋아 보인다(CLAUDE.md §3). 샤드를 나눠 돌리면 내 몫이 아닌 해시는
+      여기서 빠지는데, 그건 **다른 샤드가 쓸 것**이라 정상이다 — 그래도 수를 찍는다.
+    """
+    from db.postgres import pgvector_clause_index as ix
+
+    have = ix.existing_hashes(conn)      # 본문 + 조각 개수가 맞는 것만
+    ready = [o for o in occurrences if o[0] in have]
+    skipped = len(occurrences) - len(ready)
+    n_occ = ix.upsert_occurrences(conn, ready, generation=generation) if ready else 0
+    print(f"[발생] {n_occ:,}행 기록 (쓸 수 있던 {len(ready):,} / 모은 {len(occurrences):,})",
+          flush=True)
+    if skipped:
+        print(f"       ★청크가 아직 없어 **안 쓴** 발생 {skipped:,}건 — "
+              f"썼다면 그만큼 고아가 된다. 샤드를 나눠 돌리는 중이면 정상이다",
+              flush=True)
+
+
+def _load(conn, texts, occurrences, args, *, aliases=None, demotions=()):
     """모은 것을 임베딩해 넣는다."""
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
     import json, time
 
     #: ★★**읽은 세대를 그대로 기록한다.** 안 넘기면 `--clause-tag=s6…` 로 읽고도
@@ -261,14 +369,69 @@ def _load(conn, texts, occurrences, args):
     #: ★★**읽은 태그에서 곧바로 세대를 낸다.** `current_generation()` 을 따로 부르면
     #:   읽는 사이에 승인 포인터가 바뀌었을 때 **읽은 세대와 기록할 세대가 달라진다**
     #:   (코덱스 라운드3 지적). 같은 값에서 파생해야 경쟁이 없다.
-    n_occ = ix.upsert_occurrences(conn, occurrences,
-                                  generation=ix.generation_of(args.resolved_tag))
-    print(f"[발생] {n_occ:,}행 새로 기록 (총 {len(occurrences):,}건 시도)", flush=True)
+    generation = ix.generation_of(args.resolved_tag)
+    from app.adapters.document_content_aliases import load as load_content_aliases
+    from app.adapters.document_content_aliases import prune_occurrences
+
+    if aliases is None:
+        aliases = load_content_aliases()
+    removed_aliases = prune_occurrences(conn, aliases, generation=generation)
+    print(
+        f"[별칭] 중복본 문서 {len(aliases):,}건 · 기존 발생 {removed_aliases:,}행 정리",
+        flush=True,
+    )
+    #: ★★**발생은 여기서 안 쓴다 — 청크가 생긴 뒤에 쓴다**(2026-08-26).
+    #:
+    #:   앞서는 이 자리에서 발생을 **전량** 넣고, 청크는 한참 뒤 임베딩 루프에서
+    #:   **내 샤드 몫만** 넣었다. 그래서 —
+    #:     · 샤드를 다 안 돌리면 나머지 해시는 영구히 청크가 없고
+    #:     · 임베딩 도중에 죽으면 그 뒤 몫이 통째로 없고
+    #:   발생만 남는다. 그게 고아다. 전수 실측(2026-08-26): 고아 45,816행 중
+    #:   **32,065행(70.0%)** 이 이 원인이었다(`s5-mixed` 25,015 · `s6` 7,050).
+    #:
+    #:   앞선 감사(`docs/POSTGRESQL_HANDOFF.md` 「orphan audit update」)가
+    #:   「occurrence is committed before content/chunk loading」이라고 짚고
+    #:   「Fix writer transaction/order」를 지시한 바로 그 지점이다.
+    #:
+    #:   ★순서를 뒤집으면 반대 간극(청크는 있는데 발생이 없음)이 생기지만
+    #:     그건 **안전하다** — 검색이 발생을 LATERAL 조인하므로 발생 없는 조각은
+    #:     결과에 안 나온다. 「없는 것이 안 나오는」 쪽이고, 고아는 그 반대다.
+
+    #: ★게이트에 걸린 조항: **이미 있는 행만** 강등한다. 새로 넣지 않는다(§_collect 주석).
+    if demotions:
+        d = ix.demote_occurrences(conn, demotions, generation=generation)
+        print(f"[강등] 인용 불가로 바뀐 조항 {len(demotions):,}건 중 "
+              f"DB 에 있던 {d['matched']:,}행을 갱신 "
+              f"(그중 True→False 로 바뀐 것 {d['was_true']:,}행)", flush=True)
+        if d["was_true"]:
+            #: ★0 이 아니면 **그동안 잘못된 근거가 나갈 수 있었다**는 뜻이다. 크게 말한다.
+            print(f"       ★★인용 가능이던 조항 {d['was_true']:,}행이 불가로 바뀌었다 — "
+                  f"그전까지는 근거로 나갈 수 있는 상태였다", flush=True)
 
     #: ★반쪽으로 남은 것을 먼저 지운다. 남겨 두면 검색에 잘린 본문이 올라온다.
-    dropped = ix.drop_incomplete(conn)
-    if dropped:
-        print(f"[정리] 미완성 조항 {dropped:,}개를 지우고 다시 넣는다", flush=True)
+    #:   ★★결과를 **전부 찍는다.** 앞서는 지운 조각 수 하나만 받아 봐서,
+    #:     같은 함수가 본문을 지우며 고아 발생을 만들고 있는 것을 몰랐다
+    #:     (2026-08-25 실측: 고아 38,326행).
+    #: ★`scope="all"` 을 **명시해서** 부른다(2026-08-26). 전역 정리가 여기서는 맞다 —
+    #:   반쪽으로 남은 조각을 지워야 다시 넣을 수 있다. 실수로 불리는 것만 막는다.
+    cleanup = ix.drop_incomplete(conn, scope="all")
+    if cleanup["chunks_deleted"]:
+        print(f"[정리] 미완성 조각 {cleanup['chunks_deleted']:,}개를 지우고 다시 넣는다", flush=True)
+    if cleanup["content_deleted"]:
+        print(f"[정리] 아무도 가리키지 않는 본문 {cleanup['content_deleted']:,}행 삭제", flush=True)
+    if cleanup["content_kept"]:
+        #: ★지웠다면 그만큼 고아가 됐을 행들이다. 남긴 사실을 반드시 말한다.
+        print(f"[정리] ★벡터가 없지만 발생이 가리켜 **남긴** 본문 {cleanup['content_kept']:,}행"
+              f" — 지웠다면 고아가 된다", flush=True)
+    if cleanup.get("orphaned_by_drop"):
+        #: ★★**이 실행이 새로 만든 고아다.** 조용히 넘기면 다음 사람이
+        #:   「원래 있던 것」과 구분을 못 한다. 크게 찍는다.
+        print(f"[정리] ★★조각 삭제가 **새로 만든** 고아 발생 "
+              f"{cleanup['orphaned_by_drop']:,}행 — 그만큼 다시 임베딩해야 한다",
+              flush=True)
+    if cleanup["orphans_before"]:
+        print(f"[정리] ★실행 전부터 있던 고아 발생 {cleanup['orphans_before']:,}행"
+              f" (이 정리가 만든 것이 아니다)", flush=True)
 
     done = ix.existing_hashes(conn)
     #: ★해시로 **정렬**한 뒤 가른다. dict 순서에 기대면 재실행 때 몫이 달라져
@@ -279,6 +442,9 @@ def _load(conn, texts, occurrences, args):
     print(f"[임베딩] 이미 있음 {len(done):,} · 남은 것 {len(rest):,} · 할 것 {len(todo):,}{note}",
           flush=True)
     if not todo:
+        #: ★할 임베딩이 없어도 **발생은 써야 한다** — 이미 청크가 있는 해시의
+        #:   자리·게이트가 바뀌었을 수 있다. 여기서 빠지면 그 갱신이 영영 안 간다.
+        _write_occurrences(conn, occurrences, generation)
         print(json.dumps(ix.stats(conn), ensure_ascii=False, indent=2))
         return 0
 
@@ -363,6 +529,9 @@ def _load(conn, texts, occurrences, args):
         )
 
     print(f"[완료] {written:,}조각 기록 · {(time.time()-t0)/60:.1f}분", flush=True)
+
+    _write_occurrences(conn, occurrences, generation)
+
     #: ★끝에 **다시 세어** 출력한다. 중간에 끊겼는지 여기서 드러난다.
     print(json.dumps(ix.stats(conn), ensure_ascii=False, indent=2))
     conn.close()

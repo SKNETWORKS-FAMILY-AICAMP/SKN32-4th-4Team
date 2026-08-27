@@ -30,7 +30,7 @@ def test_clause_index_collector_ignores_candidate_facts(monkeypatch):
         lambda limit, tag: [(Path("candidate.clauses.json"), document)],
     )
 
-    texts, occurrences, report = build_clause_index._collect(None, False, "s7_hybrid-table-v1")
+    texts, occurrences, _demotions, report = build_clause_index._collect(None, False, "s7_hybrid-table-v1")
 
     assert texts == {}
     assert occurrences == []

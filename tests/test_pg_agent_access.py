@@ -21,7 +21,7 @@ _ADMIN_DSN = (
 def pg_agent_client():
     import psycopg
 
-    from app.adapters.pg_agent_access import PgAgentAccess
+    from db.postgres.pg_agent_access import PgAgentAccess
     from app.core.domain.agent_access import generate_api_key
 
     admin_store = PgAgentAccess(_ADMIN_DSN)
@@ -254,7 +254,7 @@ def test_protected_http_path_uses_real_agent_registry(pg_agent_client, monkeypat
 
 
 def test_agent_postgres_failure_has_no_fallback():
-    from app.adapters.pg_agent_access import PgAgentAccess
+    from db.postgres.pg_agent_access import PgAgentAccess
     from app.core.errors import InfraError
 
     store = PgAgentAccess("host=127.0.0.1 port=9 user=none dbname=none connect_timeout=1")

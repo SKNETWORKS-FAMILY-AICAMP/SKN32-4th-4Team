@@ -20,3 +20,7 @@ mcp[cli]==1.28.1
 psycopg[pool,binary]==3.3.4
 pgvector==0.5.0
 reportlab==5.0.0
+# app/ml/face.py가 모듈 최상단에서 numpy를 무조건 import한다(insightface/onnxruntime/cv2는
+# 함수 안에서 지연 import라 괜찮지만 numpy는 아님) — 얼굴 기능을 안 쓰는 배포도 numpy 없이는
+# 앱 자체가 기동을 못 한다. 2026-08-26 jikimi-ec2 실배포 중 ModuleNotFoundError로 발견.
+numpy==1.26.4

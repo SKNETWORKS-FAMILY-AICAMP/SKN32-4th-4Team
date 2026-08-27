@@ -38,10 +38,12 @@
 from __future__ import annotations
 
 import argparse
+import bisect
 import hashlib
 import json
+import math
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -126,11 +128,103 @@ CLAUSE_MAX_CHARS = 30_000
 
 #: 목차 판정용(줄 위치 무관). 목차는 조 번호가 촘촘히 나열되므로 전체 검색이 맞다.
 _ARTICLE_ANY = re.compile(r"제\s*\d{1,3}\s*조")
-#: ★`제N조` 바로 뒤에 오면 **상호참조**라는 신호. 제목 없는 머리에만 적용한다.
+#: ★`제N조` 바로 뒤에 오면 **상호참조**라는 신호.
 #:   `제42조제1항…` 처럼 항·호가 이어지거나, `에 의한/에 따라/에서 정한` 조사가 붙는다.
+#:
+#:   ★★쉼표 나열·항 기호 뒤 참조도 받는다(S1 §9-1 재조사 중 발견, 실측 dbins 등
+#:     여러 보험사). `제10조, 제12조 및 제13조에 따른 …`(쉼표로 여러 조를 나열),
+#:     `제12조(상해보험계약 후 알릴 의무) ①에서 정한 …`(제목 뒤 항 기호가 낀 참조)
+#:     둘 다 원래 규칙은 못 잡았다 — 앞에 `,` 나 `①-⑳` 가 하나 끼면 `^\s*` 가
+#:     막혀 참조 문구(`제\d`·`에서 정한` 등)까지 못 갔다. 그 결과 이런 참조가
+#:     `heads` 에 잘못 들어가거나(빈 제목 머리), `struct_audit.structure_faults`
+#:     의 S3(파묻힌 머리)에서 진짜 조를 오탐(실측: 117 → 6,650, 표본 4건 전부
+#:     참조·법령인용)시켰다. 앞에 `,`·`、`·항 기호가 있어도 통과시킨다.
+#: ★★S1 §9-1 3라운드 표본 검증 중 발견(B054, `397882d0d9b3` p75, population B
+#:   100건 표본 중 1건, 아직 미해결) — "제N조" 분기만은 ①-⑳ 를 건너뛰고
+#:   매치하면 **진짜 새 조항의 진짜 제1항**까지 참조로 오판한다.
+#:
+#:     제4조 (보험금 지급에 관한 세부규정)
+#:     ① 제3조(보험금의 지급사유)의 주사료에서 항암제, 항생제(항진균제 포함), …
+#:
+#:   `제4조` 는 처음 등장하는 진짜 제목인데, 그 진짜 제①항이 우연히 다른 조
+#:   (제3조)를 인용하며 시작한다.
+#:
+#:   ★★2026-08-26 수정 시도했다가 **되돌렸다.** 경위와 재시도 시 주의할 점을
+#:     남긴다(CLAUDE.md §3 "오진했던 내용을 주석에 남긴다"):
+#:
+#:     1) Codex 설계 교차검증 — "참조 번호==자기 조 번호일 때만 참조로 본다"
+#:        안은 기각. 막아야 하는 원래 버그(`제3조(제목) 제2항에도 불구하고`)의
+#:        참조 대상이 "제2항"(조가 아니라 항 번호)이라 조 번호끼리 비교가
+#:        애초에 안 된다.
+#:     2) 대신 권한 "①이 끼면 `제\s*\d` 분기만 참조로 안 본다"는 좁은 수정을
+#:        **단독으로** 전량 재측정 — aba 716→789(+10.2%)·gated 1,466→1,613
+#:        (+10.0%) 로 악화. ①로 시작하는 duplicate-title 자기참조가 같이
+#:        되살아난 탓(Codex 가 정확히 예측한 위험).
+#:     3) Codex 권고 2차 방어선("같은 부에서 동일 조번호·제목이 이미 나왔으면
+#:        도로 참조로 본다")을 `heads` 탐지 루프에 추가하고 재측정 —
+#:        **더 나빠졌다**: `struct_audit.py` 의 S3(파묻힌 머리) 검사가
+#:        `_ARTICLE`/`_REF_TAIL` 만 재사용하고 이 2차 방어선(문서 전역 상태)은
+#:        모른다 — S3 는 조항 **최종 블록**만 보고 동작해서 `heads` 루프의
+#:        중복판정 상태에 접근할 방법이 없다. 그 결과 본문 안에 파묻힌
+#:        `①+제N` 패턴 전부(진짜 중복이든 아니든)를 S3 가 "파묻힌 머리"로
+#:        다시 걸어 `S3_embedded_header` 가 68 → **5,802** 로 폭발했다(fix #4
+#:        가 고쳤던 바로 그 "두 판정식이 어긋난다" 패턴의 재발).
+#:
+#:   재시도한다면 `heads` 판정과 S3 판정이 **같은 문서 전역 상태**(중복
+#:   시그니처 집합)를 공유하도록 구조를 먼저 바꿔야 한다 — `_REF_TAIL` 정규식
+#:   만으로는 이 결함을 안전하게 못 고친다. 이번 세션 범위 밖으로 다시 둔다.
+#: ★★2026-08-26 population A 사람 표본검수(S3_embedded 20건) 중 발견 —
+#:   "에서\s*정한"은 "정한"만 받아서 "정하는"(활용형)을 놓친다. 실측(전량
+#:   스캔): dbins 여러 문서에 실린 표준 조항("43. 분쟁의 조정")이
+#:   "「금융소비자보호에 관한 법률」제42조에서 **정하는** 일정 금액…"으로
+#:   쓰는데, "제42조"가 줄머리에 걸려 `_ARTICLE` 이 머리 후보로 잡고
+#:   `_REF_TAIL` 이 "정하는"을 못 받아 참조로 못 거르니 S3(파묻힌 머리)가
+#:   오판했다(표본 20건 중 13건, 같은 표준조항 반복).
+#:   ★이전에 "정한"→"정하"(열린 어간, 정하는/정하여/정하고/정한다/정할…
+#:   전부 받음)로 넓혔다가 전량 재측정에서 역효과가 나서 되돌린 전례가
+#:   있다(aba 2,366→2,724 악화). 이번엔 그 열린 어간이 아니라 **"정하는"
+#:   하나만** 완결된 활용형으로 추가한다 — Codex 설계검토(2026-08-26)가
+#:   "노출 면적이 현저히 다르다"고 확인했다: "제N조에서 정하는" 형태는
+#:   문법상 항상 기존 제N조를 가리키는 참조이지 새 조항의 시작일 수 없다
+#:   (진짜 새 조 본문은 제목·조 번호에 조사 "에서"를 바로 붙여 시작하지
+#:   않는다). 전량 재측정으로 확인한다.
 _REF_TAIL = re.compile(
-    r"^\s*(?:제\s*\d|의\s*\d|에\s*(?:따라|따른|의하여|의해|의한|정한|규정)"
-    r"|에서\s*정한|의\s*규정|와\s|과\s|및\s|부터|까지|내지)"
+    r"^[\s,、]*(?:[①-⑳]\s*)?"
+    r"(?:제\s*\d|의\s*\d|에\s*(?:따라|따른|의하여|의해|의한|정한|규정)"
+    r"|에서\s*정한|에서\s*정하는|의\s*규정|와\s|과\s|및\s|부터|까지|내지)"
+)
+#: ★★§15(자기참조 vs 정당한 타조 인용, S1 원인규명 §9-1) 세 번째 시도
+#:   (2026-08-26, Codex 설계 — 1·2차는 전량 재측정에서 역효과로 되돌렸다,
+#:   경위는 위 `_REF_TAIL` 판정 흐름 및 디버그 리포트 참조). ★★**이번엔
+#:   `_REF_TAIL` 자체를 안 건드린다** — 1·2차 실패의 진짜 원인은 `_REF_TAIL`
+#:   (heads 와 S3 가 공유하는 정규식)을 좁히거나 넓혀서 **양쪽 판정이
+#:   어긋난 것**이었다(S3 는 `_REF_TAIL` 을 그대로 재사용하므로, `_REF_TAIL`
+#:   자체가 바뀌면 S3 도 같이 바뀐다 — 즉 원래부터 "공유된 판정"이었다).
+#:   이번엔 `_REF_TAIL` 이 참조로 판정한 것 **중 일부만**, heads 루프
+#:   안에서 **추가 증거가 있을 때만 머리로 뒤집는다** — `_REF_TAIL` 자체와
+#:   S3 의 판정식은 그대로 두므로 어긋날 방법이 없다(아래 뒤집기 소비부
+#:   주석 참조).
+#:
+#:   뒤집는 조건(전부 만족해야 함, Codex 권고):
+#:     1. 후보에 제목이 있다(제목 없는 조는 애초에 법령 인용일 확률이 높다)
+#:     2. `_REF_TAIL` 이 매치한 게 **"제M조" 형태의 조 인용**이다
+#:        (`제N항`·`제N호`처럼 조가 아닌 걸 가리키는 경우는 뒤집지 않는다
+#:        — 막아야 하는 원래 버그, "제3조(제목) 제2항에도 불구하고"가
+#:        바로 이 경우다. `_LEADING_ARTICLE_REF` 가 "조"까지 명시적으로
+#:        요구해서 가른다).
+#:     3. 인용 대상 조 번호(M)가 **이 후보 자신의 조 번호와 다르다**
+#:        (같으면 진짜 자기참조 — Codex 가 "번호 일치만으로는 부족하다"고
+#:        했던 건 "제2항"류를 조 번호로 오인하지 말라는 것이었지, "제M조"
+#:        형태로 확실히 확인된 경우까지 배제하란 뜻은 아니다).
+#:     4. 이 후보가 있는 부(部)가 **"policy"**(정책 자신의 특약)다 —
+#:        "statute"(법령 인용 구역)면 무조건 참조로 둔다(외부 법령을
+#:        정책 조항으로 착각하지 않기 위함, 4라운드 population B 재검증에서
+#:        13/24 가 이 오판이었다).
+#:     5. 같은 부(部) 안에서 동일 (조번호, 가지번호, 정규화 제목)이 **이미
+#:        머리로 채택된 적이 없다**(있으면 진짜 duplicate-title 자기참조 —
+#:        1차 시도가 이걸 놓쳐서 aba 716→789 로 악화됐었다).
+_LEADING_ARTICLE_REF = re.compile(
+    r"^[\s,、]*(?:[①-⑳]\s*)?제\s*(\d{1,3})\s*조(?:의\s*(\d{1,2}))?"
 )
 #: ★항(項)과 호(號)는 **다른 층이다.** v4 의 `_PARA` 는 둘을 섞었다
 #:   (`([①-⑳]|\d{1,2}\.)` — `①` 과 `1.` 을 같은 것으로 봤다).
@@ -267,6 +361,45 @@ _TOC_TITLE = re.compile(r"^[ \t]*[^\n]{0,80}목[ \t]*차(?:[ \t]+\d{1,4})?[ \t]*
 TOC_CONT_MIN_ENTRY = 3
 TOC_CONT_MIN_HEAD = 6
 
+#: ★목차 신호 6 (S1 §9-1 재조사 중 추가) — **안내형 체크리스트 목차**.
+#:
+#:   `약관의 핵심 체크항목 쉽게 찾기` 류 안내 페이지 — 실측 **650문서(47.6%),
+#:   1,284쪽**, 11/12개사(kbinsure 제외)에서 나타나는 표준 양식이다.
+#:   `1. 보험금 지급사유 및 지급 제한 사유 → 제3조(보상내용) 제4조(보상하지 않는
+#:   사항)` 처럼 "번호 항목 → 조문 참조"를 나열한다. 쪽번호가 없어 신호4(목차항목)
+#:   가 못 잡고, 그 결과 이 페이지의 `제3조`·`제4조` 가 **진짜 조항인 것처럼
+#:   재추출**돼 같은 조 번호가 몇 번이고 되풀이되며 S1 A-B-A 오탐의 큰 축이었다
+#:   (실측: 삼성생명 `015c910c03ae` p5 — 제3·4·11·12·13·16·17·18·26·27·30·33·34조
+#:   나열, 전부 뒤에 본문 없이 빈 줄만).
+#:
+#:   ★★밀도(조머리 줄 비율)로는 안 잡는다 — **바로 위에서 폐기한 신호와 같은
+#:     함정**(관계법령 부록도 조머리가 빽빽하다)에 다시 빠진다. 대신 "**조 머리
+#:     뒤에 진짜 본문이 없다**"만 본다 — 관계법령은 머리 뒤에 항상 `①…` 같은
+#:     본문이 있어 안 걸린다(실측: 흥국생명 `76e173e5747b` p131 · NH손보
+#:     `ba396b382a73` p287 둘 다 0건 — 코덱스가 반례로 든 바로 그 문서들로
+#:     재확인).
+#: 이 길이 미만이면 "본문 없음"으로 본다. 실측 최소 조건: 짧은 진짜 조 본문
+#:   ("① 사람을 살해한 자는 사형, 무기 또는 5년 이상의 징역에 처한다." = 33자)
+#:   보다는 작고, 체크리스트의 다음 항목 번호표("2. \n청약철회" = 6자 안팎)보다는
+#:   커야 한다.
+CHECKLIST_GAP_MAX_CHARS = 20
+
+
+def _checklist_entry_count(text: str) -> int:
+    """`_ARTICLE` 매치 뒤(다음 매치 시작 전)가 **거의 비어 있는**(본문 없음) 항목 수.
+
+    ★완전한 공백만 보면 못 잡는다 — 체크리스트는 항목 사이에 `2. \\n청약철회`
+      같은 **짧은 번호표**가 낀다(위 §신호6 주석). 그것도 "본문 없음"으로 본다.
+    """
+    matches = list(_ARTICLE.finditer(text))
+    n = 0
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        gap = _WS.sub("", text[m.end():end]) if "_WS" in globals() else re.sub(r"\s+", "", text[m.end():end])
+        if len(gap) <= CHECKLIST_GAP_MAX_CHARS:
+            n += 1
+    return n
+
 #: ★★폐기한 신호 — "조 머리 줄 밀집도"(`제N조…` 로 시작하는 줄의 비율).
 #:
 #:   신호 4(목차항목)가 **쪽번호에 의존**하는 게 약점이라 보고, 쪽번호 없이
@@ -307,6 +440,9 @@ def _toc_signals(text: str) -> dict[str, int]:
     n = _toc_entry_count(text)
     if n >= TOC_MIN_HEADS:
         sig["목차항목"] = n
+    n = _checklist_entry_count(text)
+    if n >= TOC_MIN_HEADS:
+        sig["체크리스트항목"] = n
     return sig
 
 
@@ -320,6 +456,216 @@ def _toc_verdict(text: str) -> str:
 #: 그건 부 제목이 아니라 **조항 제목**이었다. 실측으로 확인한 실제 부 제목은
 #: p23 '보통약관', p63 '별표' 처럼 **한 줄에 그것만** 있다.
 _SECTION_LINE = re.compile(r"^\s*(보통약관|특별약관|별\s*표\s*\d*|부\s*록|약관\s*요약서)\s*$")
+
+#: ★★s5L 연동계획 단계 1(2026-08-26) — 러닝헤더를 **위치+반복**으로도 잡는다.
+#:   지금까지는 "바로 다음 줄이 쪽번호 단독"이라는 텍스트 휴리스틱 하나뿐이었다
+#:   (`_SECTION_LINE` 소비부 참조) — 업계 표준 방법(같은 문서 안 여러 쪽에서
+#:   비슷한 좌표에 반복되는 텍스트 = 러닝헤더, "page-association" 방식)을
+#:   **추가 신호로 더한다**(OR — 기존 텍스트 휴리스틱은 그대로 둔다).
+#:
+#:   ★s5L(레이아웃 있는 입력)에서만 동작한다. `layout` 필드가 없으면(s5 입력)
+#:     `_running_header_signatures` 가 빈 집합을 돌려주고 하위호환 경로로
+#:     떨어진다 — 폴백이 아니라 **애초에 이 신호를 못 쓴다는 뜻**이다(감사
+#:     신호는 필요 없다 — s5 입력은 원래 이 신호가 없는 게 정상이다).
+#:
+#:   ★단순 "N쪽 이상 반복"만으로는 표가 여러 쪽에 걸쳐 우연히 반복되는 것도
+#:     같이 걸린다(s5L Phase 0 실측, 2026-08-26). 그래서 **문서 전체 쪽수 대비
+#:     반복 비율**을 요구한다 — 진짜 러닝헤더는 거의 매 쪽에 나오고, 표 반복은
+#:     소수 쪽에 그친다. 상단 여백도 80pt 로 좁힌다(표는 보통 그보다 아래에서
+#:     시작한다).
+_RUNNING_HEADER_MARGIN_PT = 80.0
+_RUNNING_HEADER_MIN_PAGES = 3
+_RUNNING_HEADER_MIN_FRACTION = 0.25
+
+
+def _running_header_signatures(pages: list[dict], toc_pages: set[int]) -> set[tuple[int, str]]:
+    """`(반올림된 y0, 정규화 텍스트)` 러닝헤더 서명 집합. 신호 없으면 빈 집합."""
+    content_pages = [pg for pg in pages if pg["page"] not in toc_pages]
+    n = len(content_pages)
+    if n < _RUNNING_HEADER_MIN_PAGES:
+        return set()
+    min_pages = max(_RUNNING_HEADER_MIN_PAGES, math.ceil(n * _RUNNING_HEADER_MIN_FRACTION))
+    occurrences: dict[tuple[int, str], set[int]] = defaultdict(set)
+    for pg in content_pages:
+        for entry in pg.get("layout") or []:
+            text = re.sub(r"\s+", "", entry.get("text", ""))
+            if not text or len(text) > 40:
+                continue
+            #: ★Codex 지적 — bbox 없는 항목을 `[0,0,0,0]`으로 채우면 가짜
+            #:   y=0 러닝헤더가 등록된다. 없으면 그냥 건너뛴다.
+            bbox = entry.get("bbox")
+            if not bbox or bbox[1] > _RUNNING_HEADER_MARGIN_PT:
+                continue
+            key = (round(bbox[1] / 5) * 5, text)
+            occurrences[key].add(pg["page"])
+    return {key for key, pgs in occurrences.items() if len(pgs) >= min_pages}
+
+#: ★★s5L 연동계획 단계 2(2026-08-27) — 부 제목 탐지에 크기/굵기를 **확인용**
+#:   신호로 얹는다. **판정을 안 바꾼다**(§2 YAGNI) — 이미 텍스트 규칙
+#:   (`_SECTION_TITLE` 등)이 채택한 부 제목에 한해서만, 대비(contrast) 결과를
+#:   `stats` 에 집계로만 남긴다. 크기/굵기가 신호와 안 맞아도 채택을
+#:   취소하지 않는다.
+#:
+#:   ★★★1차 구현은 **조 머리(`_ARTICLE`) 크기/굵기 비율을 부 제목의 대리
+#:     지표로 썼다가 코덱스 표본검수(2026-08-27, 사람 검수자 역할 시뮬레이션)
+#:     에서 반박당했다** — 실제로 **부 제목(`_SECTION_TITLE`/`_TYPE_LABEL`)
+#:     모집단으로 다시 재보니 대리 지표가 정반대인 보험사가 수두룩했다
+#:     (hyundaimarine 0.8%→**47.0%**, kbinsure 0%→**86.0%**, meritzfire
+#:     0.6%→**87.3%**, nhfire 0%→**57.9%**, nhlife **98.0%→25.5%**,
+#:     lotteins 신호축 자체가 bold→size로 뒤바뀜). 조 머리와 부 제목은
+#:     **같은 문서 안에서도 서로 다르게 조판된다** — 대리 지표를 쓰면 안
+#:     됐다. 아래 표는 **부 제목 모집단으로 직접 잰 값**이다(전량 1,362문서,
+#:     `_SECTION_TITLE`/`_TYPE_LABEL` 이 채택하고 다음 줄 size/bold 를 둘 다
+#:     읽을 수 있는 경우만). 근거: `docs/reports/2026-08-27_s5L_단계2_완료보고.md`.
+#:   ★n 이 100 미만인 보험사(heungkuklife 56·nhlife 51)는 표본이 작다 —
+#:     30% 문턱을 걸어도 확신하지 말고, 나중에 s5L 대상이 늘면 다시 잰다.
+#:   ★nhlife 는 재측정에서도 30% 를 못 넘겼다(25.5%) — **표에서 뺐다.**
+#:     실측 중 발견: nhlife 의 "확인 실패" 다수가 페이지 하단 상품명+쪽번호
+#:     러닝풋터가 `_SECTION_TITLE`(…"주계약 약관" 접미사)에 잘못 채택되는
+#:     **별개의 기존 결함**이었다(이 작업 범위 밖 — 위 리포트 §5 에 기록).
+_S5L_TITLE_SIGNAL_INSURERS: dict[str, frozenset[str]] = {
+    "DB손해보험": frozenset({"size"}),        # 67.8%(n=2,814)
+    "흥국화재": frozenset({"size"}),          # 76.1%(n=3,323)
+    "현대해상": frozenset({"size"}),          # 47.0%(n=1,966)
+    "KB손해보험": frozenset({"size"}),        # 86.0%(n=513)
+    "롯데손해보험": frozenset({"size"}),      # 74.9%(n=677) — bold 아니라 size
+    "메리츠화재": frozenset({"size"}),        # 87.3%(n=166)
+    "동양생명": frozenset({"size"}),          # 45.5%(n=132)
+    "NH농협손해보험": frozenset({"size", "bold"}),  # 57.9% · 43.4%(n=221)
+    "삼성화재": frozenset({"size"}),          # 81.0%(n=3,802)
+}
+
+
+def _title_visual_contrast(layout: list[dict], line_text: str,
+                            signals: frozenset[str]) -> bool | None:
+    """부 제목 후보 줄이 **다음 줄보다** 크거나 굵은지 대비를 확인한다.
+
+    ★이름이 "확인됨(confirmed)"이 아니라 "대비(contrast)"인 이유 — 코덱스
+      표본검수 지적: 이 값은 "진짜 부 제목이라는 확인"이 아니라 단순 대비
+      조건 적중이다. 목차 항목·표 셀도 대비 조건은 우연히 만족할 수 있다
+      (`_looks_like_section` 이 걸러야 할 몫이지 이 함수의 몫이 아니다).
+    ★확인 못 하면(레이아웃에서 이 줄을 못 찾거나 다음 줄이 없거나, size/bold
+      값 자체가 없으면) `None` 이다 — "확인 안 됨"과 "확인했는데 아니다"
+      (`False`)를 섞지 않는다(CLAUDE.md §1 "지어내지 않는다"). 결측을
+      0/False 로 채우면(코덱스 지적) 없는 데이터가 있는 것처럼 셈해진다.
+    """
+    if not layout or not signals:
+        return None
+    norm = re.sub(r"\s+", "", line_text)
+    for i, entry in enumerate(layout):
+        if re.sub(r"\s+", "", entry.get("text", "")) != norm:
+            continue
+        if i + 1 >= len(layout):
+            return None
+        nxt = layout[i + 1]
+        esz, nsz = entry.get("size"), nxt.get("size")
+        ebold, nbold = entry.get("bold"), nxt.get("bold")
+        #: ★두 축을 다 쓰는 보험사(nhfire)가 있다 — **어느 한쪽이라도** 대비가
+        #:   있으면 True(OR). 이전 판은 size 를 먼저 보고 바로 반환해 버려서
+        #:   size 가 결측 아닌데 대비가 없으면 bold 를 아예 안 봤다(버그).
+        size_hit = None
+        if "size" in signals and esz is not None and nsz is not None:
+            size_hit = esz > nsz
+        bold_hit = None
+        if "bold" in signals and ebold is not None and nbold is not None:
+            bold_hit = bool(ebold) and not nbold
+        if size_hit is None and bold_hit is None:
+            return None
+        return bool(size_hit) or bool(bold_hit)
+    return None
+
+
+#: ★부(部) 경계 — 《유형명》 스타일 라벨(S1 §9-1 재조사 중 발견, 조사 agent 실측).
+#:   `《질병통원형》`처럼 특별약관·특약 접미사 없이 짧은 보장유형만 적는다 —
+#:   삼성생명 전용 양식(전량 195/1,367문서, 다른 11개사엔 없음). 이게 부 경계로
+#:   안 잡혀서 같은 문서 안에 「제1~4조」 보일러플레이트가 유형마다 반복돼도
+#:   전부 `머리말` 하나로 뭉개졌다 — S1 A-B-A 오탐의 큰 축이었다(실측
+#:   `6f5e9d40f620`: 이 조 4개가 한 문서에서 5번 반복, 전부 같은 section).
+#:
+#:   ★★단독 줄일 때만 인정한다 — 본문 중간 인용("《질병급여형》 제3조(보상내용)
+#:     에 대하여…")이 더 흔하다(전체 《》 출현의 49%). `_SECTION_LINE` 과 같은
+#:     원칙 — 줄 전체가 이것뿐이어야 한다.
+_TYPE_LABEL = re.compile(r"^\s*《([^\n《》]{2,15})》\s*$")
+
+#: ★부(部) 경계 — `Ⅰ. 제목` 스타일(로마숫자+마침표, 특별약관 접미사 없음).
+#:   실측(현대해상 `ec21a651e45d` p21): "Ⅰ. 상해입원실손의료비(갱신형)보장"
+#:   다음 줄에 바로 `제1조(보험금의 지급사유)` 가 온다 — 이게 부 경계로 안
+#:   잡혀서 여러 보장유형의 「제1~3조」가 `머리말` 하나로 뭉개졌다(실측 전량
+#:   gated 조항 상위 패턴: `제1조/보험금의 지급사유` 144건·`제3조/보험금을
+#:   지급하지 않는 사유` 138건, 전부 이 결함 계열).
+#:
+#:   ★★★그런데 이 패턴 **단독으로는 위험하다**(전량 조사: 4,388건·324문서).
+#:     대부분이 진짜 부 경계가 아니다 — ① 안내책자 챕터 제목이 여러 쪽에
+#:     걸쳐 **러닝헤더로 반복**("Ⅱ. 소비자가 반드시 알아두어야 할 유의사항"
+#:     이 4쪽 연속) ② **질병분류표(KCD) 항목**("Ⅰ. 파킨슨병") ③ 점선+쪽번호
+#:     붙은 **진짜 목차 항목**. 셋 다 그냥 받으면 안 된다 — 특히 ②는 뒤에
+#:     오는 진짜 조항의 section 을 오염시킨다.
+#:
+#:   그래서 `_looks_like_section` 만으로는 못 거르고, **뒤에 진짜 조 머리가
+#:     바로 오는지**(`_ROMAN_DOT_LOOKAHEAD` 글자 수 안에 `_ARTICLE`/`_NUMBERED`
+#:     매치)를 추가로 요구한다(`_roman_dot_events`). KCD 표 항목·러닝헤더
+#:     뒤에는 조 머리가 오지 않으므로 이 조건 하나로 셋 다 자연히 걸러진다
+#:     (실측: 흥국화재 `0168d77c2de8`(러닝헤더 8회 반복) 0건 채택·dbins
+#:     `15d0cf40e56c`(KCD 파킨슨병 표) 0건 채택 확인).
+_ROMAN_DOT_TITLE = re.compile(r"^[ \t]{0,8}([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]{1,3})[.．][ \t]*([^\n]{2,30}?)\s*$")
+#: ★로마자와 제목이 **줄이 갈려서** 온다(실측 1,116줄·214문서, dbins·현대해상).
+#:   `Ⅰ.\n상해입원실손의료비(갱신형)보장\n` 처럼 로마자만 있는 줄 다음에 제목이
+#:   따로 온다 — 같은 줄 정규식(`_ROMAN_DOT_TITLE`)으로는 못 잡는다. 실측(같은
+#:   보험사, 같은 문서 안에서도 **한 줄·두 줄 조판이 섞여 있다** — 코덱스 사전
+#:   상의 없이 발견해 직접 검증: 사람 검수 표본에서 `제1조 → 제3조 → 제1조 →
+#:   제3조 → 제1조 → 제2조 → 제3조` 처럼 **번호가 되풀이되는데 셋 다 section 이
+#:   `보통약관`** 인 사례 10건 이상을 발견 → 전부 이 두 줄 조판이 원인이었다).
+#: ★마침표가 아예 없는 판도 있다(실측 2,104줄·323문서, 10/12개사 — 위 두 줄
+#:   판보다도 흔하다). `Ⅱ\n노후실손의료비질병(갱신형) 보장\n제1조 …` 처럼.
+#:   마침표 없는 로마자 단독 줄은 훨씬 더 흔한 문자열이라 오탐 위험이 크지만,
+#:   룩어헤드(뒤에 진짜 조 머리가 바로 오는지)가 그대로 걸러준다 — 별도 조건을
+#:   더 두지 않는다.
+_BARE_ROMAN = re.compile(r"^[ \t]{0,8}([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]{1,3})[.．]?[ \t]*$")
+_ROMAN_DOT_LOOKAHEAD = 120
+
+
+def _roman_dot_events(pages, toc_pages) -> list[tuple[int, int, str]]:
+    """`Ⅰ. 제목`(한 줄이든 두 줄이든) 부 경계를 `(page, offset, 라벨)` 로
+    모은다 — 뒤에 조 머리가 바로 오는 것만(위 주석 참조)."""
+    out = []
+    for pg in pages:
+        if pg["page"] in toc_pages:
+            continue
+        t = pg["text"]
+        lines = t.splitlines(keepends=True)
+        offsets = []
+        cur = 0
+        for line in lines:
+            offsets.append(cur)
+            cur += len(line)
+        for i, line in enumerate(lines):
+            s = line.rstrip("\n")
+            roman = label = None
+            title_line = s
+            after_off = offsets[i] + len(line)
+            m = _ROMAN_DOT_TITLE.match(s)
+            if m:
+                roman, label = m.group(1), m.group(2)
+            else:
+                mb = _BARE_ROMAN.match(s)
+                if mb:
+                    #: 다음 **빈 줄 아닌** 줄을 제목으로 본다.
+                    j = i + 1
+                    while j < len(lines) and not lines[j].strip():
+                        j += 1
+                    if j < len(lines):
+                        cand = lines[j].rstrip("\n").strip()
+                        if cand and len(cand) <= 30:
+                            roman, label = mb.group(1), cand
+                            title_line = cand
+                            after_off = offsets[j] + len(lines[j])
+            if roman and label:
+                window = t[after_off:after_off + _ROMAN_DOT_LOOKAHEAD]
+                if _ARTICLE.search(window) or _NUMBERED.search(window):
+                    clean_label = re.sub(r"\s+", " ", label).strip()
+                    if clean_label and _looks_like_section(title_line, clean_label):
+                        out.append((pg["page"], offsets[i], f"{roman}. {clean_label}"))
+    return out
 
 #: ★★인용 법령 구간 — **약관 조항이 아니다.**
 #:
@@ -364,10 +710,17 @@ _STATUTE_BULLET = re.compile(r"^\s*[○ㅇ●]\s*$")
 #:   ★`제N편` `제N장` `제N절` `제N관` 은 **경계가 아니다.**
 #:     `특별약관 → 제1관 일반사항 → 제1조` 구조가 실재하므로,
 #:     이걸 경계로 삼으면 **과분할**된다(코덱스 지적).
+#: ★같은 특약의 개정판·상품코드가 로마자·숫자로 뒤에 붙는다 — 실측 74쪽
+#:   (kbinsure·현대해상·흥국화재): `단체취급특별약관(Ⅰ)` `보험료분납 특별약관(Ⅱ)`
+#:   `무배당실손의료비특별약관(1501)`. 접미사 바로 뒤(`\s*$`)를 요구하는 원래
+#:   규칙이 이 괄호 때문에 전부 놓쳤다. 로마자·숫자**만** 든 짧은 괄호로 좁힌다
+#:   (한글이 든 진짜 예외 문구, 예 `…특약(다만 사기 목적인 경우 제외)` 는
+#:   이 문자 클래스에 안 걸려 여전히 거부된다).
 _SECTION_TITLE = re.compile(
     r"^[ \t]{0,8}(?:\d{1,2}(?:-\d{1,2})?\.?\s*)?"      # 앞의 번호 접두어(선택)
     r"(?:\[[^\]\n]{1,12}\]\s*)?"                        # `[건강]` 같은 분류(선택)
-    r"([^\n]{2,40}?(?:특별약관|특약|보통약관|주계약\s*약관))\s*$",
+    r"([^\n]{2,40}?(?:특별약관|특약|보통약관|주계약\s*약관)"
+    r"(?:[ \t]*[（(][ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ0-9]{1,6}[)）])?)\s*$",
     re.MULTILINE,
 )
 
@@ -380,7 +733,11 @@ _SECTION_TITLE = re.compile(
 #:   제목은 **문장이 아니다** — 항 번호로 시작하지 않고, 쉼표·마침표가 없고,
 #:   조사로 끝나지 않는다.
 _PARA_START = re.compile(r"^[ \t]*[①-⑳]")            # 항 번호로 시작하면 본문이다
-_SENTENCE_MARK = re.compile(r"[,，.。;；]")            # 문장부호가 있으면 본문이다
+#: ★콜론도 문장부호다(실측 22곳, 전량 현대해상 — 코덱스 검토 반영).
+#:   `사례 : A씨는 해외에서 병원치료를 받고 귀국하여 실손의료(갱신형)보장
+#:   특별약관` 은 안내책자의 **예시문**인데, 쉼표·마침표가 없어 옛 규칙을
+#:   통과해 부 제목으로 오인됐다.
+_SENTENCE_MARK = re.compile(r"[,，.。;；:：]")          # 문장부호가 있으면 본문이다
 _NOT_SECTION_TAIL = re.compile(
     r"(?:은|는|이|가|을|를|의|에|로|와|과|및|한다|합니다|따라|경우|하시면)$"
 )
@@ -650,16 +1007,28 @@ def _split_paragraphs(body: str, clause_cite: str) -> tuple[list[dict], int]:
 
 #: 조 번호 파서. ★`to_clauses` 와 `struct_audit` 이 **같은 것을 써야** 한다.
 #:   두 곳이 어긋나면 산출물의 `structure_faults` 와 감사 결과가 다른 말을 한다.
-_CLAUSE_NO = re.compile(r"^제(\d{1,3})조|^(\d{1,3})(?:-\d{1,2})?\.")
+#:
+#:   ★★가지번호(`제5조의2`·`4-1.`)를 **본번호와 구분**한다(S1 §9-1 재조사 중
+#:     발견). 옛 규칙은 가지번호를 그냥 버려서 `제5조`와 `제5조의2`가 같은
+#:     `5`로 잡혔다 — 둘은 실재하는 서로 다른 조인데, `4→5→3→5→6` 처럼 사이에
+#:     다른 조가 끼면 A-B-A 재진입으로 오탐한다(실측 `e60978d0aad7`: 제5조 →
+#:     제3조 → 제5조의2 순서가 재진입으로 잡혔다). 가지번호를 1/1000 자리에
+#:     실어 **다른 수**로 만들되, 본번호끼리의 비교(연속·역행)는 그대로
+#:     정수처럼 동작하게 한다.
+_CLAUSE_NO = re.compile(r"^제(\d{1,3})조(?:의(\d{1,2}))?|^(\d{1,3})(?:-(\d{1,2}))?\.")
 
 
-def _clause_num(clause_no: str) -> int | None:
-    """`제12조` -> 12 · `4-1.` -> 4 · 그 밖 -> None."""
+def _clause_num(clause_no: str) -> int | float | None:
+    """`제12조` -> 12 · `제12조의2` -> 12.002 · `4-1.` -> 4.001 · 그 밖 -> None."""
     m = _CLAUSE_NO.match(clause_no or "")
     if not m:
         return None
-    g = m.group(1) or m.group(2)
-    return int(g) if g else None
+    n = m.group(1) or m.group(3)
+    if not n:
+        return None
+    sub = m.group(2) or m.group(4)
+    base = int(n)
+    return base + int(sub) / 1000 if sub else base
 
 
 def _clause_hash(section: str, title: str, body: str) -> str:
@@ -671,6 +1040,13 @@ def build(page_doc: dict) -> dict:
     pages = page_doc["pages"]
     if not pages:
         raise ValidationErr("페이지가 없습니다.")
+    #: ★s5L 연동계획 단계 2 — 이 보험사에서 부 제목 크기/굵기 신호가 믿을
+    #:   만한지(위 `_S5L_TITLE_SIGNAL_INSURERS` 표 참조). 표에 없으면
+    #:   확인을 아예 안 한다(레이아웃이 있어도) — 신호 없는 보험사에 억지로
+    #:   적용하면 "확인 안 됨"을 "제목 아님"으로 오해할 위험이 있다.
+    _src = page_doc.get("source")
+    _insurer = _src.get("insurer") if isinstance(_src, dict) else None
+    _title_signals = _S5L_TITLE_SIGNAL_INSURERS.get(_insurer or "", frozenset())
 
     # ── 목차 페이지 식별 (6단계 정확도의 전제) ──
     #: ★v5 — 비율을 버리고 **구조**를 본다. 근거는 `_TOC_ENTRY_HEAD` 주석.
@@ -727,19 +1103,193 @@ def build(page_doc: dict) -> dict:
                     current = title
                     in_statute = False
                     break
+                #: 《유형명》 라벨.
+                m3 = _TYPE_LABEL.match(line)
+                if m3:
+                    current = m3.group(1).strip()
+                    in_statute = False
+                    break
         section_of_page[pg["page"]] = current
         statute_of_page[pg["page"]] = in_statute
+
+    #: ★★부 경계 개선(S1/S2 원인규명 리포트 §9-1). `section_of_page` 는 **그 쪽에서
+    #:   처음 걸린 줄에서 `break` 하고 멈춘다** — 같은 쪽 안에서 부가 또 바뀌면
+    #:   (흔히 굵은 장 제목 다음 줄에 진짜 특약 제목이 오는 경우) 못 보고 앞 이름을
+    #:   그 쪽 전체에 씌운다. 실측(s6, 흥국화재 `0d3d8bc38d21` p76): "제2장. 제도성
+    #:   특별약관"(장 제목) 다음 줄의 진짜 제목 "1. 실손의료비보장 계약전환제도Ⅲ
+    #:   특별약관"이 같은 쪽인데 `section_of_page[76]` 은 앞 것만 기억한다.
+    #:   그래서 조 경계 자체는 `section_ev` 로 올바르게 끊기는데(끊는 로직은 오프셋
+    #:   단위라 이미 맞다), **끊긴 조에 붙는 이름**만 페이지 단위라 틀린다 — 이게
+    #:   S1 "A-B-A" 오탐(같은 조 번호가 되풀이 나온 것처럼 보이는데 실은 부가 바뀐
+    #:   것)의 한 갈래다.
+    #:
+    #:   ★`section_of_page`/`statute_of_page` 는 건드리지 않는다 — `is_statute` 판정과
+    #:     문서 요약 통계(`sections`)가 이미 그걸 쓰고 있고, 이번 수정 범위는 §9-1
+    #:     "부 경계 검출"만이다(게이트 규칙 자체는 사람 표본 판정 후, §9-6).
+    #:     그래서 **같은 줄 스캔을 한 번 더** 돈다 — `break` 대신 계속 진행하며
+    #:     이름이 바뀔 때마다 `(쪽, 오프셋, 그때 이름)` 을 전부 남긴다.
+    #: ★★s5L 연동계획 단계 1 — 위치+반복 러닝헤더 서명(레이아웃 없으면 빈 집합,
+    #:   `_running_header_signatures` 위 주석 참조).
+    running_header_sigs = _running_header_signatures(pages, toc_pages)
+    #: ★★§15 재시도(2026-08-26, Codex 설계) — 이벤트에 **section_kind** 를
+    #:   같이 싣는다. `_section_name_at` 이 돌려주는 이름 문자열만으로는
+    #:   "관계법령"만 통계에 걸리고 `_STATUTE_HEAD`/`_STATUTE_LAW` 로
+    #:   바뀌는 실제 법률명("상법"·"개인정보보호법" 등)은 못 걸러서
+    #:   위험하다(Codex 지적 — S15 설계안 §2). kind ∈
+    #:   {"frontmatter", "policy", "statute"} 로 출처를 명시적으로 남긴다.
+    section_name_ev: list[tuple[int, int, str, str]] = []
+    current = "머리말"
+    current_kind = "frontmatter"
+    #: ★s5L 연동계획 단계 2 — 확인만 세고 판정은 안 바꾼다(위 `_title_visual_contrast` 참조).
+    #:   ★★코덱스 지적 — `unavailable`(비교 불가, `None`)을 `checked`(비교함)와
+    #:     섞으면 안 된다. 셋으로 나눈다.
+    n_title_visual_checked = 0
+    n_title_visual_hit = 0
+    n_title_visual_unavailable = 0
+    for pg in pages:
+        if pg["page"] in toc_pages:
+            continue
+        layout = pg.get("layout") or []
+        lines = pg["text"].splitlines(keepends=True)
+        off = 0
+        for li, line in enumerate(lines):
+            s = line.rstrip("\n")
+            ms = _STATUTE_HEAD.match(s) or _STATUTE_LAW.match(s)
+            if ms:
+                current = re.sub(r"\s+", " ", ms.group(1)).strip()
+                current_kind = "statute"
+                section_name_ev.append((pg["page"], off, current, current_kind))
+            elif _STATUTE_ZONE.match(s):
+                current = "관계법령"
+                current_kind = "statute"
+                section_name_ev.append((pg["page"], off, current, current_kind))
+            elif (
+                li + 1 < len(lines)
+                and _STATUTE_LAW_REV.match(s)
+                and _STATUTE_BULLET.match(lines[li + 1].rstrip("\n"))
+            ):
+                #: ★★Codex 구현검토(2026-08-26, §15 3차 diff) 지적·재현 — 글리프
+                #:   순서가 뒤집힌 판본(법 이름 줄 다음에 `○` 줄, `_statute_events`
+                #:   위 주석 참조. 역순 9문서는 정순을 하나도 안 씀)을 이 스캔이
+                #:   놓치면 그 구간이 계속 `policy`로 남아, §15 복구가 **외부
+                #:   법령 인용을 이 정책 자신의 조항으로 착각**한다 — population B
+                #:   4라운드에서 Codex 가 오판 13/24건으로 지적했던 바로 그 함정.
+                current = re.sub(r"\s+", " ", s).strip()
+                current_kind = "statute"
+                section_name_ev.append((pg["page"], off, current, current_kind))
+            else:
+                m = _SECTION_LINE.match(s)
+                #: ★★러닝헤더(쪽마다 반복되는 장식용 "보통약관"/"특별약관" 표기)는
+                #:   부 경계가 아니다(S1 §9-1 재조사 중 발견). 실측(현대해상): 매 쪽
+                #:   맨 위에 `보통\n약관\n보통약관\n43\n` 처럼 세로 조판+온전한 표기가
+                #:   반복되고, **바로 뒤에 쪽번호가 온다** — 진짜 부 시작이면 쪽번호가
+                #:   바로 따라붙지 않는다(신호4 `_toc_entry_count` 와 같은 원리). 이걸
+                #:   못 거르면 로마숫자 부 라벨(`_roman_dot_events`)이 한 조 걸러 한
+                #:   번씩 다시 "보통약관"으로 덮여, 사람 표본 검증에서 `제1→3→1→3→1`
+                #:   처럼 번호가 되풀이되는데 section 이 셋 다 `보통약관`인 사례가
+                #:   10건 넘게 나왔다 — 전부 이게 원인이었다.
+                if m and li + 1 < len(lines) and _NUM_ONLY_LINE.match(lines[li + 1].rstrip("\n")):
+                    m = None
+                #: ★★위치+반복 신호(레이아웃 있을 때만) — 텍스트 휴리스틱과 OR.
+                #:   Codex 설계검토(2026-08-26) 지적 반영 — 같은 정규화 텍스트가
+                #:   그 쪽에 여러 번 있으면(예: 본문/표 안에도 우연히 "보통약관"이
+                #:   있고, 러닝헤더로도 있음) **서명과 일치하는 것이 하나라도
+                #:   있는지**를 봐야 한다. 원래 코드는 첫 매치에서 바로 `break`
+                #:   해서 그게 서명과 안 맞는 위치(예: 본문 안 우연한 언급)면
+                #:   진짜 러닝헤더를 놓쳤다.
+                if m and running_header_sigs:
+                    norm = re.sub(r"\s+", "", s)
+                    for entry in layout:
+                        if re.sub(r"\s+", "", entry.get("text", "")) != norm:
+                            continue
+                        bbox = entry.get("bbox")
+                        if not bbox:
+                            continue
+                        key = (round(bbox[1] / 5) * 5, norm)
+                        if key in running_header_sigs:
+                            m = None
+                            break
+                if m:
+                    current = re.sub(r"\s+", "", m.group(1))
+                    current_kind = "policy"
+                    section_name_ev.append((pg["page"], off, current, current_kind))
+                else:
+                    m2 = _SECTION_TITLE.match(s)
+                    if m2:
+                        title = re.sub(r"\s+", " ", m2.group(1)).strip()
+                        if _looks_like_section(s, title):
+                            current = title
+                            current_kind = "policy"
+                            section_name_ev.append((pg["page"], off, current, current_kind))
+                            if _title_signals and layout:
+                                _contrast = _title_visual_contrast(layout, s, _title_signals)
+                                if _contrast is None:
+                                    n_title_visual_unavailable += 1
+                                else:
+                                    n_title_visual_checked += 1
+                                    if _contrast:
+                                        n_title_visual_hit += 1
+                    else:
+                        m3 = _TYPE_LABEL.match(s)
+                        if m3:
+                            current = m3.group(1).strip()
+                            current_kind = "policy"
+                            section_name_ev.append((pg["page"], off, current, current_kind))
+                            if _title_signals and layout:
+                                _contrast = _title_visual_contrast(layout, s, _title_signals)
+                                if _contrast is None:
+                                    n_title_visual_unavailable += 1
+                                else:
+                                    n_title_visual_checked += 1
+                                    if _contrast:
+                                        n_title_visual_hit += 1
+            off += len(line)
+    #: `Ⅰ. 제목` 부 경계 — 뒤에 조 머리가 바로 오는지 룩어헤드가 필요해서
+    #: (`_ROMAN_DOT_LOOKAHEAD`) 위 한 줄씩 도는 스캔과는 별도로 계산하고 합친다.
+    #: ★로마숫자 부 제목은 항상 정책(policy) 구역이다(법령 부록은 이 표기를
+    #:   안 씀) — kind 를 여기서 붙인다.
+    section_name_ev.extend((p, o, n, "policy") for p, o, n in _roman_dot_events(pages, toc_pages))
+    section_name_ev.sort(key=lambda e: (e[0], e[1]))
+    #: ★§15 재시도 — heads 루프가 **후보마다** 이걸 부르므로(예전엔 조항당
+    #:   한 번), 매번 선형 재탐색하면 느리다(Codex 지적). 정렬돼 있으니
+    #:   `bisect` 로 조회한다.
+    _section_ev_keys = [(ep, eo) for ep, eo, _, _ in section_name_ev]
+
+    def _section_context_at(page: int, off: int) -> tuple[str, str, int]:
+        """`(page, off)` 시점에 유효한 (부 이름, section_kind, 부 발생 색인).
+
+        ★`<=` 다. 조 머리 **자신**이 부 제목 줄이면 그 조 스스로가 새 부의 시작이다
+        (`section_ev` 소비부의 `<=`/`>` 관례와 같다).
+
+        ★★Codex 구현검토(2026-08-26, §15 3차 diff) 지적·재현 — 세 번째 값(색인)은
+          **부의 물리적 발생**을 가리킨다. 이름(`name`)만으로 같은 부를 판정하면
+          "보통약관"이라는 이름을 쓰는 서로 다른 두 특약(문서 안에 실제로 존재)의
+          정당한 조항이 서로 "중복 제목 자기참조"로 오판된다 — 직접 재현: 두 번째
+          "보통약관"의 진짜 "제4조의2"가 사라지고 `S1_aba_reentry` 까지 오탐 발생.
+          이 색인을 `seen_titled_heads` 서명에 넣어야 이름이 같아도 부가 다르면
+          다른 부로 구분된다.
+        """
+        idx = bisect.bisect_right(_section_ev_keys, (page, off)) - 1
+        if idx < 0:
+            return "머리말", "frontmatter", -1
+        _, _, name, kind = section_name_ev[idx]
+        return name, kind, idx
+
+    def _section_name_at(page: int, off: int) -> str:
+        """`(page, off)` 시점에 유효한 부 이름 — 위 `section_name_ev` 참조."""
+        return _section_context_at(page, off)[0]
 
     # ── 6) 조항 경계 찾기 (목차 페이지 제외) ──
     #: (페이지, 페이지내 오프셋, 조번호, 가지번호, 제목)
     heads: list[tuple[int, int, str, str, str]] = []
     n_ref_head = 0              # 상호참조로 판정해 버린 가짜 머리 (조용히 버리지 않는다)
+    seen_titled_heads: set[tuple[int, str, str, str]] = set()
     for pg in pages:
         if pg["page"] in toc_pages:
             continue
         t = pg["text"]
         for m in _ARTICLE.finditer(t):
-            #: ★★**제목 없는 `제N조` 뒤에 참조 꼬리가 오면 머리가 아니다.**
+            #: ★★**`제N조` 뒤에 참조 꼬리가 오면 머리가 아니다 — 제목이 있어도 본다.**
             #:
             #:   `_ARTICLE` 은 줄머리만 보지만 제목 괄호가 **선택**이라,
             #:   긴 문장이 줄바꿈되며 줄머리로 온 상호참조가 그대로 머리가 된다.
@@ -749,12 +1299,73 @@ def build(page_doc: dict) -> dict:
             #:   이것들이 조항을 쪼개 100자 미만 조각을 만들고,
             #:   부록 종료 판단에도 걸려 별표를 **조기 절단**한다(코덱스 지적).
             #:
-            #:   ★제목이 **있으면** 거르지 않는다. `제3조(용어의 정의)` 는 진짜 머리다.
-            if not (m.group(3) or "").strip() and _REF_TAIL.match(t[m.end():m.end() + 12]):
+            #:   ★★**제목이 있어도 참조일 수 있다**(S1 원인규명 §9-1 재조사, 위
+            #:     `_section_name_at` 주석 참조). 실측(s6, 흥국화재 `0d3d8bc38d21`
+            #:     p76): `제3조(전환후계약의 보장개시일)의 규정에도 불구하고 …` 와
+            #:     `제3조(전환후계약의 보장개시일) 제2항에도 불구하고 …` 는 **자기
+            #:     조를 도로 인용**하는 문장인데, 참조 대상 제목을 그대로 되풀이해
+            #:     적었다(한국 보험 약관의 흔한 관용구). 옛 규칙은 "제목이 있으면
+            #:     진짜 머리"라 이걸 걸러내지 못해 `제3→제4→제3→제5→제3` 로 번호가
+            #:     들쭉날쭉해졌고, S1 A-B-A 오탐(제3조가 재진입하는 것처럼 보임)의
+            #:     실제 다수 원인이었다(원래 가설이던 "부 경계 오검출"이 아니었다 —
+            #:     같은 부 안에서, 실측 표본 10문서 모두 `same_section` 이었다).
+            #:   ★그래도 **제목 있는 머리를 함부로 넓게 거르지 않는다.** `_REF_TAIL`
+            #:     은 "에 따라/의하여·의 규정·부터·까지·내지"처럼 참조 문장에서만
+            #:     쓰는 조사다 — 진짜 조 본문(①…, 회사는 …)은 이렇게 시작하지 않는다.
+            #:
+            #:   ★★**제목에 괄호가 중첩되면 검사를 건너뛴다.** `_ARTICLE` 의 제목
+            #:     캡처는 `)` 를 못 담아서 `납입최고(독촉)와 계약의 해지` 같은 제목이
+            #:     `납입최고(독촉` 에서 잘리고 **남은 `와 계약의 해지)` 가 꼬리로
+            #:     샌다** — `와\s` 가 `_REF_TAIL` 에 걸려 **진짜 조 27개(실측
+            #:     15d0cf40e56c 등)가 몽땅 참조로 오판될 뻔했다.** 제목 안에 `(` 가
+            #:     남아 있으면(닫는 `)` 를 못 찾아 char class 가 거기서 멈췄다는 뜻)
+            #:     이 검사를 하지 않는다 — 옛 규칙(제목 있으면 무조건 진짜)으로
+            #:     되돌아간다. 제목 정규식 자체(중첩 괄호 미지원)를 고치는 게
+            #:     근본 해법이지만 영향 범위가 더 넓어 이번 범위 밖으로 둔다.
+            title_head = (m.group(3) or "")
+            title_truncated = "(" in title_head or "（" in title_head
+            if not title_truncated and _REF_TAIL.match(t[m.end():m.end() + 12]):
+                #: ★★§15 세 번째 시도 — 위 `_LEADING_ARTICLE_REF` 주석의 다섯
+                #:   조건을 전부 만족하면 "참조"를 "머리"로 뒤집는다.
+                #:   `_REF_TAIL`/S3 판정식은 안 바꾼다 — 이 문서(같은 부 안에서
+                #:   이미 채택된 머리들) 상태만 추가로 본다.
+                title_stripped = title_head.strip()
+                lead = _LEADING_ARTICLE_REF.match(t[m.end():])
+                if title_stripped and lead:
+                    #: ★★Codex 구현검토 지적·재현 — 인용 대상이 자기 자신과
+                    #:   **본번호는 같고 가지번호만 다른 조**(`제4조의2` 가
+                    #:   `제4조의1`을 인용)일 때, 본번호만 비교하면 진짜 다른
+                    #:   조인데 자기참조로 오판해 회복을 놓친다. `(본번호, 가지
+                    #:   번호)` 쌍 전체로 비교해야 한다.
+                    ref_key = (int(lead.group(1)), lead.group(2) or "")
+                    own_key = (int(m.group(1)), m.group(2) or "")
+                    sec_name, sec_kind, sec_idx = _section_context_at(pg["page"], m.start())
+                    if ref_key != own_key and sec_kind == "policy":
+                        #: ★★Codex 구현검토 지적·재현 — 제목 비교는 공백 차이
+                        #:   ("기본형 실손" vs "기본형실손")까지 다른 제목으로
+                        #:   본다. 기존 부 이름 정규화(1111행 `re.sub(r"\s+", ""...)`)
+                        #:   와 같은 방식으로 맞춘다.
+                        title_norm = re.sub(r"\s+", "", title_stripped)
+                        #: ★★Codex 구현검토 지적·재현 — 부 발생 색인(`sec_idx`)을
+                        #:   서명에 넣는다. 이름만 쓰면 같은 이름("보통약관")을 쓰는
+                        #:   서로 다른 두 특약의 정당한 조항이 서로 "중복 제목
+                        #:   자기참조"로 오판된다(위 `_section_context_at` 주석 참조).
+                        sig = (sec_idx, m.group(1), m.group(2) or "", title_norm)
+                        if sig not in seen_titled_heads:
+                            seen_titled_heads.add(sig)
+                            heads.append(
+                                (pg["page"], m.start(), m.group(1), m.group(2) or "", title_stripped)
+                            )
+                            continue
                 n_ref_head += 1
                 continue
+            title_stripped = (m.group(3) or "").strip()
+            if title_stripped:
+                _sec_name, _sec_kind, sec_idx = _section_context_at(pg["page"], m.start())
+                title_norm = re.sub(r"\s+", "", title_stripped)
+                seen_titled_heads.add((sec_idx, m.group(1), m.group(2) or "", title_norm))
             heads.append(
-                (pg["page"], m.start(), m.group(1), m.group(2) or "", (m.group(3) or "").strip())
+                (pg["page"], m.start(), m.group(1), m.group(2) or "", title_stripped)
             )
 
     #: ★번호 체계를 **점수로 고른다.** "제N조가 하나라도 있으면 그것" 은 틀렸다.
@@ -960,7 +1571,8 @@ def build(page_doc: dict) -> dict:
             label = (f"{no}-{sub}." if sub else f"{no}.")
         else:
             label = f"제{no}조" + (f"의{sub}" if sub else "")
-        section_name = section_of_page.get(page, "미상")
+        #: ★페이지 단위가 아니라 이 조 머리 **자신의 오프셋** 기준(§9-1 수정, 위 주석).
+        section_name = _section_name_at(page, off)
 
         # ── 9) 계층형 청킹: 부 → 조 → **항** ──
         #: ★조 수준 인용 문자열. 판정 근거에 그대로 실린다.
@@ -1088,7 +1700,8 @@ def build(page_doc: dict) -> dict:
         body = chr(10).join(parts)
         if not body.strip():
             continue
-        sec = section_of_page.get(ap, "미상")
+        #: ★페이지 단위가 아니라 이 부록 라벨 **자신의 오프셋** 기준(§9-1 수정, 위 주석).
+        sec = _section_name_at(ap, ao)
         annexes.append({
             "ordinal": len(annexes),
             "label": lab,
@@ -1204,8 +1817,11 @@ def build(page_doc: dict) -> dict:
     #:   `제N조` 는 group(1), `N-M.` 은 group(2) 다. 실측: 그래서 numbered 형식의
     #:   A-B-A 재진입 **7건을 놓쳤다**(4,714 → 4,721). 코덱스가 잡았다.
     audit_blocks = [
+        #: ★`section` 도 넘긴다 — `structure_faults` 가 부(部)까지 갈라 보게 한다
+        #:   (§9-1 수정, 위 `_section_name_at` 주석). 안 넘기면 새 특약의 번호
+        #:   재시작이 여전히 직전 특약과 부딪혀 A-B-A 오탐이 난다.
         {"no": _clause_num(c["clause_no"]),
-         "kind": numbering, "title": c["title"], "text": c["text"]}
+         "kind": numbering, "title": c["title"], "text": c["text"], "section": c["section"]}
         for c in clauses
     ]
     faults = structure_faults(audit_blocks)
@@ -1297,6 +1913,17 @@ def build(page_doc: dict) -> dict:
             #: ★미검증 복원이라 조항에 안 실은 표 수. 페이지 JSON 에는 남아 있다.
             "tables_withheld_unverified": n_table_withheld,
             "annex_chars": sum(a["char_length"] for a in annexes),
+            #: ★s5L 연동계획 단계 2 — 정보용 집계일 뿐 판정에 안 쓴다. 이
+            #:   보험사에 크기/굵기 신호가 있으면(`_S5L_TITLE_SIGNAL_INSURERS`)
+            #:   채택된 부 제목마다 다음 줄과 대비를 잰다. `checked`+`unavailable`
+            #:   이 신호 있는 보험사에서 실제로 채택된 부 제목 총수다.
+            #:   ★이름이 "confirmed"가 아니라 "contrast_hit"다(코덱스 표본검수
+            #:     지적, 2026-08-27) — 이 값은 "진짜 제목이라는 확인"이 아니라
+            #:     단순 대비 조건 적중이다. 후속 의사결정에 "이 조가 진짜
+            #:     제목임이 확인됐다"는 뜻으로 읽으면 안 된다.
+            "section_title_visual_checked": n_title_visual_checked,
+            "section_title_visual_contrast_hit": n_title_visual_hit,
+            "section_title_visual_unavailable": n_title_visual_unavailable,
         },
         "sections": sorted(set(section_of_page.values())),
         "clauses": clauses,

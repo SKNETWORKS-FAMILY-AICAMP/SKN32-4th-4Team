@@ -69,10 +69,30 @@ def _offending_lines(path: pathlib.Path, pattern) -> list[tuple[int, str]]:
 
 # ── 1. verdict enum ──────────────────────────────────────────────────────
 
+#: ★`covered`/`not_covered` 는 **판례·금감원 트랙의 어휘이기도 하다.**
+#:
+#:   2026-08-26 오탐이 났다 — 다른 세션이 만든 `25_판례_case100_case94_확인요청.md` 가
+#:   판례 결론을 `covered`/`not_covered` 로 적었는데, 이 검사가 그것을
+#:   **폐기된 precheck verdict** 로 읽고 실패했다.
+#:
+#:   두 어휘는 도메인이 다르다:
+#:     precheck  `Verdict` = likely_covered · unlikely · needs_documents · needs_expert
+#:     법률 트랙  사건 결론 = covered · not_covered   (검토 상태는 confirmed/corrected/rejected)
+#:
+#:   ★어휘가 겹치는 것을 **문자열로는 가릴 수 없다.** 그래서 문서 단위로 면제하되,
+#:     `_PATH_CHECK_EXEMPT` 와 같은 규율을 쓴다 — **"이 문서가 다른 어휘의 정본인가"**
+#:     를 근거로만 늘린다. 키워드로 거르지 않는다(그 방식은 이미 오탐으로 실패했다).
+_VERDICT_CHECK_EXEMPT_PREFIX = "25_판례_"
+
+
 def test_계약문서에_폐기된_verdict_값이_남아있지_않다():
     """★이게 이 파일의 핵심이다. 조용히 빈 화면이 되는 결함을 막는다."""
     pat = re.compile("|".join(rf"`{v}`|\"{v}\"|'{v}'" for v in _RETIRED_VERDICTS))
-    bad = {p.name: _offending_lines(p, pat) for p in _docs()}
+    bad = {
+        p.name: _offending_lines(p, pat)
+        for p in _docs()
+        if not p.name.startswith(_VERDICT_CHECK_EXEMPT_PREFIX)
+    }
     bad = {k: v for k, v in bad.items() if v}
     assert not bad, (
         "코드에 없는 verdict 값이 계약 문서에 남아 있다.\n"

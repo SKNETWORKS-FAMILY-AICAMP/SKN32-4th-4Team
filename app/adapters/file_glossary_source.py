@@ -60,9 +60,22 @@ def _load() -> list[TermPassage]:
         if not _PASSAGES.exists() and not s7_present:
             raise InfraError("용어 색인과 S7 승인 사실 산출물이 모두 없습니다.")
 
+        from app.adapters.document_content_aliases import (
+            ContentAliasError,
+            is_alias_sha,
+            load as load_content_aliases,
+        )
+
+        try:
+            aliases = load_content_aliases(validate_confirmed=False)
+        except ContentAliasError as exc:
+            raise InfraError(str(exc)) from exc
+
         #: S7 금액 사실은 먼저 두되 `find()`에서 금액 사실 질문에만 노출한다.
         #: 통원·외래 같은 용어 정의 질문에 금액표가 앞서는 것을 막는다.
-        s7_rows = _load_s7()
+        s7_rows = [
+            row for row in _load_s7() if not is_alias_sha(row.sha256, aliases)
+        ]
         if (
             expected_s7_occurrences is not None
             and len(s7_rows) != expected_s7_occurrences
@@ -81,7 +94,10 @@ def _load() -> list[TermPassage]:
                     except json.JSONDecodeError as e:
                         #: ★조용히 건너뛰지 않는다. 분모가 줄면 커버리지가 좋아 보인다.
                         raise InfraError(f"용어 색인 {ln}행이 깨졌습니다: {e}") from e
-                    rows.append(_to_passage(d))
+                    passage = _to_passage(d)
+                    if is_alias_sha(passage.sha256, aliases):
+                        continue
+                    rows.append(passage)
         _cache = rows
         return rows
 

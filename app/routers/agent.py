@@ -15,7 +15,7 @@ from app.auth.agent_client import (
     set_agent_request_audit,
     set_agent_response_audit,
 )
-from app.core.errors import InfraError, NotFoundErr, ValidationErr
+from app.core.errors import InfraError, NotFoundErr, RateLimitErr, ValidationErr
 from app.obs.trace import get_trace_id
 from app.schemas.agent import (
     AgentCohortResponse,
@@ -61,6 +61,17 @@ def _call_facade(fn, *args, **kwargs):
             raise ValidationErr(message) from exc
         if exc.status_code == status.HTTP_404_NOT_FOUND:
             raise NotFoundErr(message) from exc
+        if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            retry_after = 60
+            if exc.headers:
+                try:
+                    retry_after = int(exc.headers.get("Retry-After", retry_after))
+                except (TypeError, ValueError):
+                    retry_after = 60
+            raise RateLimitErr(
+                message,
+                retry_after_seconds=retry_after,
+            ) from exc
         raise InfraError(message) from exc
 
 

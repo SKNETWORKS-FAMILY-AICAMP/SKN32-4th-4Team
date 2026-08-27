@@ -59,7 +59,14 @@ def _all_collected_node_ids() -> frozenset[str]:
     """
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "pytest", "--collect-only", "tests/"],
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "--collect-only",
+                    "tests/",
+                    "--ignore=tests/delivery",
+                ],
             cwd=_REPO_ROOT,
             #: ★★**자식 프로세스의 출력 인코딩을 못 박는다.**
             #:

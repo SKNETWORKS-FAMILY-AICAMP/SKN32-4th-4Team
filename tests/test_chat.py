@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.errors import register_exception_handlers
 from app.core.ports.glossary import TermPassage
 from app.core.usecases import chat
 
@@ -38,6 +40,16 @@ _SRC = _Fake([
     _p("2. (용어의 정의)\n도수치료 치료자가 손을 이용해 실시하는 치료행위"),
     _p("2. (용어의 정의)\n통원 의료기관에 입원하지 않고 방문하여 치료받는 것"),
 ])
+
+
+def _chat_app():
+    from app.routers import chat as chat_router
+
+    chat_router._reset_guard_for_tests()
+    app = FastAPI()
+    register_exception_handlers(app)
+    app.include_router(chat_router.router)
+    return app
 
 
 # ---------------------------------------------------------------- 의도
@@ -121,10 +133,8 @@ def test_모든_답에_판정_아님_경고가_붙는다():
 @pytest.fixture()
 def client(monkeypatch):
     from app import composition
-    from app.main import create_app
-
     monkeypatch.setattr(composition, "build_glossary", lambda: _SRC)
-    return TestClient(create_app("full"))
+    return TestClient(_chat_app())
 
 
 def test_보장질문_응답에_verdict가_없다(client):
@@ -151,7 +161,6 @@ def test_못찾음도_200이다(client):
 def test_색인이_없으면_503(monkeypatch):
     from app import composition
     from app.core.errors import InfraError
-    from app.main import create_app
 
     class _Broken:
         def find(self, *a, **k):
@@ -161,7 +170,7 @@ def test_색인이_없으면_503(monkeypatch):
             raise InfraError("용어 색인 메타가 없습니다")
 
     monkeypatch.setattr(composition, "build_glossary", lambda: _Broken())
-    r = TestClient(create_app("full")).post("/v1/chat", json={"message": "통원 뜻"})
+    r = TestClient(_chat_app()).post("/v1/chat", json={"message": "통원 뜻"})
     assert r.status_code == 503
     assert "secret" not in r.text and "private" not in r.text
     assert r.json()["detail"] == "서비스 의존 시스템을 사용할 수 없습니다."
@@ -171,7 +180,6 @@ def test_설정한_llm이_승인_원문을_설명한다(monkeypatch):
     from types import SimpleNamespace
 
     from app import composition
-    from app.main import create_app
     from app.routers import chat as chat_router
 
     class _Model:
@@ -184,16 +192,26 @@ def test_설정한_llm이_승인_원문을_설명한다(monkeypatch):
     monkeypatch.setattr(
         chat_router,
         "get_settings",
-        lambda: SimpleNamespace(LLM_CHAT_ENABLED=True, LLM_PROVIDER="openai"),
+        lambda: SimpleNamespace(
+            LLM_CHAT_ENABLED=True,
+            LLM_PROVIDER="openai",
+            LLM_REQUEST_TIMEOUT_SECONDS=5.0,
+            CHAT_RATE_LIMIT_PER_MINUTE=100,
+            CHAT_LLM_MAX_CALLS_PER_MINUTE=0,
+            CHAT_LLM_CACHE_TTL_SECONDS=0,
+            CHAT_TRUST_FORWARDED_FOR=False,
+        ),
     )
     monkeypatch.setattr(chat_router, "get_active_model", lambda: "configured-model")
+    chat_router._reset_guard_for_tests()
 
-    r = TestClient(create_app("full")).post("/v1/chat", json={"message": "통원 뜻"})
+    r = TestClient(_chat_app()).post("/v1/chat", json={"message": "통원 뜻"})
     assert r.status_code == 200
     body = r.json()
     assert body["llm"] == {
         "used": True,
         "provider": "openai",
         "model": "configured-model",
+        "source": "call",
     }
     assert "입원하지 않고" in body["message"]

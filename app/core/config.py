@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 프로젝트 루트: 이 파일은 app/core/config.py 이므로 parents[2] = 프로젝트 루트
@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     LLM_CHAT_ENABLED: bool = True
     LLM_REQUEST_TIMEOUT_SECONDS: float = 120.0
     LLM_HEALTH_TIMEOUT_SECONDS: float = 3.0
+    # 익명 챗봇 과금 보호. 0은 해당 보호를 끄므로 격리된 부하 시험에서만 사용한다.
+    CHAT_RATE_LIMIT_PER_MINUTE: int = Field(default=20, ge=0)
+    CHAT_LLM_MAX_CALLS_PER_MINUTE: int = Field(default=60, ge=0)
+    CHAT_LLM_CACHE_TTL_SECONDS: float = Field(default=30.0, ge=0)
+    # 신뢰 프록시를 통해서만 앱에 접근할 수 있을 때 true로 둔다.
+    CHAT_TRUST_FORWARDED_FOR: bool = False
 
     # --- 모델 레지스트리(Phase 1) ---
     # 활성 모델 '프로필 선택자'(모델 ID 자체가 아니라 model_registry.yaml의 profile_id).
@@ -61,7 +67,7 @@ class Settings(BaseSettings):
 
     # --- OpenAI ---
     OPENAI_API_KEY: str | None = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_MODEL: str = "gpt-4.1-nano"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
 
     # --- Gemini ---
@@ -130,6 +136,17 @@ class Settings(BaseSettings):
     #   프레임워크·전달 계층의 순수 오버헤드를 재려면 코어가 거의 0인 경로가 필요한데,
     #   그런 경로를 운영 표면에 상시 노출할 이유는 없다.
     BENCH_ENDPOINTS_ENABLED: bool = False
+    #: ★**공개 도메인 뒤에 둘 때 필요하다.** 비우면 `DELIVERY_DJANGO_BASE_URL` 에서
+    #:   호스트를 파생한다(로컬·컨테이너용). 리버스 프록시가 `Host: jikimi.duckdns.org`
+    #:   같은 공개 이름을 넘기면 파생값과 달라 **Django 가 400 으로 거절**한다.
+    #:   쉼표로 구분한다. 예: "jikimi.duckdns.org,www.example.com"
+    #:   ★`*` 를 넣으면 Django 의 Host 검사가 **꺼진다** — 프록시가 Host 를 고정해 주는
+    #:     경우가 아니면 쓰지 않는다.
+    DELIVERY_ALLOWED_HOSTS: str = ""
+    #: ★L1-c 대조군 — 전달 계층이 업스트림 연결을 재사용할지(계획서 W7·§6.1).
+    #:   기본 True(재사용). False 로 두면 요청마다 새로 연결한다.
+    #:   ★측정용 스위치이지 운영 선택지가 아니다 — 끄면 느려지는 것을 재려고 있다.
+    DELIVERY_UPSTREAM_KEEPALIVE: bool = True
 
     #: ★`CLAUSE_STORE` 는 예전에 `os.getenv(...).strip().lower()` 로 읽혔다(2026-08-25 이전).
     #:   그래서 `CLAUSE_STORE=PG` 나 앞뒤 공백이 있어도 동작했다.
@@ -184,6 +201,78 @@ class Settings(BaseSettings):
     CLAUSE_RERANK_MAX_LENGTH: int = 1536
     #: 채점 프롬프트에 넣는 본문 길이 상한(자). 조 전체는 3만 자까지 있다.
     CLAUSE_RERANK_SCORE_CHARS: int = 1200
+
+    #: ★리랭킹 시한(초). 넘으면 **504** 로 나간다.
+    #:   실측(2026-08-05 · RTX 4070 SUPER · 후보 20 · Qwen3-4B): 질의당 2.3초.
+    #:   30초는 그 열 배가 넘는 여유다 — 이보다 오래 걸리면 무언가 잘못된 것이다.
+    #:
+    #: ★★**시한이 지나도 추론은 안 멈춘다.** 파이썬 스레드는 강제 종료가 없고
+    #:   torch 추론은 중간에 끊기지 않는다. 시한은 「이 요청을 포기한다」는 뜻이지
+    #:   「계산을 멈춘다」가 아니다. 그동안 워커는 새 요청을 받지 않는다(503).
+    #:   진짜 취소가 필요하면 별도 프로세스로 띄워 죽여야 한다 — 아직 안 했다.
+    CLAUSE_RERANK_TIMEOUT_SECONDS: float = 30.0
+    #: 워커 대기열 길이. 차면 503 — 쌓아 두면 밖에서 안 보인다.
+    CLAUSE_RERANK_QUEUE_SIZE: int = 8
+
+    #: ★리랭크 워커 방식 — `thread` | `process`
+    #:
+    #:   `thread`(기본)  모델을 스레드가 붙든다. 가볍지만 **시한이 지나도 추론을 못 멈춘다**
+    #:                   (파이썬 스레드는 강제 종료가 없다). 계산이 끝날 때까지
+    #:                   새 요청을 503 으로 거절한다 — 한 건이 막히면 한동안 멈춘다.
+    #:   `process`       자식 프로세스가 붙든다. 시한이 지나면 **죽인다** — 실제로 멈춘다.
+    #:                   OOM 도 자식만 죽고 서버는 산다.
+    #:                   대가: 죽인 뒤 무게추를 **다시** 올린다(4B ≈ 수십 초).
+    #:
+    #: ★기본을 `thread` 로 두는 이유 — 죽이는 것은 싸지 않다. 시한 초과가 잦거나
+    #:   OOM 이 실제로 관측될 때 `process` 로 바꾼다. 그 판단 근거는 메트릭에 있다
+    #:   (`clause_rerank_jobs_total{result="timeout"}`).
+    CLAUSE_RERANK_WORKER: Literal["thread", "process"] = "thread"
+
+    #: ★메트릭 스크레이프 전용 토큰. **비어 있으면 그 경로가 열리지 않는다**(무폴백).
+    #:
+    #:   `/api/admin/metrics` 는 관리자 로그인을 요구해 Prometheus 가 그냥은 못 긁는다.
+    #:   그렇다고 무인증으로 열면 운영 지표가 그대로 노출된다.
+    #:   그래서 **읽기 전용 · 메트릭 전용** 토큰을 따로 둔다 —
+    #:   관리자 계정과 분리돼 있어 이 값이 새도 다른 것은 못 한다.
+    #:
+    #: ★★토큰 비교는 `secrets.compare_digest` 로 한다. `==` 로 하면 앞자리부터
+    #:   달라지는 지점이 응답 시간에 남아(타이밍 공격) 토큰을 한 글자씩 맞출 수 있다.
+    METRICS_SCRAPE_TOKEN: str = ""
+
+    #: ★사전판정 응답에 **참고 조항**을 붙일까(벡터 의미검색).
+    #:
+    #:   `/v1/prechecks` 는 지금까지 벡터 색인을 **한 번도 안 봤다.** 판정은
+    #:   질병기호 대조로만 하고, 대부분의 답이 「면책엔 없다, 보상하는 사항이 정한다」로
+    #:   끝나면서 **그 조항을 보여 주지 않았다.** 이 스위치가 그 자리를 메운다.
+    #:
+    #: ★★**켜도 판정은 안 바뀐다.** 유사도는 근거가 아니다 — 결과는 `related_clauses`
+    #:   로만 나가고 `citations` 에 안 섞이며, 급도 `retrieved_clause` 로 따로 붙는다.
+    #:
+    #: ★기본이 꺼짐인 이유 — 판정 한 건마다 임베딩 1회 + 벡터 조회 1회가 늘고,
+    #:   이 참고 조항이 실제로 도움이 되는지 아직 실측하지 않았다.
+    #: ★★조항 벡터 색인이 사는 **스키마 이름**.
+    #:
+    #:   그동안 이 테이블들은 `mall_vec` DB 의 `public` 에 있었다. 그 이름은 커머스
+    #:   실습 시절(`_unified_mall`) 잔재이고, `insurance_real` 안 `vec` 스키마로 옮기는 중이다.
+    #:
+    #: ★★**왜 설정으로 두나 — 「조용히 다른 것을 읽는」 사고를 막으려고.**
+    #:
+    #:   SQL 120곳이 테이블을 **맨이름**으로 쓴다(`policy_clause_chunk` 등).
+    #:   기본 `search_path` 는 `"$user", public` 이라, DSN 만 바꾸면 그 전부가
+    #:   `relation does not exist` 로 깨진다 — **그건 차라리 낫다.**
+    #:   더 나쁜 경우는 두 스키마에 같은 이름이 있어 **엉뚱한 쪽을 조용히 읽는** 것이다.
+    #:   이 저장소는 그 유형으로 여러 번 데였다(옛 세대 혼입 · 옛 모델 벡터 · 낡은 게이트 값).
+    #:
+    #:   그래서 스키마를 **여기 한 곳에서 정하고**, 연결할 때 `search_path` 를
+    #:   그 값 **하나로** 고정한다(`public` 을 뒤에 붙이지 않는다 —
+    #:   붙이면 못 찾았을 때 조용히 옛 것으로 떨어진다).
+    #:
+    #: ★기본이 `public` 인 이유 — 지금 운영이 그렇다. 이관이 끝나면 `vec` 으로 바꾼다.
+    PGVECTOR_SCHEMA: str = "public"
+
+    PRECHECK_RELATED_SEARCH_ENABLED: bool = False
+    #: 참고 조항을 몇 개까지 붙일까. 많이 붙일수록 화면에서 근거와 참고가 헷갈린다.
+    PRECHECK_RELATED_SEARCH_LIMIT: int = 5
 
     # --- 음성 (Phase 11, STT/TTS) ---
     # GPU 미검출 환경(Codex 검토) — CPU + int8로 검증한 크기만 기본값으로 둔다.
@@ -269,6 +358,7 @@ class Settings(BaseSettings):
     # 1M 토큰당 USD [input, output]. 로컬(local)은 과금 없음이라 미등록 → 비용추정 불가.
     PRICE_TABLE: dict[str, list[float]] = {
         "gpt-4o-mini": [0.15, 0.60],
+        "gpt-4.1-nano": [0.10, 0.40],
         "gemini-2.5-flash": [0.075, 0.30],
     }
 

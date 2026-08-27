@@ -30,6 +30,7 @@
     bindLoginEvents();
     bindSimulationEvents();
     bindModeEvents();
+    bindLlmProviderEvents();
     synchronizeAuthentication();
 
     if (hasToken()) {
@@ -91,6 +92,11 @@
     elements.modePending = document.getElementById("modePending");
     elements.modeCollected = document.getElementById("modeCollected");
     elements.modeNote = document.getElementById("modeNote");
+
+    elements.llmProviderBadge = document.getElementById("llmProviderBadge");
+    elements.llmProviderSelect = document.getElementById("llmProviderSelect");
+    elements.llmProviderDesc = document.getElementById("llmProviderDesc");
+    elements.llmProviderNote = document.getElementById("llmProviderNote");
 
     elements.realQueue = document.getElementById("realQueue");
     elements.realQueueCount = document.getElementById("realQueueCount");
@@ -363,7 +369,8 @@
       fetchApi("/api/admin/demo/simulation"),
       fetchApi("/api/admin/precheck-mode"),
       fetchApi("/api/admin/verifications/queue"),
-      fetchApi("/api/admin/users")
+      fetchApi("/api/admin/users"),
+      fetchApi("/api/admin/llm-provider")
     ]);
 
     const [
@@ -376,7 +383,8 @@
       simResult,
       modeResult,
       realQueueResult,
-      usersResult
+      usersResult,
+      llmProviderResult
     ] = requests;
 
     const failures = [];
@@ -429,6 +437,15 @@
       renderMode(null);
       failures.push(formatLoadFailure("판정 모드", modeResult.reason));
       handlePossibleAuthenticationError(modeResult.reason);
+    }
+
+    if (llmProviderResult.status === "fulfilled") {
+      state.llmProvider = normalizeObject(llmProviderResult.value);
+      renderLlmProvider(state.llmProvider);
+    } else {
+      renderLlmProvider(null);
+      failures.push(formatLoadFailure("LLM 프로바이더", llmProviderResult.reason));
+      handlePossibleAuthenticationError(llmProviderResult.reason);
     }
 
     if (realQueueResult.status === "fulfilled") {
@@ -884,6 +901,61 @@
     if (!elements.modeNote) return;
     elements.modeNote.textContent = text || "";
     elements.modeNote.className = "sim-note" + (tone ? ` is-${tone}` : "");
+  }
+
+  /* ── LLM 프로바이더 ───────────────────────────────────────────────────
+   * `.env`의 LLM_PROVIDER 기본값을 런타임에 덮어쓴다. 판정 모드와 같은 이유로
+   * 파일에 남겨 admin·customer 프로세스가 같은 값을 보게 한다.
+   */
+  function bindLlmProviderEvents() {
+    if (!elements.llmProviderSelect) return;
+    elements.llmProviderSelect.addEventListener("change", handleLlmProviderChange);
+  }
+
+  async function handleLlmProviderChange() {
+    const want = elements.llmProviderSelect.value || null;  // "" → 기본값(null)
+
+    elements.llmProviderSelect.disabled = true;
+    const result = await apiFetch("/api/admin/llm-provider", {
+      method: "PUT",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: want })
+    });
+    elements.llmProviderSelect.disabled = false;
+
+    if (!result || !result.ok) {
+      renderLlmProvider(state.llmProvider);  // 되돌린다
+      setLlmProviderNote(simErrorText(result), "error");
+      return;
+    }
+    state.llmProvider = result.body;
+    renderLlmProvider(state.llmProvider);
+    setLlmProviderNote(`LLM 프로바이더를 ${result.body.effective}(으)로 바꿨습니다.`, "ok");
+  }
+
+  function renderLlmProvider(info) {
+    if (!elements.llmProviderBadge) return;
+    if (!info) {
+      elements.llmProviderBadge.className = "status-badge status-unknown";
+      elements.llmProviderBadge.textContent = "확인 실패";
+      return;
+    }
+
+    const overridden = Boolean(info.override);
+    elements.llmProviderSelect.value = info.override || "";
+    elements.llmProviderBadge.className =
+      "status-badge " + (overridden ? "status-pending" : "status-resolved");
+    elements.llmProviderBadge.textContent = info.effective || "-";
+
+    elements.llmProviderDesc.textContent = overridden
+      ? `.env 기본값(${info.default})을 덮어씀 — 현재 ${info.effective} 사용 중.`
+      : `.env 기본값(${info.default}) 그대로 사용 중.`;
+  }
+
+  function setLlmProviderNote(text, tone) {
+    if (!elements.llmProviderNote) return;
+    elements.llmProviderNote.textContent = text || "";
+    elements.llmProviderNote.className = "sim-note" + (tone ? ` is-${tone}` : "");
   }
 
   /* ── 실제 트랙 검수 큐 ────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 """전처리 v5 산출물 시각화 HTML 생성."""
 import os, json, datetime
 import pandas as pd
+from db.postgres.pgvector_index import get_conn
 
 TAG = os.environ.get('VIZ_TAG', 's5')
 
@@ -189,7 +190,11 @@ def _db_section() -> str:
             sys.path.insert(0, _root)
         import psycopg
         from app.core.config import get_settings
-        with psycopg.connect(get_settings().PGVECTOR_DSN, connect_timeout=10) as conn:
+        #: ★★`get_conn()` 을 쓴다 — **직접 `psycopg.connect` 하면 `search_path` 가 안 걸린다**
+        #:   (2026-08-26). 조항 색인이 `insurance_real.vec` 로 옮겨진 뒤
+        #:   맨이름 SQL 이 `relation "policy_clause_chunk" does not exist` 로 깨진다.
+        #:   실제로 이 스크립트가 그렇게 죽었다. 스키마를 정하는 곳은 한 군데다.
+        with get_conn() as conn:
             with conn.cursor() as cur:
                 def one(sql, *a):
                     cur.execute(sql, a)

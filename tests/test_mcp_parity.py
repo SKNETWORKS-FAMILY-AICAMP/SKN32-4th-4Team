@@ -166,6 +166,18 @@ def test_잘못된_observation_outcome도_구조화된_422다():
     assert out["retryable"] is False
 
 
+def test_mcp_429_preserves_retry_after():
+    from fastapi import HTTPException
+    from app.mcp.server import _call
+
+    def limited():
+        raise HTTPException(429, "budget exhausted", headers={"Retry-After": "19"})
+
+    out = _call(limited)
+    assert out["http_status"] == 429
+    assert out["retry_after"] == "19"
+
+
 def test_도구는_정확히_네_개다():
     """LLM 용어 설명도 별도 구현 없이 REST 라우터를 그대로 쓴다."""
     from app.mcp.server import mcp

@@ -454,6 +454,28 @@ def verify_against_store(outcome: PrecheckOutcome, clauses) -> tuple:
     )
 
 
+def _related_port():
+    """참고 조항 포트를 만든다. 못 만들면 **`None` 이 아니라 터뜨리지 않는다.**
+
+    ★기동을 죽이지 않는다 — 참고 조항은 곁가지다. 다만 **조용히 넘기지 않는다**:
+      켰는데 못 만들었으면 그 사실을 로그에 남긴다. 안 남기면 스위치가 켜진 채
+      아무 일도 안 하는 상태가 밖에서 안 보인다(CLAUDE.md §0).
+    """
+    from app.adapters import related_clause_search
+
+    try:
+        return related_clause_search.build()
+    except Exception as exc:  # noqa: BLE001
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "참고 조항 검색을 켰지만 만들지 못했습니다(%s: %s). "
+            "판정은 그대로 동작하며 참고 조항만 붙지 않습니다.",
+            type(exc).__name__, exc,
+        )
+        return None
+
+
 def build() -> PrecheckGraph:
     """조립. **어댑터를 고르는 것은 조립 지점의 일이다.**"""
     from app.composition import build_precheck
@@ -471,9 +493,15 @@ def build() -> PrecheckGraph:
         loader = getattr(deps["policies"], "load_versions_cached", None)
         return loader() if loader else deps["policies"].load_versions()
 
+    #: ★참고 조항 검색은 **꺼져 있으면 `None`** 이다. 스위치를 끈 것과
+    #:   검색이 실패한 것은 다른 상태라 섞지 않는다 —
+    #:   전자는 `related_search=""`, 후자는 `"failed: ..."` 로 나간다.
+    #:   ★여기서 한 번만 만든다. 판정마다 만들면 임베더 적재가 요청 안으로 들어온다.
+    related = _related_port()
+
     def _run(body: PrecheckInput) -> PrecheckOutcome:
         return uc.run(body, policies=deps["policies"], clauses=deps["clauses"],
-                      versions=_versions())
+                      versions=_versions(), related=related)
 
     def _verify(outcome: PrecheckOutcome):
         return verify_against_store(outcome, deps["clauses"])

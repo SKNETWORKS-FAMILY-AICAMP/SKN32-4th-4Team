@@ -109,6 +109,7 @@ class AgentLlmStatus(_StrictModel):
     used: bool
     provider: str | None
     model: str | None
+    source: Literal["call", "single_flight", "cache"] | None = None
 
 
 class AgentTermResponse(_StrictModel):

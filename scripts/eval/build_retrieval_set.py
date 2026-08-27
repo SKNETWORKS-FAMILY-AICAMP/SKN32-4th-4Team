@@ -32,6 +32,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import pathlib
 import random
@@ -83,12 +84,30 @@ def _strip_head(text: str, title: str) -> str:
 
 
 def main() -> int:
-    files = sorted(_STRUCT.glob("*/s5_*/*.clauses.json"))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--schema", default="s5", choices=["s5", "s6"],
+                     help="어느 전처리 산출물에서 만들지(기본 s5, 기존 동작 유지)")
+    ap.add_argument("--seed", type=int, default=20260802,
+                     help="표본 시드. holdout 을 만들 때는 다른 값을 준다")
+    ap.add_argument("--out", default="",
+                     help="산출물 경로(기본은 --schema 로 정함)")
+    ap.add_argument("--exclude-ids-file", default="",
+                     help="이 파일(embed_bench*.json)의 corpus id 는 표본에서 뺀다"
+                          " — holdout 이 본 세트와 안 겹치게 하려는 목적")
+    args = ap.parse_args()
+
+    exclude_ids: set[str] = set()
+    if args.exclude_ids_file:
+        prior = json.loads(pathlib.Path(args.exclude_ids_file).read_text(encoding="utf-8"))
+        exclude_ids = {c["id"] for c in prior.get("corpus") or []}
+
+    glob_pat = f"*/{args.schema}_*/*.clauses.json"
+    files = sorted(_STRUCT.glob(glob_pat))
     if not files:
-        print("s5 산출물이 없습니다.")
+        print(f"{args.schema} 산출물이 없습니다.")
         return 2
 
-    rng = random.Random(20260802)
+    rng = random.Random(args.seed)
     rng.shuffle(files)
 
     pool: list[dict] = []
@@ -108,6 +127,10 @@ def main() -> int:
             text = c.get("text") or ""
             #: ★중복 65.4% 이므로 같은 내용을 여러 번 넣으면 정답이 모호해진다.
             if not h or h in seen_hash or not title:
+                continue
+            #: ★holdout 용 — 본 세트에 이미 쓴 id 는 뺀다(진짜 안 겹치는 표본이어야
+            #:   "다시 본 적 없는 데이터"라는 holdout 의 뜻이 선다).
+            if h[:16] in exclude_ids:
                 continue
             body = _strip_head(text, title)
             if not (MIN_CHARS <= len(body) <= MAX_CHARS):
@@ -210,8 +233,10 @@ def main() -> int:
         })
 
     out = {
-        "built_at": "2026-08-03",
-        "built_from": "s5",
+        "built_at": "2026-08-03" if args.schema == "s5" else "2026-08-27",
+        "built_from": args.schema,
+        "seed": args.seed,
+        "excluded_ids_from": args.exclude_ids_file or None,
         "source_documents": n_doc,
         "corpus_size": len(corpus),
         "query_count": len(queries),
@@ -231,17 +256,18 @@ def main() -> int:
         "proviso_probes": probes,
         "proviso_queries": proviso_queries,
     }
-    _OUT.parent.mkdir(parents=True, exist_ok=True)
-    _OUT.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    out_path = pathlib.Path(args.out) if args.out else _OUT
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
 
     print(
+        f"[{args.schema} · seed={args.seed}] "
         f"코퍼스 {len(corpus):,} · 제목질의 {len(queries)} · "
         f"뒷부분질의 {len(proviso_queries)}"
         f"(진짜 면책 {sum(1 for q in proviso_queries if q['is_exclusion'])}) · "
         f"탐침 {len(probes)} "
-        f"(문서 {n_doc:,}개에서)"
+        f"(문서 {n_doc:,}개에서) → {out_path}"
     )
-    print(f"→ {_OUT.relative_to(_ROOT)}")
     return 0
 
 

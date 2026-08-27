@@ -63,14 +63,16 @@ def _digest(paths: list[Path]) -> str:
     return h.hexdigest()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     from app.core import release
     from app.core.domain import eligibility
+    from app.adapters.document_content_aliases import ensure_canonicals_present
+    from app.adapters.document_content_aliases import load as load_content_aliases
 
     ap = argparse.ArgumentParser(description="모델팀 인계용 단일 데이터셋")
     ap.add_argument("--clause-tag", default="", help="★shadow 세대. 기본은 승인 릴리스")
     ap.add_argument("--out", default=str(_OUT))
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
 
     rel = release.load()
     tag = a.clause_tag or rel.clause_tag
@@ -103,9 +105,13 @@ def main() -> int:
     inelig_cnt: Counter = Counter()
     n_docs = 0
     n_candidates = 0
+    n_skip_alias = 0
     candidate_ids: set[str] = set()
     candidate_status: Counter = Counter()
     candidate_reasons: Counter = Counter()
+    aliases = load_content_aliases()
+    seen_shas: set[str] = set()
+    selected_files: list[Path] = []
 
     with (
         (out / "occurrences.jsonl").open("w", encoding="utf-8", newline="\n") as f_occ,
@@ -113,11 +119,16 @@ def main() -> int:
     ):
         for p in files:
             doc = json.loads(p.read_text(encoding="utf-8"))
+            src = doc.get("source") or {}
+            sha = src.get("sha256") or doc.get("sha256") or ""
+            seen_shas.add(sha)
+            if sha in aliases:
+                n_skip_alias += 1
+                continue
+            selected_files.append(p)
             n_docs += 1
             status = doc.get("parse_status") or "unknown"
             status_cnt[status] += 1
-            src = doc.get("source") or {}
-            sha = src.get("sha256") or ""
             insurer = src.get("insurer") or ""
 
             for fact in doc.get("candidate_facts") or []:
@@ -213,6 +224,8 @@ def main() -> int:
                     }, ensure_ascii=False) + "\n")
                     n_occ += 1
 
+    ensure_canonicals_present(aliases, seen_shas, context=f"모델팀 데이터셋 {tag}")
+
     n_has_elig = n_mixed = 0
     with (out / "clauses.jsonl").open("w", encoding="utf-8", newline="\n") as f:
         for c in contents.values():
@@ -242,8 +255,10 @@ def main() -> int:
             {d.name for d in (_ROOT / "data" / "extracted").glob("*/s*_*") if d.is_dir()}
         ),
         "eligibility_rules_version": eligibility.RULES_VERSION,
-        "input_digest": _digest(files),
+        "input_digest": _digest(selected_files),
+        "source_documents": len(files),
         "documents": n_docs,
+        "content_alias_documents_skipped": n_skip_alias,
         "parse_status": dict(status_cnt),
         "occurrences": n_occ,
         "unique_contents": len(contents),

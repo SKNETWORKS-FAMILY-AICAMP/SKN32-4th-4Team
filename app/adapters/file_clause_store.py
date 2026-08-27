@@ -142,6 +142,11 @@ def _to_clause(sha256: str, c: dict, parse_status: str) -> ClauseRow:
         is_statute=c.get("statute", c.get("is_statute")),
         parse_status=parse_status,
         ordinal=c.get("ordinal"),
+        #: ★★파일 저장소는 **산출물을 직접 읽으므로** 둘이 같은 값이다.
+        #:   PG 저장소에서는 `ordinal` 이 검색용 재번호라 갈린다 — 그래서 필드를 나눠 뒀다.
+        #:   ★여기서 안 실으면 파일 경로만 `occurrence_id` 가 비어 **두 저장소 판정이 갈린다**
+        #:   (`tests/test_clause_store_parity.py` 가 잡는다).
+        source_ordinal=c.get("ordinal"),
         source_kind=c.get("source_kind") or "clause",
         release_id=_release_id(),
     )

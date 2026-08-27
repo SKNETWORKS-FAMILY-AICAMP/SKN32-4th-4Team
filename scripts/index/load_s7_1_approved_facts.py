@@ -34,6 +34,21 @@ def _full_sha_by12() -> dict[str, str]:
     return result
 
 
+def _reject_content_alias_occurrences(occurrences, full_sha, aliases) -> None:
+    bad = sorted(
+        {
+            full_sha.get(str(row.get("sha12") or ""))
+            for row in occurrences
+            if full_sha.get(str(row.get("sha12") or "")) in aliases
+        }
+    )
+    if bad:
+        raise SystemExit(
+            "approved fact occurrence가 동일 원문 별칭 문서를 참조합니다. "
+            "대표본으로 승인 산출물을 다시 만드세요: " + ", ".join(bad)
+        )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--src", type=Path, default=ROOT / "data/work/s7_1_approved_facts")
@@ -85,8 +100,8 @@ def main() -> int:
     if not np.isfinite(vectors).all():
         raise SystemExit("non-finite vectors")
 
-    from app.adapters import pgvector_clause_index as ix
-    from app.adapters.pgvector_index import get_conn
+    from db.postgres import pgvector_clause_index as ix
+    from db.postgres.pgvector_index import get_conn
     from app.core import release as accepted_release
 
     profile = accepted_release.current().embed_profile
@@ -95,6 +110,10 @@ def main() -> int:
     model_key = profile.key
     generation = ix.current_generation()
     full_sha = _full_sha_by12()
+    from app.adapters.document_content_aliases import load as load_content_aliases
+
+    aliases = load_content_aliases()
+    _reject_content_alias_occurrences(occurrences, full_sha, aliases)
     fact_by_id = {row["candidate_id"]: row for row in facts}
     occurrence_rows = []
     for row in occurrences:
@@ -114,8 +133,29 @@ def main() -> int:
                 "approved_ocr_table_fact",
                 {"citation_eligible": True, "chunk_type": "approved_ocr_fact",
                  "is_statute": False, "parse_status": "ok"},
+                #: 자리 번호는 아래에서 문서별로 **결정적으로** 매긴다.
+                None,
             )
         )
+
+    #: ★★**산출물이 없는 출처에도 자리 번호가 필요하다** (2026-08-27).
+    #:
+    #:   `occurrence_id` v2 는 `source_ordinal` 을 쓴다. 조항·부록은 산출물이 매긴
+    #:   순번이 있지만, 이 OCR fact 는 **구조화 산출물에서 온 게 아니라** 승인 fact
+    #:   파일에서 온다 — 산출물 순번이 없다.
+    #:   비워 두면 `occurrence_id` 가 빈 문자열이 되어 **850행이 통째로 인용 불가**가 된다.
+    #:   실제로 그랬다: `test_pg_행은_수록_식별자를_갖는다` 가 잡았다.
+    #:
+    #:   ★DB 의 `ordinal`(검색용 재번호)을 쓰면 안 된다 — 색인에 무엇이 드는지에 따라
+    #:     밀린다. 대신 **승인 fact 의 `candidate_id` 를 문서 안에서 정렬해** 매긴다.
+    #:     `candidate_id` 는 승인 릴리스가 고정한 값이라 다시 돌려도 같은 번호가 나온다.
+    _seen: dict[str, list[int]] = {}
+    for i, r in enumerate(occurrence_rows):
+        _seen.setdefault(r[1], []).append(i)
+    for sha, idxs in _seen.items():
+        #: 문서 안에서 `qualified_no`(= `OCR표/<candidate_id 조각>`)로 줄세운다.
+        for n, i in enumerate(sorted(idxs, key=lambda k: occurrence_rows[k][3])):
+            occurrence_rows[i] = (*occurrence_rows[i][:10], n)
 
     summary = {
         "generation": generation,

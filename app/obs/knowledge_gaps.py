@@ -6,9 +6,8 @@ RAG가 근거를 못 찾아 abstention한 질문을 모아 "문서 보강 대상
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from app.auth.user_types import AuthStore
 
-from app.db.models import KnowledgeGap
 from app.obs.pii import mask_pii
 from app.obs.trace import get_trace_id
 from db.postgres.ops_repository import PgKnowledgeGap, PgOpsStore
@@ -58,10 +57,14 @@ def record_gap_safe(question: str) -> bool:
 
 def record_knowledge_gap(
     db: Session | PgOpsStore, question: str
-) -> KnowledgeGap | PgKnowledgeGap:
+) -> object | PgKnowledgeGap:
     """abstention 질문을 마스킹해 큐에 적재한다."""
     if isinstance(db, PgOpsStore):
         return db.record_knowledge_gap(mask_pii(question), get_trace_id() or "no-trace")
+    #: ★레거시 SQLite 분기 **안에서만** 적재한다 — 최상단에서 부르면
+    #:   PostgreSQL 전용 배포에도 SQLAlchemy 가 딸려 온다(`app/auth/user_types.py`).
+    from db.sqlite_legacy.models import KnowledgeGap
+
     gap = KnowledgeGap(
         question=mask_pii(question),  # 원문 그대로 저장하지 않는다
         trace_id=get_trace_id() or "no-trace",

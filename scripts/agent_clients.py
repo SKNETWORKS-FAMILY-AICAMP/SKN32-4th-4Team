@@ -9,8 +9,8 @@ import argparse
 import json
 import sys
 
-from app.adapters.pg_agent_access import PgAgentAccess
-from app.adapters.pg_insurance_repository import PgInsuranceAdminRepository
+from db.postgres.pg_agent_access import PgAgentAccess
+from db.postgres.pg_insurance_repository import PgInsuranceAdminRepository
 from app.core.config import get_settings
 from app.core.domain.agent_access import AGENT_SCOPES, generate_api_key, validate_scopes
 from app.core.errors import AppError
@@ -46,7 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     sync = sub.add_parser("sync-real")
     sync.add_argument("--apply", action="store_true")
     sync.add_argument("--disable-extras", action="store_true")
-    sub.add_parser("prune", help="보존기간이 지난 auth/rate/audit/idempotency 이력 파기")
+    _prune = sub.add_parser(
+        "prune", help="보존기간이 지난 auth/rate/audit/idempotency 이력 파기")
+    #: ★기본은 **미리보기**다. 되돌릴 수 없는 작업이라 의도를 말하게 한다.
+    _prune.add_argument("--apply", action="store_true",
+                        help="실제로 파기한다. 없으면 건수만 센다(기본).")
     args = parser.parse_args(argv)
 
     try:
@@ -78,6 +82,21 @@ def main(argv: list[str] | None = None) -> int:
             ).run(apply=args.apply, disable_extras=args.disable_extras)
             print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
         else:
+            #: ★★**세고 나서 지운다**(2026-08-26 · 코덱스 감사 P1).
+            #:   앞서는 건수를 보기 전에 지웠다. 되돌릴 수 없는 작업이다.
+            preview = store.count_expired_history()
+            total = sum(r["expired"] for r in preview)
+            print("[미리보기] 보존기간이 지난 행")
+            for r in preview:
+                print(f"    {r['relation']:26} {r['expired']:>8,}")
+            print(f"    {'합계':26} {total:>8,}")
+            if not total:
+                print("★ 지울 것이 없다. 아무것도 하지 않는다.")
+                return 0
+            if not args.apply:
+                #: ★기본을 미리보기로 뒤집었다. 지우려면 명시해야 한다.
+                print(f"★ 지우려면 --apply 를 명시하라. {total:,}행이 사라지고 되돌릴 수 없다.")
+                return 0
             print(json.dumps(store.prune_history(), ensure_ascii=False, indent=2))
         return 0
     except (AppError, ValueError) as exc:

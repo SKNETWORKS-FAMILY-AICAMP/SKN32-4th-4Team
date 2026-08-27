@@ -19,7 +19,7 @@ from app.core.domain.agent_access import (
     hash_api_key,
     parse_api_key,
 )
-from app.core.errors import AuthErr, InfraError
+from app.core.errors import AuthErr, InfraError, RateLimitErr
 from app.schemas.precheck import PrecheckResult
 
 
@@ -339,6 +339,20 @@ def test_limiter_and_registry_fail_closed():
         },
     )
     assert response.status_code == 503
+
+
+def test_terms_facade_rate_limit_preserves_retry_after():
+    class LimitedFacade(_Facade):
+        def explain_term(self, body):
+            from fastapi import HTTPException
+
+            raise HTTPException(429, "budget exhausted", headers={"Retry-After": "23"})
+
+    client, _, _ = _client({"terms:read"}, facade=LimitedFacade())
+    response = _request(client, "terms")
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "23"
+    assert response.json()["error_code"] == RateLimitErr.error_code
 
 
 def test_disabled_flag_blocks_direct_asgi_start(monkeypatch):

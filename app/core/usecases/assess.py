@@ -21,6 +21,12 @@ from app.core.usecases.retrieval import EvidenceBundleV1
 ASSESSOR_VERSION = "rule-assessor-v1"
 _POSITIVE_PAYMENT = re.compile(r"(?:보상|보장|지급)[\s\d]{0,12}(?:합니다|하여\s*드립니다)")
 _NEGATIVE_PAYMENT = re.compile(r"(?:보상|보장|지급)하지[\s\d]{0,12}(?:않|아니)")
+#: ★같은 문장 안에 지급 선언과 단서·예외·제외가 같이 있으면 그 단서가 이 코드를
+#:   가리키는지 우리는 모른다. "F32는 보장합니다(단, 계약 전 발병은 제외합니다)"가
+#:   `_NEGATIVE_PAYMENT`(보장하지 않)에는 안 걸려 그대로 LIKELY_COVERED 로 샐 뻔했다
+#:   (코덱스 반례, 2026-08-26). 모르면 확정하지 않는다 — 걸리면 이 문장은 긍정
+#:   근거로 안 쓰고 `NEEDS_EXPERT` 로 떨어뜨린다(아래 else 분기, 안전한 방향).
+_EXCEPTION_CARVEOUT = re.compile(r"단,|다만|단서|제외(?:합니다|한다|됩니다|됨)|불포함")
 
 
 @dataclass(frozen=True)
@@ -105,7 +111,9 @@ def _explicit_coverage_rows(
     for row in clauses:
         # KCD 세분류 `N39.3`의 점은 문장 경계가 아니다.
         for sentence in re.split(r"(?:(?<!\d)\.|\.(?!\d)|。|\n)", row.text or ""):
-            if not sentence.strip() or _NEGATIVE_PAYMENT.search(sentence):
+            if (not sentence.strip()
+                    or _NEGATIVE_PAYMENT.search(sentence)
+                    or _EXCEPTION_CARVEOUT.search(sentence)):
                 continue
             mentions = kcd.scan_clause(sentence)
             if (_POSITIVE_PAYMENT.search(sentence)

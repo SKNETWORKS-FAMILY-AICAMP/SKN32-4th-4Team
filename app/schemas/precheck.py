@@ -109,6 +109,9 @@ class PrecheckRequest(BaseModel):
     )
     #: 외부 에이전트가 호출할 때 자기 참조를 담는다(감사용).
     client_ref: str | None = None
+    #: 증상·진단명 등 자유 서술. ★**판정에는 쓰지 않는다** — 참고 조항을 찾는
+    #:   질의로만 쓴다. 비워 두면 「보상하는 사항」을 묻는 고정 질의로 대신한다.
+    condition_text: str = Field(default="", max_length=500)
     consent_purpose: str | None = Field(default=None, min_length=1, max_length=100)
 
 
@@ -147,6 +150,15 @@ class PrecheckResult(BaseModel):
     rule_engine_version: str = ""
     extractor: str = ""
     trace_id: str = ""
+
+    #: ★★**참고 조항 — 판정 근거가 아니다.**
+    #:   `citations` 는 질병기호가 **실제로 적힌** 조항이고, 여기는 의미검색이
+    #:   「읽어 볼 만하다」고 고른 조항이다. 유사도는 근거가 아니므로 목록을 나눠 둔다 —
+    #:   합치면 화면이 둘을 같은 무게로 보여 준다. 급도 `retrieved_clause` 로 다르다.
+    related_clauses: list[Citation] = Field(default_factory=list)
+    #: 참고 조항 검색 상태. `""`=안 함(스위치 꺼짐) · `"ok"` · `"failed: ..."`.
+    #:   ★실패를 빈 목록으로 숨기지 않는다 — 「관련 조항 없음」과 다른 말이다.
+    related_search: str = ""
 
     #: 판정에 쓰지 못한 근거가 있으면 여기 남긴다(조용히 버리지 않는다).
     warnings: list[str] = Field(default_factory=list)

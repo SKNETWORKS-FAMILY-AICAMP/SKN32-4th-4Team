@@ -11,9 +11,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
+from app.application.chat_call_guard import (
+    PROMPT_VERSION,
+    ChatLlmGuard,
+    LlmBudgetExceeded,
+    RateLimited,
+    SingleFlightTimeout,
+    build_key,
+    fingerprint_of,
+)
 from app.core.config import get_settings
 from app.core.errors import InfraError, ValidationErr, public_error_message
 from app.core.llm_clients import get_active_model
@@ -39,24 +48,106 @@ def _model():
     return LlmGateway()
 
 
-@router.post("/chat")
+_guard_cache: ChatLlmGuard | None = None
+_guard_lock = __import__("threading").Lock()
+
+
+def _guard_settings():
+    return get_settings()
+
+
+def _guard() -> ChatLlmGuard:
+    """프로세스당 하나인 공개 챗봇 과금 보호기."""
+    global _guard_cache
+    if _guard_cache is None:
+        with _guard_lock:
+            if _guard_cache is None:
+                settings = _guard_settings()
+                _guard_cache = ChatLlmGuard(
+                    client_limit_per_minute=settings.CHAT_RATE_LIMIT_PER_MINUTE,
+                    llm_calls_per_minute=settings.CHAT_LLM_MAX_CALLS_PER_MINUTE,
+                    cache_ttl_seconds=settings.CHAT_LLM_CACHE_TTL_SECONDS,
+                    wait_timeout_seconds=float(
+                        settings.LLM_REQUEST_TIMEOUT_SECONDS
+                    )
+                    + 10.0,
+                )
+    return _guard_cache
+
+
+def _reset_guard_for_tests() -> None:
+    global _guard_cache
+    with _guard_lock:
+        _guard_cache = None
+
+
+def _client_key(request: Request) -> str:
+    """기본은 소켓 주소, 신뢰 프록시 설정 시에만 XFF 첫 주소를 사용한다."""
+    if _guard_settings().CHAT_TRUST_FORWARDED_FOR:
+        forwarded = (
+            request.headers.get("x-forwarded-for") or ""
+        ).split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
+def _release_fingerprint(source) -> str:
+    return fingerprint_of(source.meta())
+
+
+def _rate_limited(retry_after: int, detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+@router.post("/chat", name="chat_turn")
+def chat_turn_http(body: ChatRequest, request: Request) -> dict:
+    """공개 HTTP 채널. 클라이언트별 제한은 이 경로에만 적용한다."""
+    return _chat_turn(
+        body,
+        record_knowledge_gap=True,
+        client_key=_client_key(request),
+    )
+
+
 def chat_turn(body: ChatRequest) -> dict:
-    return _chat_turn(body, record_knowledge_gap=True)
+    """MCP 등 프로세스 내부 채널. 전역 LLM 예산과 캐시는 공유한다."""
+    return _chat_turn(body, record_knowledge_gap=True, client_key=None)
 
 
 def chat_turn_for_registered_agent(body: ChatRequest) -> dict:
     """보호 기계 채널용. 사용자 질문 원문을 knowledge-gap 로그에 복제하지 않는다."""
 
-    return _chat_turn(body, record_knowledge_gap=False)
+    return _chat_turn(body, record_knowledge_gap=False, client_key=None)
 
 
-def _chat_turn(body: ChatRequest, *, record_knowledge_gap: bool) -> dict:
+def _chat_turn(
+    body: ChatRequest,
+    *,
+    record_knowledge_gap: bool,
+    client_key: str | None,
+) -> dict:
     """용어 질문에 **약관 원문 인용으로** 답한다.
 
     ★보장 질문에는 답하지 않는다. 판정 양식으로 안내한다.
     """
+    guard = _guard()
+    if client_key is not None:
+        try:
+            guard.check_client(client_key)
+        except RateLimited as e:
+            raise _rate_limited(
+                e.retry_after_seconds,
+                "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.",
+            ) from e
+
     try:
-        turn = chat.reply(body.message, source=_source(), insurer=body.insurer)
+        source = _source()
+        turn = chat.reply(body.message, source=source, insurer=body.insurer)
     except ValidationErr as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
@@ -70,6 +161,7 @@ def _chat_turn(body: ChatRequest, *, record_knowledge_gap: bool) -> dict:
     ex = turn.explanation
     message = turn.message
     llm_used = False
+    llm_source: str | None = None
 
     #: ★★**지식갭 큐를 보험 경로에 연결한다(2026-08-04).**
     #:
@@ -89,12 +181,40 @@ def _chat_turn(body: ChatRequest, *, record_knowledge_gap: bool) -> dict:
         if settings.LLM_CHAT_ENABLED:
             from app.application.grounded_term_answer import explain_term
 
-            message = explain_term(
-                term=turn.term,
-                quotes=[q.quote for q in ex.quotes],
-                model=_model(),
+            quotes = [q.quote for q in ex.quotes]
+            key = build_key(
+                [
+                    turn.term,
+                    body.insurer or "",
+                    str(settings.LLM_PROVIDER),
+                    str(get_active_model()),
+                    PROMPT_VERSION,
+                    _release_fingerprint(source),
+                    fingerprint_of(quotes),
+                ]
             )
+            try:
+                outcome = guard.explain(
+                    key=key,
+                    produce=lambda: explain_term(
+                        term=turn.term,
+                        quotes=quotes,
+                        model=_model(),
+                    ),
+                )
+            except LlmBudgetExceeded as e:
+                raise _rate_limited(
+                    e.retry_after_seconds,
+                    "설명 생성 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.",
+                ) from e
+            except SingleFlightTimeout as e:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="응답 생성이 지연되어 처리하지 못했습니다.",
+                ) from e
+            message = outcome.value
             llm_used = True
+            llm_source = outcome.source
     return {
         "schema_version": "v1",
         "intent": turn.intent,
@@ -120,6 +240,7 @@ def _chat_turn(body: ChatRequest, *, record_knowledge_gap: bool) -> dict:
             "used": llm_used,
             "provider": get_settings().LLM_PROVIDER if llm_used else None,
             "model": get_active_model() if llm_used else None,
+            "source": llm_source,
         },
     }
 

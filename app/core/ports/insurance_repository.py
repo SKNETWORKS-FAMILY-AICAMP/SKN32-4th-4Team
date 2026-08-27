@@ -332,6 +332,9 @@ class InsuranceRepositoryPort(Protocol):
         source_kind: str,
         ordinal: int,
         quote: str,
+        #: ★★자리(`ordinal`)만으로는 부족하다 — 그 자리가 밀렸는지 알 수 없다.
+        #:   내용 해시를 **함께** 받아 대조한다(2026-08-27, `occurrence_id` v2).
+        content_hash: str = "",
     ) -> InsuranceClauseReference: ...
 
 

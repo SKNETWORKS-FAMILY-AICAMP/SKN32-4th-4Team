@@ -27,7 +27,33 @@ from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 MIGRATION_DIR = ROOT / "db" / "migrations" / "postgres"
-EXPECTED_LATEST = "016_runtime_ownership_and_grants.sql"
+#: ★★**이름을 박지 않는다** (2026-08-27 정정).
+#:
+#:   `EXPECTED_LATEST = "019_..."` 로 굳어 있었다. 020 을 더하자 `latest_matches` 가
+#:   거짓이 되고 릴리스 점검이 **실패**했다 — 스키마가 더 최신인데 「어긋났다」고 답한 것이다.
+#:   ★같은 결함을 오늘 `PgInsuranceRepository.readiness()` 에서도 고쳤다
+#:     (거기도 `latest == "016_..."` 였다). **마이그레이션을 더할 때마다 소스를 고쳐야 하는
+#:     구조는 언젠가 「시험을 고치는 대신 기능을 되돌리게」 만든다.**
+#:
+#:   진짜로 재야 하는 것은 「몇 번까지인가」가 아니라 **번호가 성한가**다 —
+#:   빠진 번호도 겹친 번호도 없어야 한다. 그건 여기서 계산할 수 있다.
+#:   적용 여부는 적용기가 checksum·advisory lock 으로 이미 지킨다.
+
+
+def _numbering_faults(names: list[str]) -> list[str]:
+    """번호가 빠졌거나 겹쳤나. **이게 진짜 불변식이다.**"""
+    seen: dict[int, list[str]] = {}
+    for name in names:
+        head = name.split("_", 1)[0]
+        if not head.isdigit():
+            continue
+        seen.setdefault(int(head), []).append(name)
+    faults = [f"번호 겹침 {n:03d}: {', '.join(v)}" for n, v in sorted(seen.items()) if len(v) > 1]
+    if seen:
+        missing = sorted(set(range(min(seen), max(seen) + 1)) - set(seen))
+        if missing:
+            faults.append("빠진 번호: " + ", ".join(f"{n:03d}" for n in missing))
+    return faults
 
 # Support both documented module execution and direct script execution:
 # ``python -m scripts.ops.verify_release`` and
@@ -71,12 +97,15 @@ def _migration_info() -> dict[str, Any]:
         digest = hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
         entries.append({"filename": path.name, "sha256": digest})
     latest = entries[-1]["filename"] if entries else None
+    faults = _numbering_faults([e["filename"] for e in entries])
     return {
         "directory": str(MIGRATION_DIR),
         "count": len(entries),
         "latest": latest,
-        "expected_latest": EXPECTED_LATEST,
-        "latest_matches": latest == EXPECTED_LATEST,
+        #: ★번호가 성한가. 빠지거나 겹치면 **여기서 걸린다** — 그건 진짜 결함이다.
+        #:   「몇 번까지인가」는 재지 않는다(위 주석).
+        "numbering_faults": faults,
+        "latest_matches": not faults,
         "files": entries,
     }
 
@@ -139,7 +168,7 @@ def _insurance_readiness(dsn: str | None) -> dict[str, Any]:
     if not (dsn or "").strip():
         return _skip("INSURANCE_PG_DSN not supplied")
     try:
-        from app.adapters.pg_insurance_repository import PgInsuranceRepository
+        from db.postgres.pg_insurance_repository import PgInsuranceRepository
 
         result = PgInsuranceRepository(dsn).readiness()
         return {"configured": True, "checked": True, **result}
@@ -157,7 +186,7 @@ def _agent_readiness(dsn: str | None) -> dict[str, Any]:
     if not (dsn or "").strip():
         return _skip("AGENT_PG_DSN not supplied")
     try:
-        from app.adapters.pg_agent_access import PgAgentAccess
+        from db.postgres.pg_agent_access import PgAgentAccess
 
         result = PgAgentAccess(dsn).readiness()
         return {"configured": True, "checked": True, **result}
@@ -201,8 +230,8 @@ def _agent_mirror(
     if not (insurance_admin_dsn or "").strip():
         return _skip("INSURANCE_ADMIN_PG_DSN not supplied")
     try:
-        from app.adapters.pg_agent_access import PgAgentAccess
-        from app.adapters.pg_insurance_repository import PgInsuranceAdminRepository
+        from db.postgres.pg_agent_access import PgAgentAccess
+        from db.postgres.pg_insurance_repository import PgInsuranceAdminRepository
         from app.core.usecases.sync_agent_clients import SyncAgentClients
 
         report = SyncAgentClients(

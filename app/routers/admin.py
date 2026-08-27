@@ -9,16 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
 from app.auth.roles import require_admin
+from app.auth.user_types import AuthStore
 from app.auth.store import get_auth_store
 from app.core.config import get_settings
-from app.db.models import KnowledgeGap, RunEvent
 from app.obs.store import get_ops_store
 from db.postgres.ops_repository import PgOpsStore
 
@@ -45,7 +45,7 @@ class DemoVerifyRequest(BaseModel):
 
 @router.get("/events")
 def admin_list_events(
-    store: Session | PgOpsStore = Depends(get_ops_store),
+    store: AuthStore | PgOpsStore = Depends(get_ops_store),
     trace_id: str | None = None,
     kind: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
@@ -59,6 +59,10 @@ def admin_list_events(
     if isinstance(store, PgOpsStore):
         rows = store.list_events(trace_id=trace_id, kind=kind, limit=limit)
     else:
+        #: ★레거시 SQLite 분기 **안에서만** 적재한다 — 최상단 import 는
+        #:   PostgreSQL 전용 배포에도 SQLAlchemy 를 끌어온다(`app/auth/user_types.py`).
+        from db.sqlite_legacy.models import RunEvent
+
         q = store.query(RunEvent)
         if trace_id:
             q = q.filter(RunEvent.trace_id == trace_id)
@@ -97,7 +101,7 @@ def admin_index_status() -> dict:
 
 
 @router.get("/report")
-def admin_report(store: Session | PgOpsStore = Depends(get_ops_store)) -> Response:
+def admin_report(store: AuthStore | PgOpsStore = Depends(get_ops_store)) -> Response:
     """현재 대시보드 데이터(준비상태·코호트·이벤트·지식갭)를 요약한 PDF 보고서.
 
     서버에도 `docs/generated_reports/`에 스냅샷을 저장하고, 같은 PDF를 다운로드로 반환한다.
@@ -120,7 +124,7 @@ def admin_report(store: Session | PgOpsStore = Depends(get_ops_store)) -> Respon
 
 @router.get("/knowledge-gaps")
 def admin_list_knowledge_gaps(
-    store: Session | PgOpsStore = Depends(get_ops_store),
+    store: AuthStore | PgOpsStore = Depends(get_ops_store),
     resolved: bool | None = None,
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[dict]:
@@ -137,6 +141,10 @@ def admin_list_knowledge_gaps(
     if isinstance(store, PgOpsStore):
         rows = store.list_knowledge_gaps(resolved=resolved, limit=limit)
     else:
+        #: ★레거시 SQLite 분기 **안에서만** 적재한다 — 최상단 import 는
+        #:   PostgreSQL 전용 배포에도 SQLAlchemy 를 끌어온다(`app/auth/user_types.py`).
+        from db.sqlite_legacy.models import KnowledgeGap
+
         q = store.query(KnowledgeGap)
         if resolved is not None:
             q = q.filter(KnowledgeGap.resolved == resolved)
@@ -301,7 +309,7 @@ def admin_list_users(store=Depends(get_auth_store)) -> dict:
             "note": "최초 관리자 부트스트랩은 CLI 전용입니다: python -m scripts.manage promote <username>",
         }
     db = store
-    from app.db.models import FaceCredential, User
+    from db.sqlite_legacy.models import FaceCredential, User
 
     rows = db.query(User).order_by(User.id).all()
     face_ids = {c.user_id for c in db.query(FaceCredential).all()}
@@ -376,7 +384,7 @@ def admin_precheck_mode() -> dict:
 @router.put("/precheck-mode")
 def admin_set_precheck_mode(
     body: PrecheckModeRequest,
-    store: Session | PgOpsStore = Depends(get_ops_store),
+    store: AuthStore | PgOpsStore = Depends(get_ops_store),
     user=Depends(require_admin),
 ) -> dict:
     """판정 모드를 바꾼다. **캐시를 반드시 비운다.**
@@ -403,6 +411,57 @@ def admin_set_precheck_mode(
     out = state.as_dict()
     out["usable_now"] = len(precheck_router._versions())
     return out
+
+
+# ★이 스위치는 `.env`의 `LLM_PROVIDER` 기본값을 런타임에 덮어쓴다. admin·customer가
+#   별도 프로세스라 파일에 남기지 않으면 서로 다른 값을 본다(§precheck-mode와 같은 이유).
+
+
+class LlmProviderOverrideRequest(BaseModel):
+    """`provider=null`이면 `.env` 기본값(`LLM_PROVIDER`)으로 되돌린다."""
+
+    provider: Literal["local", "openai", "gemini"] | None
+
+
+@router.get("/llm-provider")
+def admin_llm_provider() -> dict:
+    from app.core.domain import llm_provider_override
+
+    settings = get_settings()
+    override = llm_provider_override.current()
+    return {
+        "override": override,
+        "default": settings.LLM_PROVIDER,
+        "effective": override or settings.LLM_PROVIDER,
+    }
+
+
+@router.put("/llm-provider")
+def admin_set_llm_provider(
+    body: LlmProviderOverrideRequest,
+    store: AuthStore | PgOpsStore = Depends(get_ops_store),
+    user=Depends(require_admin),
+) -> dict:
+    from app.core.domain import llm_provider_override
+    from app.obs import agent_stream
+    from app.obs.events import record_event
+
+    actor = getattr(user, "username", "admin")
+    llm_provider_override.set_override(body.provider, actor=actor)
+
+    settings = get_settings()
+    effective = body.provider or settings.LLM_PROVIDER
+
+    #: 감사 기록(DB)과 관측 스트림(화면) 양쪽에 남긴다 — precheck-mode와 같은 이유.
+    record_event(store, "llm_provider_changed", {"provider": effective, "by": actor})
+    agent_stream.publish("mode.change", client_ref=actor,
+                         detail={"llm_provider": effective})
+
+    return {
+        "override": body.provider,
+        "default": settings.LLM_PROVIDER,
+        "effective": effective,
+    }
 
 
 # ── 실제 트랙 증빙 검수 ───────────────────────────────────────────────────
@@ -709,27 +768,28 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
                 detail=("조항 리랭킹이 꺼져 있습니다(INSURANCE_CLAUSE_RERANK_ENABLED=false). "
                         "끈 채로 재정렬한 척하지 않습니다."),
             )
-        from app.adapters.reranker import CrossEncoderReranker
+        from app.adapters import rerank_worker as rw
 
-        #: ★생성이 `try` 밖에 있었다. 무게추 적재·설정 오류가 **500** 으로 나가
-        #:   「서버 버그」처럼 보였다(코덱스 지적). 리랭커를 못 쓰는 것은 503 이다.
-        _build = lambda: CrossEncoderReranker(
-            st.RERANKER_MODEL,
-            device=st.RERANKER_DEVICE,
-            batch_size=st.RERANKER_BATCH_SIZE,
-            #: ★조항 전용 절단값을 쓴다. 커머스 768 을 그대로 쓰면
-            #:   후보가 같은 앞부분만 남아 `constant scores` 로 멈추는 질의가 나온다.
-            max_length=st.CLAUSE_RERANK_MAX_LENGTH,
-            dtype=st.RERANKER_DTYPE,
-            trust_remote_code=st.RERANKER_TRUST_REMOTE_CODE,
-        )
+        #: ★**전용 워커에 맡긴다.** 앞서는 요청마다 모델을 새로 만들어 `to_thread` 로 돌렸다.
+        #:   그러면 무게추 적재(4B ≈ 9GB · 수십 초)가 요청 안에서 일어나고,
+        #:   겹치면 GPU 가 OOM 이다. 워커는 **한 번만** 적재해 붙든다.
+        #:   방식은 `CLAUSE_RERANK_WORKER` 가 고른다(thread | process).
         try:
-            reranker = _build()
+            worker = rw.build_worker_from_settings()
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"리랭커를 준비하지 못했습니다: {type(exc).__name__}: {exc}",
             ) from exc
+
+        class _WorkerReranker:
+            """`rerank_hits` 가 부르는 모양 그대로, 안에서 워커에 맡긴다."""
+
+            def rerank(self, query, evidence, top_n=None):
+                return worker.rerank(query, evidence, top_n=top_n,
+                                     timeout=st.CLAUSE_RERANK_TIMEOUT_SECONDS)
+
+        reranker = _WorkerReranker()
 
     def _run():
         with get_conn() as conn:
@@ -758,6 +818,41 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except clause_search.RerankUnavailable as exc:
         #: ★벡터 순서로 되돌려 200 을 주지 않는다. 실패는 실패로 보인다.
+        #:   다만 **왜 실패했는지에 따라 코드를 가른다** — 시한 초과와 장애는 다른 일이다.
+        from app.adapters import rerank_worker as rw
+
+        from app.adapters.rerank_process import (
+            ProcessRerankTimeout,
+            ProcessRerankUnavailable,
+        )
+
+        cause = exc.__cause__
+        if isinstance(cause, ProcessRerankTimeout):
+            #: ★프로세스 워커는 **실제로 죽였다.** 그 사실을 그대로 말한다 —
+            #:   스레드 워커와 달리 「아직 돌고 있다」가 아니다.
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=(f"리랭킹이 시한({st.CLAUSE_RERANK_TIMEOUT_SECONDS:.0f}초)을 넘겨 "
+                        f"작업 프로세스를 종료했습니다. 계산은 실제로 멈췄고, "
+                        f"다음 요청에서 무게추를 다시 적재합니다."),
+            ) from exc
+        if isinstance(cause, ProcessRerankUnavailable):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"리랭크 작업 프로세스를 쓸 수 없습니다: {cause}",
+            ) from exc
+        if isinstance(cause, rw.RerankTimeout):
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail=(f"리랭킹이 시한({st.CLAUSE_RERANK_TIMEOUT_SECONDS:.0f}초) 안에 "
+                        f"끝나지 않았습니다. 추론은 중간에 끊을 수 없어 계속 돌고 있으며, "
+                        f"그동안 새 요청을 받지 않습니다."),
+            ) from exc
+        if isinstance(cause, rw.RerankBusy):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"리랭커가 바쁩니다: {cause}",
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"리랭킹에 실패했습니다(원래 순서로 되돌리지 않습니다): {exc}",
@@ -777,7 +872,8 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         "dropped_unscorable": result.dropped_unscorable,
         "settings": {"score_body": st.CLAUSE_RERANK_SCORE_BODY,
                      "max_length": st.CLAUSE_RERANK_MAX_LENGTH,
-                     "rerank_enabled": st.INSURANCE_CLAUSE_RERANK_ENABLED},
+                     "rerank_enabled": st.INSURANCE_CLAUSE_RERANK_ENABLED,
+                     "timeout_seconds": st.CLAUSE_RERANK_TIMEOUT_SECONDS},
         "hits": [
             {
                 "clause_id": h.clause_id,
@@ -794,3 +890,17 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         ],
         "_주의": "근거 후보입니다. 보장 여부 판정이 아닙니다 — 판정은 /v1/prechecks 가 합니다.",
     }
+
+
+@router.get("/metrics")
+def admin_metrics() -> Response:
+    """Prometheus 텍스트 형식 메트릭 — **관리자 로그인**으로 본다.
+
+    ★고객 앱(:8080)에는 실리지 않는다. 운영 지표를 무인증으로 노출하지 않는다.
+    ★긁는 요청은 싸야 한다 — 프로세스 안 수치만 낸다. DB 를 세지 않는다.
+
+    스크레이퍼(Prometheus)는 로그인을 못 하므로 `/metrics-scrape` 를 쓴다.
+    """
+    from app.obs.metrics import CONTENT_TYPE, render_metrics
+
+    return Response(content=render_metrics(), media_type=CONTENT_TYPE)

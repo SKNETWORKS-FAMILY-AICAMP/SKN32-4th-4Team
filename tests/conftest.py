@@ -60,13 +60,40 @@ _TEST_DB_NAME = "insurance_pytest"
 _TEST_SCHEMA = f"pytest_{uuid.uuid4().hex[:12]}"
 
 
+#: ★PG 가 없을 때 **무엇을 해야 하는지** 알려 주는 메시지.
+#:
+#:   무폴백은 지키되(조용히 sqlite 로 안 돌아간다), 원인과 조치는 말해야 한다.
+#:   고치기 전에는 `psycopg.errors.ConnectionTimeout` 이 conftest import 실패 안에
+#:   그대로 튀어나와, 처음 보는 사람은 **테스트가 깨진 줄 안다**(`CLAUDE.md` §3 —
+#:   오류 메시지가 사실을 잘못 전하지 않게 한다).
+_PG_DOWN_HINT = f"""
+시험 하네스가 PostgreSQL({_PG_HOST}:{_PG_PORT})에 붙지 못했습니다.
+
+  이건 테스트 결함이 아니라 **전제 조건 미충족**입니다.
+  기본 CI 도 PostgreSQL 을 씁니다 — 커밋 9cd48a3f 에서 하네스를 postgres 로 옮겼고,
+  조용히 sqlite 로 되돌아가지 않습니다(CLAUDE.md §0 폴백 금지).
+
+  먼저 이것을 하세요:
+      python -m scripts.pg start
+      python -m scripts.pg status      # "연결 OK" 를 확인하고 나서 pytest
+
+  근거 문서: docs/submission/04_테스트_계획_및_결과.md §3
+"""
+
+
 def _ensure_test_database() -> None:
     #: 위험 — CREATE DATABASE 는 트랜잭션 안에서 못 돈다. autocommit 필수.
-    admin = psycopg.connect(
-        f"host={_PG_HOST} port={_PG_PORT} user={_PG_ADMIN_USER} dbname=postgres",
-        connect_timeout=5,
-        autocommit=True,
-    )
+    try:
+        admin = psycopg.connect(
+            f"host={_PG_HOST} port={_PG_PORT} user={_PG_ADMIN_USER} dbname=postgres",
+            connect_timeout=5,
+            autocommit=True,
+        )
+    except psycopg.OperationalError as exc:
+        #: ★삼키지 않는다 — 원래 예외를 원인으로 달고 죽는다. 다만 조치를 함께 적는다.
+        raise RuntimeError(
+            _PG_DOWN_HINT + f"  원래 오류: {type(exc).__name__}: {exc}"
+        ) from exc
     try:
         with admin.cursor() as cur:
             cur.execute("SELECT 1 FROM pg_database WHERE datname=%s", (_TEST_DB_NAME,))
@@ -156,7 +183,7 @@ _mode._MODE_FILE = (
     pathlib.Path(tempfile.gettempdir()) / f"precheck_mode_{uuid.uuid4().hex}.json"
 )
 
-from app.db.database import Base, engine  # noqa: E402
+from db.sqlite_legacy.connection import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -191,3 +218,160 @@ def auth_header(client: TestClient, username: str, password: str) -> dict:
     resp = client.post("/auth/login", data={"username": username, "password": password})
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+# ── ★실모델 적재 가드 ───────────────────────────────────────────────────────
+#
+#   시험은 무게추를 내려받으면 안 된다. 그런데 문장으로만 적혀 있었고,
+#   `tests/test_clause_search_route.py` 의 시험 하나가 `_fake_worker()` 를
+#   빠뜨려 **`Qwen3-Reranker-4B`(7.5GB)를 실제로 적재**했다(2026-08-26).
+#
+#   ★그 시험 자체는 **통과했다.** 워커가 아직 안 떠서 503 을 받았기 때문이다.
+#     적재는 데몬 스레드에서 계속 돌다가 **한참 뒤 다른 시험 도중**
+#     `access violation` 으로 pytest 프로세스 전체를 죽였다
+#     (전량 실행이 54~67% 에서 segfault · 재현 3/3).
+#     증상과 원인이 멀어서 원인 규명에 여러 번 헛짚었다.
+#
+#   → 규칙을 **구조로 만든다.** `ml`·`llm` 표시가 없는 시험에서 실모델 생성자가
+#     불리면 **그 자리에서 죽는다.** 조용히 통과한 뒤 나중에 프로세스를 죽이는 것보다
+#     낫다(`CLAUDE.md` §0 — 신호 없는 자동 복구는 안전장치가 아니다).
+#
+#   ★가짜를 주입한 시험은 생성자를 아예 안 부르므로 이 가드에 걸리지 않는다.
+
+_REAL_MODEL_ALLOWED = False
+
+#: ★가드가 **데몬 스레드에서** 물릴 수 있다.
+#:
+#:   실제 사고가 그랬다 — 적재는 `rerank_worker` 의 워커 스레드에서 일어났다.
+#:   거기서 예외를 올리면 워커의 `except Exception` 이 받아 `load_error` 에 적고 끝난다.
+#:   **적재는 막히지만 시험은 그대로 통과한다.**
+#:   그래서 위반을 여기 모아 두고 픽스처 정리에서 **시험을 실패시킨다.**
+#:   (스레드 타이밍상 다음 시험에서 잡힐 수 있다. 그래도 조용히 지나가지는 않는다.)
+_REAL_MODEL_VIOLATIONS: list[str] = []
+NL = chr(10)   #: 역슬래시 이스케이프를 피한다(편집 도구에서 깨진 적이 있다)
+
+
+class RealModelLoadInTest(RuntimeError):
+    """시험이 실제 모델 무게추를 적재하려 했다."""
+
+
+def _guard_real_model(kind: str, name: object) -> None:
+    if _REAL_MODEL_ALLOWED:
+        return
+    _REAL_MODEL_VIOLATIONS.append(f"{kind}({name!r})")
+    raise RealModelLoadInTest(
+        f"\n시험이 실제 모델을 적재하려 했습니다: {kind}({name!r})\n"
+        "\n"
+        "  기본 CI 는 무게추를 내려받지 않습니다. 둘 중 하나를 하세요:\n"
+        "    · 가짜를 주입하세요 — 예: 리랭커 경로는 `_fake_worker()`,\n"
+        "      임베더는 `ClauseQueryEmbedder(profile, model=_FakeST())`\n"
+        "    · 정말 실모델이 필요하면 `@pytest.mark.ml` 을 붙이세요(기본 CI 에서 제외됩니다)\n"
+        "\n"
+        "  ★이 가드가 없던 때 무슨 일이 났는지: 시험은 통과하고, 적재는 데몬 스레드에서\n"
+        "    계속 돌다가 한참 뒤 **다른 시험 도중** 프로세스를 죽였습니다.\n"
+        "    근거: docs/reports/debugs/2026-08-26_기본CI_segfault_원인규명_한번_틀렸다.md\n"
+    )
+
+
+def _install_real_model_guard() -> None:
+    #: 세션 전체에 한 번만 건다. 데몬 스레드가 뒤늦게 적재해도 잡히도록
+    #: 시험마다 끼웠다 빼지 않는다 — 허용 여부는 `_REAL_MODEL_ALLOWED` 로만 바꾼다.
+    try:
+        import sentence_transformers as _st
+    except Exception:  # noqa: BLE001 — 없으면 가드도 필요 없다
+        return
+    for _cls_name in ("SentenceTransformer", "CrossEncoder"):
+        _cls = getattr(_st, _cls_name, None)
+        if _cls is None or getattr(_cls.__init__, "_real_model_guarded", False):
+            continue
+        _orig = _cls.__init__
+
+        def _make(orig, kind):
+            def _patched(self, *a, **k):
+                _guard_real_model(kind, a[0] if a else k.get("model_name_or_path"))
+                return orig(self, *a, **k)
+            _patched._real_model_guarded = True
+            return _patched
+
+        _cls.__init__ = _make(_orig, _cls_name)
+
+
+_install_real_model_guard()
+
+
+@pytest.fixture(autouse=True)
+def _real_model_guard(request):
+    """`ml`·`llm` 표시가 있는 시험에서만 실모델 적재를 허용한다."""
+    global _REAL_MODEL_ALLOWED
+    allowed = any(request.node.get_closest_marker(m) for m in ("ml", "llm"))
+    previous, _REAL_MODEL_ALLOWED = _REAL_MODEL_ALLOWED, allowed
+    try:
+        yield
+    finally:
+        _REAL_MODEL_ALLOWED = previous
+    #: ★데몬 스레드에서 물린 위반도 여기서 드러난다. 비우고 실패시킨다 —
+    #:   그대로 두면 뒤따르는 모든 시험이 같은 이유로 실패해 원인이 가려진다.
+    if _REAL_MODEL_VIOLATIONS and not allowed:
+        seen, _REAL_MODEL_VIOLATIONS[:] = list(_REAL_MODEL_VIOLATIONS), []
+        raise RealModelLoadInTest(
+            "실제 모델 적재 시도가 있었습니다: " + repr(seen) + NL
+            + "  ★백그라운드 스레드에서 났다면 **이 시험이 아니라 앞선 시험**이 "
+              "시작했을 수 있습니다." + NL
+            + "  근거: docs/reports/debugs/"
+              "2026-08-26_기본CI_segfault_원인규명_한번_틀렸다.md" + NL
+        )
+
+
+# --- ★`get_settings` 를 **import 시점에 묶은** 모듈이 패치를 물고 늘어지는 것 ------
+#
+#   `monkeypatch.setattr("app.core.config.get_settings", lambda: ...)` 로 갈아끼운
+#   **그 사이에 어떤 모듈이 처음 임포트되면**, 그 모듈의
+#   `from app.core.config import get_settings` 가 **람다를 영구히** 붙잡는다.
+#   monkeypatch 는 `app.core.config` 쪽 이름만 되돌리므로 그 참조는 안 풀린다.
+#
+#   실제로 그랬다(2026-08-26): `db.postgres.pgvector_index` 가
+#   `test_clause_search_route.py::_admin_app` 의 람다를 물어
+#   `test_pgvector.py` 와 `test_pgvector_schema_pin.py` 가 **전량 실행에서만** 깨졌다.
+#   두 시험 다 단독으론 통과해서 파일 단위로 돌려 보면 안 잡힌다.
+#
+#   ★그래서 **터진 자리가 아니라 흘린 자리에서** 잡는다.
+_SETTINGS_SCAN_PREFIXES = ("app.", "db.", "scripts.")
+
+
+def _leaked_settings_refs() -> list[str]:
+    import sys as _sys
+
+    from app.core import config as _cfg
+
+    canonical = _cfg.get_settings
+    bad = []
+    for name, mod in list(_sys.modules.items()):
+        if not name.startswith(_SETTINGS_SCAN_PREFIXES) or mod is None:
+            continue
+        fn = getattr(mod, "get_settings", None)
+        if fn is None or fn is canonical:
+            continue
+        #: ★모듈이 **자기 것**을 정의한 경우는 정상이다(`pgvector_index` 의 지연 조회 래퍼).
+        #:   `app.core.config` 에서 그대로 가져다 쓴 것도 정상 — 그건 `canonical` 과 같다.
+        #:   남는 것은 **바깥에서 들어온 남의 함수**뿐이고, 그게 새어 들어온 패치다.
+        if getattr(fn, "__module__", None) == name:
+            continue
+        bad.append(f"{name}.get_settings -> {fn!r}")
+    return bad
+
+
+@pytest.fixture(autouse=True)
+def _settings_binding_guard():
+    """시험이 끝난 뒤 `get_settings` 참조가 새어 있으면 **그 자리에서** 실패시킨다."""
+    yield
+    leaked = _leaked_settings_refs()
+    if leaked:
+        raise RuntimeError(
+            "`get_settings` 참조가 이 시험 뒤에 남았습니다:" + NL
+            + NL.join("  " + x for x in leaked) + NL
+            + "  ★원인: 그 모듈이 `from app.core.config import get_settings` 로 "
+              "**import 시점에 묶는데**, 패치가 걸린 사이에 처음 임포트됐습니다." + NL
+            + "  ★고치는 법: 그 모듈이 **부를 때** 찾게 바꾼다 — "
+              "`from app.core import config` 뒤 `config.get_settings()`." + NL
+            + "  본보기: db/postgres/pgvector_index.py 의 `get_settings()` 주석" + NL
+        )

@@ -119,6 +119,81 @@ def test_본문에서만_말하고_선언하지_않으면_폐기한다():
     assert "제77조" in r.undeclared_mentions
 
 
+def test_제로폭_문자로_조번호를_숨겨도_잡는다():
+    """★코덱스 반례(2026-08-26) — 숫자와 '조' 사이에 보이지 않는 문자(제로폭
+    스페이스 등)가 끼면 옛 정규식(\\s*만 허용)을 통과했다. 리터럴로 직접 안 적고
+    `chr()`로 만든다 — 편집기·복붙 과정에서 보이지 않는 문자가 유실되기 쉽다."""
+    zw = chr(0x200B)  # ZERO WIDTH SPACE
+    r = verify(
+        cited_clauses=["보통약관/제9조"],
+        evidence=_EV,
+        answer_text=f"제9조에 따라 보장되고, 제7{zw}7조도 관련 있습니다.",
+    )
+    assert not r.ok
+    assert r.reason_code == "undeclared_citation"
+    assert "제77조" in r.undeclared_mentions
+
+
+def test_한글_한자_숫자_조번호도_잡는다():
+    """★코덱스 반례 — 옛 정규식은 아라비아 숫자만 잡아 '제칠십칠조'·'제七十七조'
+    처럼 표기만 바꾸면 그대로 통과했다(한자 숫자라도 '조'는 한글로 쓰는 것이
+    실제 한국 약관 표기다 — 七十七條/条 같은 한자 '조'까지는 지원하지 않는다)."""
+    r_hangul = verify(
+        cited_clauses=["보통약관/제9조"],
+        evidence=_EV,
+        answer_text="제9조에 따라 보장되고, 제칠십칠조도 관련 있습니다.",
+    )
+    assert not r_hangul.ok
+    assert "제77조" in r_hangul.undeclared_mentions
+
+    r_hanja = verify(
+        cited_clauses=["보통약관/제9조"],
+        evidence=_EV,
+        answer_text="제9조에 따라 보장되고, 제七十七조도 관련 있습니다.",
+    )
+    assert not r_hanja.ok
+    assert "제77조" in r_hanja.undeclared_mentions
+
+
+def test_한글_숫자_조번호도_정상적으로_선언하면_통과한다():
+    """★확장이 오탐을 늘리면 안 된다 — 선언한 조를 한글 숫자로만 다시
+    말한 정상 답변까지 막으면 안 된다."""
+    r = verify(
+        cited_clauses=["보통약관/제9조"],
+        evidence=_EV,
+        answer_text="제구조에 따라 보장됩니다.",
+    )
+    assert r.ok
+    assert r.undeclared_mentions == []
+
+
+def test_근거_원문에_없는_확신_문구는_폐기한다():
+    """★코덱스 반례 — verdict 는 그대로 두고 reason 텍스트에만 원문에 없는
+    확신을 보태는 경로. citation_guard 는 인용 자체는 정상이라고 볼 수
+    있어서, 확신 문구 검사가 없으면 이런 답이 그대로 통과했다."""
+    r = verify(
+        cited_clauses=["보통약관/제9조"],
+        evidence=_EV,
+        answer_text="제9조에 따라 100% 확실히 보장됩니다.",
+    )
+    assert not r.ok
+    assert r.reason_code == "unsupported_confidence"
+    assert any("확실" in p or "100" in p for p in r.unsupported_confidence)
+
+
+def test_조항_원문이_직접_단정하면_확신_문구도_인용이다():
+    """★과신 검사가 오탐을 늘리면 안 된다 — 조항 자신이 '무조건'이라고
+    쓴 걸 그대로 옮기면 근거 없는 확신이 아니다."""
+    ev = [EvidenceClause(qualified_no="보통약관/제9조", text="회사는 무조건 보상합니다.")]
+    r = verify(
+        cited_clauses=["보통약관/제9조"],
+        evidence=ev,
+        answer_text="제9조에 따라 무조건 보상됩니다.",
+    )
+    assert r.ok
+    assert r.unsupported_confidence == []
+
+
 def test_인용한_조항_자신은_선언_누락이_아니다():
     r = verify(
         cited_clauses=["보통약관/제9조"],

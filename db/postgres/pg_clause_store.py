@@ -44,7 +44,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from db.postgres import pgvector_clause_index as ix
-from app.core.errors import InfraError
+from app.core.errors import ArtifactMissing, InfraError
 from app.core.ports.precheck import ClauseRow
 
 #: trigram 유사도 하한. 낮추면 무관한 조항이 근거로 붙는다.
@@ -98,6 +98,17 @@ def _rows_to_clauses(rows) -> list[ClauseRow]:
         #: ★게이트 값이 없으면 `None` — 공통 게이트가 "모른다"로 판정한다.
         gate = dict(zip(("citation_eligible", "chunk_type", "is_statute", "parse_status"),
                         row[8:12])) if len(row) >= 12 else {}
+        #: ★수록 순번. **없으면 `None` 그대로 둔다** — `occurrence_id` 가 빈 문자열이 되고
+        #:   인용 검증이 기권한다. 그게 맞는 동작이다(순서를 지어내면 식별자가 거짓이 된다).
+        #:   2026-08-25 이전에는 이 값을 아예 읽지 않아 **pg 경로 판정이 전건 기권**했다.
+        #:   → `docs/reports/debugs/2026-08-25_1400_pg조항색인에_수록순번이_없어_인용검증이_전건_실패한다.md`
+        ordinal = row[12] if len(row) >= 13 else None
+        #: ★★산출물이 매긴 **원래** 순번(2026-08-27 에 열이 하나 늘었다).
+        #:   ★열 순서가 밀렸다 — `source_kind` 가 13 → **14** 로 옮겨졌다.
+        #:     안 맞추면 종류 자리에 숫자가 들어가 **부록이 조항으로 둔갑한다.**
+        source_ordinal = row[13] if len(row) >= 14 else None
+        #: ★종류. 기본값 `"clause"` 로 두면 부록이 조항으로 둔갑한다(위 SELECT 주석).
+        source_kind = row[14] if len(row) >= 15 else "clause"
         out.append(
             ClauseRow(
                 sha256=sha,
@@ -116,6 +127,9 @@ def _rows_to_clauses(rows) -> list[ClauseRow]:
                 #:   PG 가 eligibility 필드를 아직 저장하지 않으므로 "모른다"가 되고,
                 #:   그러면 **못 쓴다**로 나온다 — 그게 정직한 상태다.
                 release_id=rid,
+                ordinal=ordinal,
+                source_ordinal=source_ordinal,
+                source_kind=source_kind,
                 **_gate(qno, text, gate),
             )
         )
@@ -164,7 +178,20 @@ def load_clauses(sha256: str, *, usable_only: bool = True) -> list[ClauseRow]:
                 """
                 SELECT o.content_hash, ct.text,
                        o.sha256, o.qualified_no, o.section, o.title, o.page_from, o.page_to,
-                       o.citation_eligible, o.chunk_type, o.is_statute, o.parse_status
+                       o.citation_eligible, o.chunk_type, o.is_statute, o.parse_status,
+                       --: ★수록 순번. ★★**검색용 재번호다** — 산출물의 값이 아니다.
+                       --:   `assign_ordinals` 가 색인에 든 행만 줄세워 다시 매긴다.
+                       o.ordinal,
+                       --: ★★산출물이 매긴 **원래** 순번. `occurrence_id` 는 이걸 쓴다
+                       --:   (2026-08-27, 마이그레이션 020). 게이트 판정이 바뀌면
+                       --:   위 `ordinal` 은 밀리지만 이 값은 안 밀린다.
+                       o.source_ordinal,
+                       --: ★★**종류를 반드시 읽는다.** 안 읽으면 `ClauseRow` 기본값 `"clause"` 가 붙어
+                       --:   **부록이 조항으로 둔갑한다.** `occurrence_id` 에 종류가 들어가므로
+                       --:   부록 1번이 조항 1번과 같은 식별자가 되고, 인용 검증은 중복 키를
+                       --:   「못 쓰는 것」으로 표시해 그 조항을 근거에서 버린다.
+                       --:   실제로 그랬다 — `tests/test_clause_store_parity.py` 가 잡았다(2026-08-25).
+                       o.source_kind
                 FROM policy_clause_occurrence o
                 JOIN policy_clause_content ct ON ct.content_hash = o.content_hash
                 WHERE o.sha256 = %s
@@ -180,7 +207,8 @@ def load_clauses(sha256: str, *, usable_only: bool = True) -> list[ClauseRow]:
     if not fetched:
         #: ★"적재 안 됨"과 "인용 불가라 일부러 뺐음"은 **다른 사실**이다.
         #:   섞어 말하면 팀이 적재를 다시 돌리는 헛수고를 한다.
-        raise InfraError(
+        #: ★위와 같은 이유로 `ArtifactMissing` 이다(적재 전 ≠ 저장소 장애).
+        raise ArtifactMissing(
             f"이 약관의 조항 본문이 색인에 없습니다: {sha256[:12]}. "
             "인용 불가(citation_eligible=false)로 제외됐거나 아직 적재 전입니다. "
             "GET /v1/support-manifest 로 대상 여부를 확인하세요."
@@ -209,7 +237,18 @@ def stats(sha256: str) -> dict:
             #:   "있다"고 세어 놓고 못 꺼내면 판정이 근거 없이 기권한다.
             cur.execute(
                 """
-                SELECT count(*) FILTER (WHERE c.h IS NOT NULL),
+                SELECT count(*) FILTER (WHERE c.h IS NOT NULL
+                                          --: ★★**게이트도 함께 본다** (2026-08-26).
+                                          --:   앞서는 청크 유무만 셌다. 그래서 이 값이
+                                          --:   `load_clauses()` 보다 커졌다 —
+                                          --:   실측: stats 902 vs load 875, 차이 27건은
+                                          --:   **부록(별표)** 이고 게이트가 NULL 이었다.
+                                          --:   부록은 산출물에 `citation_eligible` 이 없어
+                                          --:   「모른다」로 들어온다(설계대로 fail-closed).
+                                          --:   ★"같은 기준"이라 적어 두고 다른 것을 세면
+                                          --:     「조항 902개」라 해 놓고 875개만 나온다 —
+                                          --:     이 함수 docstring 이 경계한 바로 그 일이다.
+                                          AND o.citation_eligible IS TRUE),
                        count(DISTINCT c.h),
                        count(*),
                        --: ★둘 다 NULL 을 무시한다. 그래서
@@ -233,7 +272,9 @@ def stats(sha256: str) -> dict:
     except Exception as exc:  # noqa: BLE001
         raise InfraError(f"조항 현황을 읽지 못했습니다: {exc}") from exc
     if not recorded:
-        raise InfraError(f"이 약관의 조항 기록이 없습니다: {sha256[:12]}")
+        #: ★**장애가 아니라 사실**이다 — 판정 유스케이스가 기권으로 바꾼다(200).
+        #:   전에는 `InfraError` 라 503 이 나갔고, 같은 상황에서 파일 저장소는 200 기권이었다.
+        raise ArtifactMissing(f"이 약관의 조항 기록이 없습니다: {sha256[:12]}")
 
     #: ★★**PG 에도 그 값이 있었다(2026-08-25 정정).**
     #:
@@ -265,6 +306,8 @@ def stats(sha256: str) -> dict:
         "distinct_contents": uniq,
         #: ★기록은 있으나 본문이 없는 것. 숨기지 않는다.
         "recorded_occurrences": recorded,
+        #: ★이름이 「본문 없음」이지만 이제 **본문이 없거나 인용 불가**인 수다.
+        #:   둘 다 「조회에 안 나오는 이유」라 한 칸에 담되, 아래 두 칸으로 갈라 낸다.
         "missing_bodies": recorded - usable,
         #: ★한때 `"ok"` 를 **지어냈고**(코덱스 지적), 그 뒤엔 반대로 **항상 `None`** 이었다.
         #:   둘 다 틀렸다 — 지금은 색인에 실제로 있는 값을 읽고, 없으면 없다고 한다(위 주석).

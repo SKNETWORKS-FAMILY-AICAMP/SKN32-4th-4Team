@@ -1,0 +1,207 @@
+# EC2 + docker-compose 최소 배포 구성.
+# 상세 근거·순서는 docs/plans/2026-08-25_1727_dockerize_ec2_배포_계획.md 와
+# docs/manuals/ec2-deploy-runbook.md 참고. 이 파일만으로는 순서를 강제하지 못하므로
+# (compose는 "migrate가 성공적으로 끝났는지"까지는 못 지켜준다) 런북의 순서를 반드시 따른다.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD가 .env에 없다}
+      POSTGRES_DB: insurance_real
+      # docker/postgres/init/01-create-databases-and-roles.sh가 이 값들로
+      # insurance_runtime · insurance_demo_runtime · insurance_admin LOGIN 롤을 만든다.
+      INSURANCE_RUNTIME_PASSWORD: ${INSURANCE_RUNTIME_PASSWORD:?}
+      INSURANCE_DEMO_RUNTIME_PASSWORD: ${INSURANCE_DEMO_RUNTIME_PASSWORD:?}
+      INSURANCE_ADMIN_PASSWORD: ${INSURANCE_ADMIN_PASSWORD:?}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    # 퍼블릭 노출 없음 — 필요하면 개발 중에만 "127.0.0.1:5432:5432"로 바꿔 쓴다.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # 1회성 컨테이너. `docker compose up migrate`로 직접 실행하고 완료(exit 0)를 지켜본다.
+  # `docker compose up -d`의 정상 구성원이 아니다 — 런북 순서를 따른다.
+  migrate:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    command: >
+      sh -c "
+        python -m scripts.db.apply --dsn postgresql://postgres:$$POSTGRES_PASSWORD@postgres:5432/insurance_real --track core &&
+        python -m scripts.db.apply --dsn postgresql://postgres:$$POSTGRES_PASSWORD@postgres:5432/insurance_demo --track demo &&
+        python docker/postgres/apply_grants.py
+      "
+    # agent 트랙은 이번 배포 범위 밖(AGENT_API_ENABLED=false) — 일부러 안 돌린다.
+
+  llm:
+    build:
+      context: .
+      dockerfile: docker/llm/Dockerfile
+    volumes:
+      - llm_model_cache:/model-cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,json,sys; r=json.load(urllib.request.urlopen('http://localhost:8002/healthz', timeout=5)); sys.exit(0 if r.get('ready') else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      # 첫 부팅은 GGUF 다운로드+로드로 수 분 걸릴 수 있다 — 넉넉히 잡는다.
+      start_period: 10m
+    restart: unless-stopped
+
+  # x600(집)의 PostgreSQL 로 가는 SSH 터널. ★공유기에서 22 번만 열려 있어서
+  # (실측 2026-08-27: jikimi.duckdns.org:22 열림 · 5432 닫힘) DB 를 인터넷에 직접
+  # 노출하지 않고 이미 있는 SSH 를 쓴다.
+  #
+  # ★**기본으로 켜지 않는다.** `--profile x600db` 를 줄 때만 뜬다 —
+  #   EC2 자체 postgres 를 쓰는 형상(현재 기본)을 건드리지 않기 위해서다.
+  #   쓰려면: docker compose --profile x600db up -d
+  #   그리고 앱의 INSURANCE_PG_DSN 에 host=dbtunnel port=5432 을 넣는다.
+  dbtunnel:
+    profiles: ["x600db"]
+    build:
+      context: .
+      dockerfile: docker/dbtunnel/Dockerfile
+    environment:
+      TUNNEL_SSH_HOST: ${TUNNEL_SSH_HOST:?TUNNEL_SSH_HOST 를 .env 에 넣으세요}
+      TUNNEL_SSH_USER: ${TUNNEL_SSH_USER:?TUNNEL_SSH_USER 를 .env 에 넣으세요}
+      TUNNEL_SSH_PORT: ${TUNNEL_SSH_PORT:-22}
+      TUNNEL_DB_PORT: ${TUNNEL_DB_PORT:-5432}
+    volumes:
+      # ★읽기전용. 개인키와 known_hosts 를 함께 넣는다 —
+      #   known_hosts 가 없으면 컨테이너가 **기동을 거부한다**(호스트키 검사를 끄지 않는다).
+      - ${TUNNEL_SSH_DIR:?TUNNEL_SSH_DIR 를 .env 에 넣으세요}:/ssh:ro
+    restart: unless-stopped
+    healthcheck:
+      # ★포트가 열렸는지가 아니라 **실제로 PostgreSQL 이 응답하는지** 본다.
+      #   터널만 서 있고 뒤가 죽어도 healthy 로 보이면 안 된다.
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 5432 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  customer:
+    build: .
+    command: ["uvicorn", "app.main:customer_app", "--host", "0.0.0.0", "--port", "8080"]
+    env_file: .env
+    # data/raw/는 .dockerignore라 이미지에 안 구워진다 — manifest_policy_resolver가
+    # 읽는 가벼운 수집 메타데이터(URL·sha256, 저작물 원문 아님)만 볼륨으로 넣는다.
+    volumes:
+      - ./data/raw/manifests:/app/data/raw/manifests:ro
+    # ★80(기본 HTTP)으로 매핑 — 컨테이너 안 포트(8080, uvicorn --port)는 그대로 두고
+    #   호스트 쪽만 바꾼다. 주소창에 :8080 안 붙여도 되게 하기 위함(시연용).
+    ports:
+      - "80:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/api/health/ready', timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  delivery:
+    build:
+      context: .
+      args:
+        # Dockerfile 기본값은 false다. Django 의존성은 이 전용 이미지에만 설치해
+        # FastAPI 단독 customer/admin/migrate 이미지에는 포함하지 않는다.
+        INSTALL_DELIVERY: "true"
+    env_file: .env
+    environment:
+      DELIVERY_MODE: ${DELIVERY_MODE:-direct}
+      # settings.py가 이 URL의 host를 ALLOWED_HOSTS로 사용한다. 컨테이너에서
+      # localhost는 자기 자신이므로 Compose DNS 이름을 명시해 Host=delivery를 허용한다.
+      DELIVERY_DJANGO_BASE_URL: http://delivery:8000
+      # Django가 전달할 FastAPI 업스트림도 컨테이너 루프백이 아니라 서비스 DNS다.
+      CUSTOMER_BASE_URL: http://customer:8080
+    command:
+      - sh
+      - -c
+      - |
+        # profile은 DELIVERY_MODE 외에 --profile이라는 두 번째 스위치를 요구한다.
+        # 대신 같은 변수 하나로 direct는 정상 종료(A: FastAPI 단독), django는
+        # 전달 계층을 실행(B)한다. 알 수 없는 값은 조용히 direct로 폴백하지 않는다.
+        case "$$DELIVERY_MODE" in
+          direct)
+            echo "delivery disabled: DELIVERY_MODE=direct"
+            exit 0
+            ;;
+          django)
+            # 현재 패스스루 뷰와 httpx 클라이언트가 동기식이므로 비교분석의 권고대로
+            # ASGI 스레드풀 왕복을 더하지 않는 WSGI 인터페이스를 사용한다.
+            exec uvicorn delivery.django_app.wsgi:application --interface wsgi --host 0.0.0.0 --port 8000
+            ;;
+          *)
+            echo "DELIVERY_MODE must be direct or django: $$DELIVERY_MODE" >&2
+            exit 64
+            ;;
+        esac
+    ports:
+      - "8000:8000"
+    depends_on:
+      customer:
+        condition: service_healthy
+    healthcheck:
+      # Host=delivery로 실제 패스스루 readiness까지 확인해 ALLOWED_HOSTS 오설정도 잡는다.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://delivery:8000/api/health/ready', timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    # direct는 exit 0이라 다시 뜨지 않고, django가 비정상 종료할 때만 재시작한다.
+    restart: on-failure
+
+  admin:
+    build: .
+    command: ["uvicorn", "app.main:admin_app", "--host", "0.0.0.0", "--port", "8081"]
+    env_file: .env
+    volumes:
+      - ./data/raw/manifests:/app/data/raw/manifests:ro
+    # 루프백에만 바인딩 — 관리자 화면은 SSH 터널(ssh -L 8081:localhost:8081 ...)로만
+    # 접근한다. customer/admin 분리(app/main.py의 의도)를 인프라 레벨에서도 지킨다.
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8081/api/health/ready', timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  backup:
+    build:
+      context: .
+      dockerfile: docker/backup/Dockerfile
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      S3_BUCKET: ${S3_BUCKET:?}
+      S3_PREFIX: ${S3_PREFIX:-pg-backups}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # AWS 자격증명을 여기 넣지 않는다 — EC2 인스턴스 프로필(IAM role)로 S3에 접근한다.
+    # docs/manuals/ec2-deploy-runbook.md의 IMDS hop-limit 안내를 반드시 먼저 적용해야
+    # 컨테이너 안에서 IAM role 자격증명을 받아올 수 있다.
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  llm_model_cache:

@@ -83,10 +83,109 @@ from hashlib import sha256
 _ARTICLE_FULL = re.compile(r"제\s*(\d{1,3})\s*조(?:\s*의\s*(\d{1,2}))?")
 #: 특별약관의 번호 조항. `1.`, `4-1.` — ★`제1조` 와 **다른 문법 층**이다.
 _NUMBERED_FULL = re.compile(r"(\d{1,3})(?:-(\d{1,2}))?\s*[.．]?")
+#: ★★제로폭 문자 우회(코덱스 반례, 2026-08-26) — "제9​조"(9와 조 사이에 보이지
+#:   않는 문자)는 옛 `_MENTION`(`제\s*(\d{1,3})\s*조...`)에 안 걸렸다. `\s*` 는
+#:   공백만 허용하니 매치가 깨진다. **텍스트 전체를 지우고 다시 스캔하지 않는다**
+#:   — 그러면 위치가 밀려서 아래 `quote_spans` 면제 판정(원래 텍스트 기준
+#:   좌표)이 어긋난다. 대신 정규식 자체에 제로폭 문자를 끼워 넣어도 통과하게
+#:   만들어 좌표를 원문 그대로 유지한다.
+_ZW = r"[​‌‍⁠﻿]*"
+#: ★숫자 **사이**에도 제로폭 문자가 낄 수 있다("7"+ZW+"7") — `\d{1,3}` 하나로
+#:   뭉쳐 잡으면 그 경우를 놓친다. 자릿수마다 뒤에 `_ZW` 를 허용해 묶고,
+#:   꺼낼 때 잘라낸 문자열에서 제로폭 문자를 지운 뒤 정수로 읽는다.
+_DIGIT_ZW = rf"\d{_ZW}"
+#: 캡처한 숫자 그룹(제로폭 문자가 섞여 있을 수 있다)에서 지우고 `int()` 로 읽는다.
+_ZW_ONLY = re.compile(r"[​‌‍⁠﻿]")
 #: 본문에서 조항을 말한 흔적(선언 누락 확인용). 여기서는 `search` 가 맞다.
-_MENTION = re.compile(r"제\s*(\d{1,3})\s*조(?:\s*의\s*(\d{1,2}))?")
+_MENTION = re.compile(
+    rf"제{_ZW}\s*((?:{_DIGIT_ZW}){{1,3}})\s*조"
+    rf"(?:\s*의\s*{_ZW}((?:{_DIGIT_ZW}){{1,2}}))?"
+)
 #: 근거 손잡이. `E001`.
 _HANDLE = re.compile(r"^E\d{3,4}$")
+
+#: ★★근거 없는 확신 문구(코덱스 반례, 2026-08-26) — `explain()` 은 LLM 초안의
+#:   `verdict` 가 규칙 판정과 같으면 통과시킨다. `verdict` 는 안 바꾸고 `reason`
+#:   텍스트에만 "100% 확실합니다"·"틀림없이 지급됩니다" 처럼 원문에 없는 확신을
+#:   보태도 여태 안 걸렸다. **조항 자신이 그렇게 단정했다면 인용이다** —
+#:   그래서 근거 조항 원문에 없을 때만 막는다.
+_OVERCLAIM = re.compile(
+    r"100\s*%|백\s*퍼센트|백프로|확실히|확실합니다|확신(?:합니다)?|틀림없이|"
+    r"무조건|반드시|절대(?:적으로)?|완전히"
+)
+
+#: ★★한글·한자 숫자 조항 우회(코덱스 반례) — 옛 `_MENTION` 은 아라비아 숫자만
+#:   잡아 "제십조"·"제十조"를 못 봤다. 인용 선언 없이 본문에서만 조항을
+#:   가리키는 게 undeclared_mentions 검사의 핵심인데, LLM 이 표기만 바꾸면
+#:   그대로 통과했다. 1~99 만 지원한다(정책 문서 조 번호가 이 범위를 넘는
+#:   경우는 실측에서 못 봤다 — 넘으면 탐지를 못 할 뿐이지 기존 아라비아 숫자
+#:   탐지를 줄이지는 않는다).
+_SINO_DIGIT = {
+    "영": 0, "공": 0, "零": 0, "〇": 0,
+    "일": 1, "一": 1,
+    "이": 2, "二": 2,
+    "삼": 3, "三": 3,
+    "사": 4, "四": 4,
+    "오": 5, "五": 5,
+    "육": 6, "륙": 6, "六": 6,
+    "칠": 7, "七": 7,
+    "팔": 8, "八": 8,
+    "구": 9, "九": 9,
+}
+_SINO_TEN = {"십": 10, "十": 10}
+_SINO_CHARS = "".join(sorted(set(_SINO_DIGIT) | set(_SINO_TEN)))
+#: `제<한글/한자 숫자>조(의<한글/한자 숫자>)?` — 그룹은 문자열째로 받아
+#: `_parse_sino_number()` 로 따로 정수화한다(아라비아 숫자처럼 그룹 두 개로
+#: 못 쪼갠다 — "십일"처럼 십의 자리·일의 자리가 붙어 있다). 여기도 제로폭
+#: 문자를 끼워 넣어 같은 우회를 막는다.
+_SINO_MENTION = re.compile(
+    rf"제{_ZW}\s*([{_SINO_CHARS}]{{1,4}}){_ZW}\s*조"
+    rf"(?:\s*의\s*{_ZW}([{_SINO_CHARS}]{{1,3}}){_ZW})?"
+)
+
+
+def _parse_sino_number(s: str) -> int | None:
+    """1~99 사이 한글/한자 숫자 하나를 정수로. 못 읽으면 `None`(조용히 버리지 않고
+    호출부가 그 매치를 스킵하게 만든다 — 지어내지 않는다)."""
+
+    s = re.sub(_ZW, "", s or "")
+    if not s:
+        return None
+    if s in _SINO_TEN:
+        return 10
+    if s in _SINO_DIGIT:
+        return _SINO_DIGIT[s]
+    if len(s) == 2 and s[0] in _SINO_TEN and s[1] in _SINO_DIGIT:
+        return 10 + _SINO_DIGIT[s[1]]
+    if len(s) == 2 and s[0] in _SINO_DIGIT and s[1] in _SINO_TEN:
+        return _SINO_DIGIT[s[0]] * 10
+    if len(s) == 3 and s[0] in _SINO_DIGIT and s[1] in _SINO_TEN and s[2] in _SINO_DIGIT:
+        return _SINO_DIGIT[s[0]] * 10 + _SINO_DIGIT[s[2]]
+    return None
+
+
+def _find_all_mentions(text: str) -> list[tuple[int, int, str]]:
+    """본문에서 조항을 가리킨 흔적 전부 — 아라비아·한글·한자 숫자, 제로폭 우회까지.
+
+    `(시작, 끝, 정규화한 조항)` 목록을 원문 좌표 그대로 돌려준다 — 호출부가
+    `quote_spans` 면제 판정에 좌표를 그대로 쓸 수 있어야 한다.
+    """
+
+    text = text or ""
+    found: list[tuple[int, int, str]] = []
+    for m in _MENTION.finditer(text):
+        main = int(_ZW_ONLY.sub("", m.group(1)))
+        sub = int(_ZW_ONLY.sub("", m.group(2))) if m.group(2) else None
+        found.append((m.start(), m.end(), f"제{main}조" + (f"의{sub}" if sub else "")))
+    for m in _SINO_MENTION.finditer(text):
+        main = _parse_sino_number(m.group(1))
+        if main is None:
+            continue
+        sub = _parse_sino_number(m.group(2)) if m.group(2) else None
+        if m.group(2) and sub is None:
+            continue
+        found.append((m.start(), m.end(), f"제{main}조" + (f"의{sub}" if sub else "")))
+    return found
 
 
 class Resolution(str, Enum):
@@ -141,6 +240,8 @@ class GuardResult:
     undeclared_mentions: list[str] = field(default_factory=list)
     #: 인용이 하나도 없다.
     no_citations: bool = False
+    #: 근거 조항 원문에 없는 확신 문구("100%"·"무조건" 등)를 답변이 보탰다.
+    unsupported_confidence: list[str] = field(default_factory=list)
 
     @property
     def unknown_citations(self) -> list[str]:
@@ -175,6 +276,8 @@ class GuardResult:
             return "quote_not_in_source"
         if self.undeclared_mentions:
             return "undeclared_citation"
+        if self.unsupported_confidence:
+            return "unsupported_confidence"
         return "unverified"
 
     @property
@@ -199,11 +302,30 @@ class GuardResult:
                 "본문에서 말했으나 인용에 선언하지 않았습니다: "
                 f"{', '.join(self.undeclared_mentions)}"
             )
+        if self.unsupported_confidence:
+            parts.append(
+                "근거 조항 원문에 없는 확신 표현입니다: "
+                f"{', '.join(self.unsupported_confidence)}"
+            )
         return " / ".join(parts)
 
 
 def _norm_space(s: str) -> str:
     return re.sub(r"\s+", "", s or "")
+
+
+def _find_overclaims(answer_text: str, evidence: list[EvidenceClause]) -> list[str]:
+    """답변의 확신 문구 중 근거 조항 원문 어디에도 없는 것만 골라낸다.
+
+    조항 자신이 "무조건 보상합니다"처럼 단정했다면 그건 근거가 있는
+    인용이지 과신이 아니다 — 원문에 있는지부터 본다.
+    """
+
+    found = {m.group(0) for m in _OVERCLAIM.finditer(answer_text or "")}
+    if not found:
+        return []
+    source = _norm_space("".join(e.text or "" for e in evidence))
+    return sorted(p for p in found if _norm_space(p) not in source)
 
 
 def _parse_clause_ref(s: str) -> tuple[str, str] | None:
@@ -549,17 +671,15 @@ def verify(
         quotes=qmap,
     )
     mentioned: set[str] = set()
-    for mention in _MENTION.finditer(answer_text or ""):
+    for start, end, normalized in _find_all_mentions(answer_text):
         if any(
-            span_start <= mention.start() and mention.end() <= span_end
+            span_start <= start and end <= span_end
             for span_start, span_end in quote_spans
         ):
             continue
-        normalized = f"제{int(mention.group(1))}조" + (
-            f"의{int(mention.group(2))}" if mention.group(2) else ""
-        )
         mentioned.add(normalized)
     undeclared = sorted(mentioned - declared)
+    overclaims = _find_overclaims(answer_text, evidence)
 
     no_citations = require_citation and not cited_clauses
     #: ★fail-closed. 하나라도 걸리면 그 답은 쓰지 않는다.
@@ -572,12 +692,14 @@ def verify(
         )
         and not any(ch.quote_mismatch for ch in checks)
         and not undeclared
+        and not overclaims
     )
     return GuardResult(
         ok=ok,
         checks=checks,
         undeclared_mentions=undeclared,
         no_citations=no_citations,
+        unsupported_confidence=overclaims,
     )
 
 

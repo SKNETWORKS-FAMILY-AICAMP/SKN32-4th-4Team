@@ -30,8 +30,8 @@ def client():
 
 
 def _set_role(username: str, role: str) -> None:
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
 
     db = SessionLocal()
     try:
@@ -74,8 +74,8 @@ def test_rbac_200_for_admin(client, unique_user, path):
 def test_new_user_defaults_to_user_role(client, unique_user):
     u, p = unique_user()
     auth_header(client, u, p)
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
 
     db = SessionLocal()
     try:
@@ -134,8 +134,8 @@ def test_promote_unknown_user_raises():
 
 def test_cannot_demote_last_admin(client, unique_user):
     """마지막 관리자를 강등하면 잠금(lockout)이 되므로 거부한다."""
-    from app.db.database import SessionLocal
-    from app.db.models import User
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import User
     from scripts.manage import set_role
 
     # 기존 ADMIN을 모두 USER로 내려 깨끗한 상태를 만든다
@@ -262,8 +262,8 @@ def test_events_endpoint_masks_on_output_and_flags_anomaly(client, unique_user):
     detail이 "요약만" 관례를 어기고 원문 PII를 담고 있으면, 응답은 안전하게 가리되
     조용히 덮지 않고 감사기록(run_event_unmasked_detected)을 남겨야 한다.
     """
-    from app.db.database import SessionLocal
-    from app.db.models import RunEvent
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import RunEvent
 
     db = SessionLocal()
     try:  # record_event를 거치지 않고 직접 삽입(관례 위반 재현)
@@ -296,9 +296,9 @@ def test_knowledge_gaps_endpoint_masks_on_output_and_flags_anomaly(client, uniqu
     """저장 시 마스킹을 우회한 데이터가 있으면 (1) 출력은 안전하게 가리되 (2) 조용히
     덮지 않고 감사기록(run_events)을 남긴다 — 무조건 재마스킹만 하면 그 자체가
     "이상 상태를 조용히 고치는" 폴백이 되므로, 발견 사실을 반드시 신호로 남겨야 한다."""
-    from app.db.database import SessionLocal
-    from app.db.models import KnowledgeGap as KG
-    from app.db.models import RunEvent
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import KnowledgeGap as KG
+    from db.sqlite_legacy.models import RunEvent
 
     db = SessionLocal()
     try:  # 마스킹을 거치지 않고 직접 삽입(우회 상황 재현)
@@ -336,9 +336,9 @@ def test_properly_masked_gap_does_not_trigger_anomaly_event(client, unique_user)
     것은 **의도된 동작**(고치지 않고 방치되면 볼 때마다 알림)이라 전역 카운트로는 격리가
     안 된다 — 이 테스트가 만든 gap_id를 특정해 검증한다.
     """
-    from app.db.database import SessionLocal
-    from app.db.models import KnowledgeGap as KG
-    from app.db.models import RunEvent
+    from db.sqlite_legacy.connection import SessionLocal
+    from db.sqlite_legacy.models import KnowledgeGap as KG
+    from db.sqlite_legacy.models import RunEvent
     from app.obs.pii import mask_pii
 
     db = SessionLocal()

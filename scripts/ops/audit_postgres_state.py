@@ -10,6 +10,12 @@ import psycopg
 from psycopg import sql
 
 
+#: ★**여기는 `get_conn()` 을 쓰지 않는다 — 일부러다.**
+#:   이 도구는 `postgres`·`mall_vec`·`insurance_real` 처럼 **여러 데이터베이스를
+#:   이름으로 돌며** 감사한다. 풀(`get_conn`)은 설정에 박힌 DSN 하나만 연다.
+#:   ★다른 조회 스크립트는 반드시 `get_conn()` 을 써야 한다 — 안 그러면
+#:     `PGVECTOR_SCHEMA`(운영 `vec`)가 안 걸려 **빈 결과를 정상처럼** 돌려준다.
+#:     그 이유로 2026-08-26~27 에 5곳을 고쳤다. 여기만 예외다.
 def _connect(database: str, host: str, port: int, user: str) -> psycopg.Connection:
     return psycopg.connect(
         host=host,
@@ -87,11 +93,18 @@ def main() -> int:
     with _connect("postgres", args.host, args.port, args.user) as conn:
         databases = _databases(conn)
 
-    reports = {}
+    reports: dict[str, dict[str, Any]] = {}
+    skipped_databases: dict[str, str] = {}
     for database in databases:
-        reports[database] = _database_report(
-            database, host=args.host, port=args.port, user=args.user
-        )
+        try:
+            reports[database] = _database_report(
+                database, host=args.host, port=args.port, user=args.user
+            )
+        except psycopg.OperationalError as exc:
+            # A stale pg_database entry can remain after an interrupted test
+            # database cleanup. Keep the audit read-only and continue with the
+            # databases that are actually connectable.
+            skipped_databases[database] = str(exc).splitlines()[0]
 
     print(
         json.dumps(
@@ -101,6 +114,7 @@ def main() -> int:
                 "port": args.port,
                 "databases": databases,
                 "reports": reports,
+                "skipped_databases": skipped_databases,
             },
             ensure_ascii=False,
             indent=2,

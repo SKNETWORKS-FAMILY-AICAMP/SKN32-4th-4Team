@@ -51,8 +51,20 @@ def test_약한_idempotency_입력은_거절한다(command):
 
 
 def test_occurrence는_release에_colon이_있어도_오른쪽에서_해석한다():
-    sha = "a" * 64
-    assert _occurrence(f"release:part:{sha}:annex:12") == (sha, "annex", 12)
+    #: ★v2 로 옮겨도 **오른쪽부터 해석**해야 한다 — `release_id` 에 콜론이 들어갈 수 있다.
+    #:   실제로 v2 를 `split(":", 5)`(왼쪽부터)로 썼다가 이 시험이 잡았다(2026-08-27).
+    sha, ch = "a" * 64, "b" * 64
+    assert _occurrence(f"v2:release:part:{sha}:annex:12:{ch}") == (sha, "annex", 12, ch)
+
+
+def test_v1_형식은_거절한다():
+    """★v1 은 **검색용 재번호**를 쓰고 있었다 — 게이트가 바뀌면 다른 조항을 가리킨다.
+
+    ★모양이 비슷해 파싱은 되므로, 조용히 받아 주면 **틀린 근거가 저장된다.**
+      그래서 「v2 가 아니다」라고 말하며 거절한다.
+    """
+    with pytest.raises(ValidationErr):
+        _occurrence(f"release:{'a' * 64}:clause:0")
 
 
 @pytest.mark.parametrize("value", ["bad", f"r:{'a' * 64}:other:0", f"r:{'a' * 64}:clause:-1"])

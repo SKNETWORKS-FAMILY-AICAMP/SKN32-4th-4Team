@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 
 from app.adapters.clause_rerank import rerank_hits
-from app.adapters.pgvector_clause_index import ClauseHit
+from db.postgres.pgvector_clause_index import ClauseHit
 from app.adapters.reranker import CrossEncoderReranker
 from app.application.ports import Evidence
 

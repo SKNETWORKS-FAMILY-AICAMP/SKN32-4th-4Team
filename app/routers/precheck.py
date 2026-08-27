@@ -30,6 +30,7 @@ from app.core.domain.precheck_result import PrecheckInput, PrecheckOutcome
 from app.core.errors import InfraError, ValidationErr, public_error_message
 from app.core.config_validation import require_insurance_idempotency_secret
 from app.core.usecases import precheck
+from app.core.usecases import self_pay
 from app.routers._uploads import read_capped
 from app.schemas.precheck import (
     AppliedPolicy,
@@ -39,6 +40,7 @@ from app.schemas.precheck import (
     PrecheckRequest,
     PrecheckResult,
 )
+from app.schemas.self_pay import SelfPayCandidate, SelfPayRequest, SelfPayResponse
 
 #: 청구 증거 파일 저장 위치. `data/obs/`는 이미 .gitignore 대상이다(진료 관련
 #: 개인정보라 약관 원문보다도 더 커밋하면 안 된다).
@@ -59,6 +61,19 @@ def _deps():
 
         _DEPS = build_precheck()
     return _DEPS
+
+
+#: 자기부담금 소스도 같은 이유로 한 번만 조립해 캐시한다(§ 위 `_DEPS` 참고).
+_SELF_PAY_SOURCE = None
+
+
+def _self_pay_deps():
+    global _SELF_PAY_SOURCE
+    if _SELF_PAY_SOURCE is None:
+        from app.composition import build_self_pay_source
+
+        _SELF_PAY_SOURCE = build_self_pay_source()
+    return _SELF_PAY_SOURCE
 
 #: 판정 흐름. 매 요청마다 다시 조립하지 않는다.
 _GRAPH = None
@@ -227,6 +242,7 @@ def _to_input(body: PrecheckRequest) -> PrecheckInput:
         kcd_codes=tuple(normalized_codes),
         product_name=body.product_name,
         client_ref=body.client_ref,
+        condition_text=body.condition_text,
     )
 
 
@@ -279,6 +295,9 @@ def _to_dto(o: PrecheckOutcome) -> PrecheckResult:
             for a in o.per_code
         ],
         citations=[_cite(c) for c in o.citations],
+        #: ★근거와 **다른 목록**으로 내보낸다. 합치면 화면이 둘을 같은 무게로 그린다.
+        related_clauses=[_cite(c) for c in o.related_clauses],
+        related_search=o.related_search,
         candidates=[_policy(c) for c in o.candidates],
         rule_engine_version=o.rule_engine_version,
         extractor=o.extractor,
@@ -811,9 +830,13 @@ def catalog_products(
 
     ★★**「우리가 지원하는 상품 전부」로 읽히면 안 된다.**
 
-        확정 약관은 850건이고 판정대상 1,367건의 **62.2%** 다. 나머지는 아직
-        「이 파일이 무엇인가」를 확정하지 못한 것이지 **없는 상품이 아니다.**
-        전량을 내려주면 「목록에 없으면 미지원」으로 읽힌다 — 그건 거짓이다.
+        확정 약관 건수는 여기 박아두지 않는다 — 원장이 바뀔 때마다 낡는다
+        (실측: 850/1,367→1,353/1,362→1,354/… 로 하루 안에도 갱신됐다). 지금 값은
+        `config/confirmed_documents.jsonl` 의 `identification=="confirmed"` 건수를
+        판정대상 분모와 함께 직접 세거나 `GET /v1/support-manifest` 를 본다.
+        확정 안 된 나머지는 아직 「이 파일이 무엇인가」를 확정하지 못한 것이지
+        **없는 상품이 아니다.** 전량을 내려주면 「목록에 없으면 미지원」으로
+        읽힌다 — 그건 거짓이다.
 
         그래서 **보험사를 필수로 받고**, 검색어로 좁히고, 상한을 둔다.
         응답에 「전체 목록이 아니다」를 항상 싣는다.
@@ -873,6 +896,70 @@ def catalog_products(
                  "목록에 없다고 그 상품이 없는 것은 아닙니다 — 아직 확정 절차가 남은 약관이 있습니다. "
                  "상품명을 골라도 적용 판본은 가입일이 정합니다."),
     }
+
+
+@router.post("/self-pay", response_model=SelfPayResponse)
+def get_self_pay(body: SelfPayRequest) -> SelfPayResponse:
+    """승인된 표 사실로만 자기부담금을 계산한다.
+
+    ★사람이 승인한 사실이 정확히 하나로 좁혀질 때만 계산한다(`app/core/usecases/self_pay.py`).
+      후보가 여럿이거나 없으면 `found`/`ambiguous`로만 답하고 금액은 `null`이다 —
+      모르면 모른다고 한다(CLAUDE.md §0). 이 계산은 참고용이며 실제 심사·지급 판단이 아니다.
+    """
+    try:
+        source = _self_pay_deps()
+        result = self_pay.lookup(
+            policy_version_sha=body.policy_version_sha,
+            plan=body.plan,
+            service=body.service,
+            institution=body.institution,
+            coverage=body.coverage,
+            source=source,
+        )
+    except ValidationErr as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
+    except InfraError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=public_error_message(e),
+        ) from e
+
+    if not result.matches or result.ambiguous:
+        return SelfPayResponse(
+            policy_version_sha=result.policy_version_sha,
+            found=bool(result.matches),
+            ambiguous=result.ambiguous,
+            reason=result.reason,
+            candidates=[
+                SelfPayCandidate(
+                    candidate_id=f.candidate_id,
+                    institution=f.institution,
+                    coverage=f.coverage,
+                    formula=f.formula,
+                    page=f.page,
+                )
+                for f in result.matches
+            ],
+        )
+
+    try:
+        calc = self_pay.calculate(result, eligible_expense_won=body.eligible_expense_won)
+    except ValidationErr as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)
+        ) from e
+
+    return SelfPayResponse(
+        policy_version_sha=result.policy_version_sha,
+        found=True,
+        ambiguous=False,
+        reason=result.reason,
+        eligible_expense_won=calc.eligible_expense_won,
+        deductible_won=calc.deductible_won,
+        formula=calc.formula,
+    )
 
 
 def _norm_for_search(s: str) -> str:

@@ -502,7 +502,7 @@ def test_claim_candidate_count_has_normal_and_mutant_cases(real_claim_fixture) -
 def test_claim_4bit_metric_pair_has_normal_and_mutant_cases(real_claim_fixture) -> None:
     doc, rows, data = real_claim_fixture
     assert not _run_claims(doc, rows, data).fail
-    _mutate_doc(doc, "제목 0.521→0.535", "제목 0.521→0.538")
+    _mutate_doc(doc, "제목 0.524→0.535", "제목 0.524→0.538")
     assert any("4bit 제목 전후값" in message for message in _messages(_run_claims(doc, rows, data), "본문숫자"))
 
 
@@ -520,7 +520,7 @@ def test_claim_4bit_title_pair_reads_nested_current_schema(real_claim_fixture) -
 def test_claim_4bit_tail_pair_has_normal_and_mutant_cases(real_claim_fixture) -> None:
     doc, rows, data = real_claim_fixture
     assert not _run_claims(doc, rows, data).fail
-    _mutate_doc(doc, "뒷부분 0.253→0.269", "뒷부분 0.253→0.271")
+    _mutate_doc(doc, "뒷부분 0.238→0.269", "뒷부분 0.238→0.271")
     assert any("4bit 뒷부분 전후값" in message
                for message in _messages(_run_claims(doc, rows, data), "본문숫자"))
 

@@ -83,7 +83,7 @@ def build_precheck():
         rel.ensure_ready()
 
     if kind == "pg":
-        from app.adapters import pg_clause_store
+        from db.postgres import pg_clause_store
 
         #: ★승인된 임베딩 프로필이 없으면 PG 경로를 **고르지 않는다.**
         #:   벡터가 없으면 검색이 0건인데, 그걸 "근거 없음"으로 내보내면
@@ -139,7 +139,23 @@ def build_clause_search_deps() -> dict:
     ★유스케이스(`app/core/usecases/clause_search.py`)는 어댑터를 직접 부르지 않는다
       (ARCH-002·003 — 의존 방향). 그래서 조립은 여기서 한다.
     """
-    from app.adapters import pgvector_clause_index
+    from db.postgres import pgvector_clause_index
     from app.adapters.clause_rerank import rerank_hits
 
     return {"index": pgvector_clause_index, "rerank_fn": rerank_hits}
+
+
+def build_self_pay_source():
+    """자기부담금 조회가 쓸 승인 사실 저장소.
+
+    ★파일 어댑터뿐이다 — 인용가능·serving_eligible·사람승인(`human_pattern_approved`)
+      3중 검사를 통과한 S7.1 산출물만 읽는다(`app/adapters/file_benefit_facts.py`).
+      해시가 하나라도 어긋나면 만들 때 바로 실패한다(fail-closed) — 여기서
+      한 번만 만들고 라우터가 캐시해 쓴다.
+    """
+    from pathlib import Path
+
+    from app.adapters.file_benefit_facts import FileSelfPayFactSource
+
+    root = Path(__file__).resolve().parent.parent
+    return FileSelfPayFactSource(root)

@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import time
 
-from sqlalchemy.orm import Session
+from app.auth.user_types import AuthStore, AuthUser
 
 from app.core.config import get_settings
 from app.core.errors import AuthErr, ForbiddenErr, ValidationErr
-from app.db.models import FaceCredential, User
 from app.ml.face import (
     analyze_face,
     average_embeddings,
@@ -33,13 +32,25 @@ _attempts: dict[object, list[float]] = {}
 _WINDOW_SEC = 300.0
 
 
-def has_face(db: Session | PgAuthStore, user_id) -> bool:
+def _legacy_face_credential():
+    """레거시 SQLite 모델을 **부를 때** 적재한다.
+
+    ★최상단 import 는 PostgreSQL 전용 배포에도 SQLAlchemy 를 통째로 끌어온다
+      (`app/auth/user_types.py` — 그것 때문에 기동이 막힌 적이 있다).
+    """
+    from db.sqlite_legacy.models import FaceCredential
+
+    return FaceCredential
+
+
+def has_face(db: AuthStore, user_id) -> bool:
     if isinstance(db, PgAuthStore):
         return db.get_face(user_id) is not None
+    FaceCredential = _legacy_face_credential()
     return db.query(FaceCredential).filter(FaceCredential.user_id == user_id).first() is not None
 
 
-def register_face(db: Session | PgAuthStore, user: User | PgUser, images: list[bytes]) -> dict:
+def register_face(db: AuthStore, user: AuthUser, images: list[bytes]) -> dict:
     """로그인된 세션에서만 호출됨(라우터가 get_current_user로 보장).
 
     다중 이미지 등록(Codex 권고): 각 샷을 **엄격 품질 게이팅**(strict) + 라이브니스로 거른 뒤
@@ -76,6 +87,7 @@ def register_face(db: Session | PgAuthStore, user: User | PgUser, images: list[b
         record_event(db, "face_registered", {"user_id": user.id, "shots_used": len(embeddings)})
         return {"registered": True, "shots_used": len(embeddings), "shots_submitted": len(images)}
 
+    FaceCredential = _legacy_face_credential()
     cred = db.query(FaceCredential).filter(FaceCredential.user_id == user.id).first()
     if cred is None:
         cred = FaceCredential(user_id=user.id, embedding=blob)
@@ -87,7 +99,7 @@ def register_face(db: Session | PgAuthStore, user: User | PgUser, images: list[b
     return {"registered": True, "shots_used": len(embeddings), "shots_submitted": len(images)}
 
 
-def _check_attempts(db: Session | PgAuthStore, user_id) -> None:
+def _check_attempts(db: AuthStore, user_id) -> None:
     settings = get_settings()
     now = time.monotonic()
     hist = [t for t in _attempts.get(user_id, []) if now - t < _WINDOW_SEC]
@@ -105,11 +117,15 @@ def _clear_attempts(user_id: int) -> None:
     _attempts.pop(user_id, None)
 
 
-def verify_face(db: Session | PgAuthStore, user: User | PgUser, image_bytes: bytes) -> None:
+def verify_face(db: AuthStore, user: AuthUser, image_bytes: bytes) -> None:
     """2차 인증: 라이브니스 → 임베딩 비교. 실패 시 AuthErr(일반 메시지). 성공 시 조용히 반환."""
     _check_attempts(db, user.id)
 
-    cred = db.get_face(user.id) if isinstance(db, PgAuthStore) else db.query(FaceCredential).filter(FaceCredential.user_id == user.id).first()
+    if isinstance(db, PgAuthStore):
+        cred = db.get_face(user.id)
+    else:
+        FaceCredential = _legacy_face_credential()
+        cred = db.query(FaceCredential).filter(FaceCredential.user_id == user.id).first()
     if cred is None:
         # 이 경로는 라우터가 이미 has_face로 거르지만 방어적으로 처리.
         raise AuthErr(_GENERIC_FAIL)

@@ -37,6 +37,31 @@ REQUIRE_CONFIRMED = os.getenv("PRECHECK_ALLOW_UNCONFIRMED", "").strip() not in (
 )
 
 
+#: ★★**세대 검토 상태의 어휘는 여기 하나뿐이다.**
+#:
+#:   실측 2026-08-26 — 게이트가 `("reviewed", "partial")` 만 받는데 확정 원장은
+#:   `verified` 54건 · `not_applicable` 3건을 쓰고 있었다. 말이 안 맞아
+#:   **확정까지 끝난 문서 57건이 판정에서 조용히 빠졌다**(1,353 → 1,296).
+#:   KB손해보험은 LIG 시절 약관 4건이 통째로 검색에도 안 잡혔다.
+#:
+#:   그래서 어휘를 상수로 꺼내 **한 곳에서만** 정한다. 원장을 쓰는 쪽이 새 낱말을
+#:   만들면 `tests/test_generation_review_vocabulary.py` 가 곧바로 깨진다 —
+#:   조용히 빠지는 것보다 시끄럽게 깨지는 편이 낫다(CLAUDE.md §3).
+#:
+#:   `verified`       사람이 세대를 확인했다. `partial` 보다 **강한** 주장이다.
+#:   `reviewed`       규칙셋 검토를 마쳤다.
+#:   `partial`        일부만 검토됐다 — 그래도 세대는 정해졌다.
+#:   `not_applicable` 세대 규칙이 **해당하지 않는** 문서다(노후실손 특별약관 등).
+#:                    세대를 잘못 적용할 위험 자체가 없으므로 막을 이유가 없다.
+GENERATION_REVIEW_OK = frozenset({"verified", "reviewed", "partial", "not_applicable"})
+
+#: 검토가 **아직 안 된** 상태. 이건 막는다.
+GENERATION_REVIEW_BLOCKED = frozenset({"", "pending", "unreviewed"})
+
+#: 게이트가 아는 말 전부. 여기 없는 값이 원장에 나타나면 테스트가 깨진다.
+GENERATION_REVIEW_KNOWN = GENERATION_REVIEW_OK | GENERATION_REVIEW_BLOCKED
+
+
 @dataclass(frozen=True)
 class PolicyVersionRow:
     """매니페스트 한 줄을 판정에 필요한 만큼만 투영한 것.
@@ -102,7 +127,13 @@ class PolicyVersionRow:
         #:   **조용히 새는 문이 된다.** 그 전에 막는다.
         #:
         #:   ★`""` 도 막는다. 값이 없으면 "검토했다"가 아니다.
-        if self.generation_review not in ("reviewed", "partial"):
+        #:
+        #: ★★2026-08-26 정정 — 여기 `("reviewed", "partial")` 이라고 **손으로 적어** 뒀는데,
+        #:   원장은 `verified`·`not_applicable` 도 쓴다. 그래서 사람이 세대를 확인해 둔
+        #:   문서 57건이 판정에서 조용히 빠졌다. 어휘는 `GENERATION_REVIEW_OK` 하나로 모은다.
+        #:   ★모르는 낱말은 여전히 막는다(fail-closed). 다만 **모른 채로 조용히 막지는
+        #:   않는다** — 원장 어휘를 테스트가 대조한다.
+        if self.generation_review not in GENERATION_REVIEW_OK:
             return False
         if self.date_confidence not in ("exact", "month"):
             return False
@@ -142,8 +173,13 @@ class ClauseRow:
     chunk_type: str | None = None
     is_statute: bool | None = None
     parse_status: str | None = None
-    #: ★수록(occurrence) 순번. 조항 JSON 이 결정적으로 매긴 값이다.
+    #: ★수록(occurrence) 순번. ★★**검색용 재번호다** — 조항 JSON 의 값이 아니다
+    #:   (2026-08-27 정정). `assign_ordinals` 가 **색인에 든 행만** 줄세워 다시 매긴다.
+    #:   게이트 판정이 바뀌면 이 값도 바뀐다. 영구 식별자로 쓰면 안 된다.
     ordinal: int | None = None
+    #: ★★산출물(clauses.json)이 매긴 **원래** 순번. `occurrence_id` 는 이걸 쓴다.
+    #:   게이트가 바뀌어도 안 바뀐다 — 그래서 영구 식별자에 넣을 수 있다.
+    source_ordinal: int | None = None
     #: 조항인가 부록인가. 부록을 조 이름으로 인용하면 출처가 틀린다.
     source_kind: str = "clause"
     #: 어느 승인 릴리스에서 왔나. 인용 검증이 세대까지 맞춰 볼 수 있어야 한다.
@@ -157,14 +193,44 @@ class ClauseRow:
           `page_from`·세대·조항/부록 구분이 없다. 인용 검증이
           "정확히 한 행이 조회될 때만 통과"하려면 이만큼이 필요하다.
 
-        ★`ordinal` 이 없으면 **빈 문자열**이다. 지어내지 않는다 —
+        ★값이 하나라도 없으면 **빈 문자열**이다. 지어내지 않는다 —
           호출부가 "식별자가 없다"를 보고 기권해야 한다.
+
+        ★★**형식이 바뀌었다: v2** (2026-08-27, 코덱스와 교차검증)
+
+            v1  `릴리스:sha256:source_kind:ordinal`
+            v2  `v2:릴리스:sha256:source_kind:source_ordinal:content_hash`
+
+          v1 은 **검색용 재번호**(`ordinal`)를 영구 식별자에 넣고 있었다.
+          그 번호는 `assign_ordinals` 가 **색인에 든 행만** 줄세워 매기고,
+          색인에 무엇이 드는지는 **인용 게이트**가 정한다.
+          곧 **게이트 판정이 바뀌면 어제 발급한 인용이 다른 조항을 가리킨다.**
+          게이트는 판단이고 앞으로도 바뀐다 — 하루에 강등 17,820행이 난 적도 있다.
+
+          실측 피해: `core.policy_clause.ordinal`(산출물 그대로)과 자리 일치가
+          **62.51%** 뿐이라, 인용을 원장에 저장할 때 **30%가 실패**했다
+          (표본 300건: 찾음 209 · 못 찾음 91 · 모호 0).
+          ★틀린 조항이 저장되지는 않았다 — 조회에 `position(quote in body)>0` 가 있어
+            어긋나면 실패한다(fail-closed). 그래도 30%를 못 남기는 것은 결함이다.
+
+          v2 는 **게이트가 못 건드리는 두 값**만 쓴다 —
+            · `source_ordinal` 산출물이 매긴 자리. 실측 (문서,종류,순번) **중복 0**
+            · `content_hash`   그 자리에 실린 내용. 자리가 밀렸는지 바로 드러난다
+
+          ★해시만으로는 부족하다 — 한 문서 안에서 같은 내용이 두 번 실리는 자리가
+            **2,789개** 있다. 그래서 자리와 내용을 **함께** 본다(코덱스 지적).
+
+        ★지금 바꾸는 이유 — 발급된 인용이 **0건**이다
+          (`core.clause_reference` 0행 · `app.assessment_clause_citation` 0행).
+          소급 피해 없이 형식을 바꿀 수 있는 창은 지금뿐이다.
         """
         #: ★`release_id` 가 없으면 **빈 문자열**이다. `'?'` 로 채우면
         #:   서로 다른 릴리스의 행이 **같은 식별자**를 갖는다(코덱스 지적).
-        if self.ordinal is None or not self.sha256 or not self.release_id:
+        if (self.source_ordinal is None or not self.sha256
+                or not self.release_id or not self.content_hash):
             return ""
-        return f"{self.release_id}:{self.sha256}:{self.source_kind}:{self.ordinal}"
+        return (f"v2:{self.release_id}:{self.sha256}:{self.source_kind}"
+                f":{self.source_ordinal}:{self.content_hash}")
 
     @property
     def clause_id(self) -> str:
@@ -216,3 +282,27 @@ class ClauseSourcePort(Protocol):
     def stats(self, sha256: str) -> dict: ...
 
     def search(self, sha256: str, query: str, *, limit: int = 8) -> Sequence[ClauseRow]: ...
+
+
+@runtime_checkable
+class RelatedClausePort(Protocol):
+    """의미검색으로 **읽어 볼 만한 조항**을 찾는다.
+
+    ★★**판정 근거를 주는 포트가 아니다.** `ClauseSourcePort` 와 나눠 둔 이유가 그것이다.
+
+      · `ClauseSourcePort.load_clauses` → 질병기호가 **실제로 적힌** 조항을 찾는 재료.
+        여기서 나온 것만 `citations` 가 되고, 판정을 바꾼다.
+      · `RelatedClausePort.find` → 벡터 유사도가 고른 조항. **유사도는 근거가 아니다.**
+        사람이 읽을 참고 자료로만 나가고(`related_clauses`), 판정은 건드리지 않는다.
+
+      두 포트를 하나로 합치면 조립 지점이 실수로 벡터 검색을 판정 재료로 꽂을 수 있다.
+      타입으로 막는다.
+
+    ★범위는 **약관 한 벌**로 가둔다(`sha256`). 전역으로 열면 2019년 가입자에게
+      2024년 조항이 참고로 붙는다 — 참고라도 그건 틀린 참고다.
+
+    ★못 찾으면 빈 목록, 못 하면 **예외**다. 둘을 같게 만들지 않는다 —
+      호출부가 「관련 조항 없음」과 「검색 실패」를 구별해야 한다(CLAUDE.md §0).
+    """
+
+    def find(self, sha256: str, query: str, *, limit: int = 5) -> Sequence[ClauseRow]: ...

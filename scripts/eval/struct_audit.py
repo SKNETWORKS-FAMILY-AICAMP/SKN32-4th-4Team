@@ -36,6 +36,14 @@ import json
 import re
 from pathlib import Path
 
+#: ★S3(파묻힌 머리) 판정이 `to_clauses.py` 의 머리 판정과 어긋나면 안 된다
+#:   (아래 `structure_faults` 안 §9-1 주석 참조) — 정규식을 다시 베끼지 않고
+#:   정답 소스를 그대로 가져온다. 순환 없음: `to_clauses.py` 모듈 최상단은
+#:   `struct_audit` 를 쓰지 않고, `build()` 함수 **안에서만** 지연 import 한다.
+from scripts.extract.to_clauses import (  # noqa: E402
+    _ARTICLE, _REF_TAIL, _ANNEX_HEAD, _ANNEX_REF_TAIL,
+)
+
 _ROOT = Path(__file__).resolve().parents[2]
 _EXTRACTED = _ROOT / "data" / "extracted"
 _STRUCTURED = _ROOT / "data" / "structured"
@@ -56,13 +64,92 @@ _REPL = re.compile(r"�")
 #:     "[별표2] "특정부위 분류표" 중에서 회사가 지정한 부위에 발생한 질병 …"
 #:   진짜 부록은 **새 줄에서 시작**한다. 조 머리·항 마커와 같은 원칙이다.
 #:   (코덱스도 "본문 내 단순 `[별표] 참조`는 제외해야 한다"고 지적했다.)
-_ANNEX = re.compile(
-    r"^[ \t]{0,6}(?:[\[［]\s*(?:붙\s*임|별\s*표|별\s*첨)|[＜<]\s*붙\s*임"
-    r"|(?:질병|재해|특정부위|특정질병)\s*분류표)",
-    re.MULTILINE,
-)
+#:
+#: ★★2026-08-26 population A 사람 표본검수(44건) 중 발견 — 위 자체 규칙은
+#:   "줄머리"만 보고 **닫는 괄호·조사 참조를 안 본다.** 실측(전량 스캔 기준
+#:   S4 게이트 모집단 **4건 전부**, samsungfire "제7조(보험금의 지급절차)"):
+#:
+#:     ④ … 그 다음날부터 지급일까지의 기간에 대하여
+#:     <붙임2>에서 정한 이율로 계산한 금액을 보험금에 더하여 지급합니다.
+#:
+#:   `<붙임2>에서 정한`은 **정상 문장 중간의 인용**인데(줄바꿈으로 `<붙임2>`가
+#:   줄머리에 온 것뿐), 이 정규식은 `<붙임`까지만 보고 뒤의 `에서 정한`을
+#:   확인 안 해서 진짜 부록 시작으로 오판했다(4/4, 표본 전수 오탐).
+#:   ★`to_clauses.py`의 `_ANNEX_HEAD`/`_ANNEX_REF_TAIL`은 **이미 이 정확한
+#:     사례를 예시로 들며 고쳐져 있다**(주석에 "<붙임2>에서 정한 이율" 그대로
+#:     나온다) — 닫는 괄호까지 확인하고 참조 꼬리를 거른다. S3(파묻힌 머리)가
+#:     `_ARTICLE`/`_REF_TAIL`을 재사용하는 것과 같은 이유로, 여기서도 별도
+#:     느슨한 규칙을 두지 않고 **정답 소스를 그대로 가져온다**(순환 없음,
+#:     위 import 주석 참조). Codex 설계검토(2026-08-26) 교차확인 완료 —
+#:     단, 표본이 4건(사실상 같은 조항 1종)뿐이라 "이 신호가 앞으로도
+#:     오탐 없다"는 보장은 아니다. 전량 재측정으로 확인한다.
 #: 마커 뒤에 이만큼 이상 남아 있어야 "삼켰다"고 본다. 제목 한 줄만 있는 건 경계 표시다.
 ANNEX_MIN_TAIL = 300
+
+#: ★★2026-08-26 S3 잔여 26건 Codex 전수분석(디버그 리포트 참조) — "정한→정하는"
+#:   외에 새 오탐 2종을 발견했다. `_ARTICLE`/`_REF_TAIL`(=heads 판정, 조항
+#:   경계 자체)은 **안 건드린다** — 이 두 패턴은 S3 가 최종 블록을 다시 훑을
+#:   때만 생기는 **감사 전용 오탐**이라, S3 게이트 정밀도만 좁게 고친다
+#:   (Codex 설계, 코드는 그대로 실행 안 하고 검토만 받은 뒤 이 세션에서 구현).
+#:
+#:   ① 법령 나열 항목("가."~"하.") 안에서 "「형법」... 및\n제281조(제목)
+#:      (한정문)의 죄" 처럼 조 번호 뒤에 **괄호 한정문 + "의 죄"로 그 줄이
+#:      끝나는** 형법 조문 열거(실측 dbins 8건).
+#:   ② "약관요약서" 부(section) 안에서 "숫자\n항목명\n제N조(제목),"처럼
+#:      **표 행 다음에 조 인용이 쉼표로 끝나고 그 뒤 본문이 아예 없는** 참조
+#:      (실측 meritzfire 9건).
+#:
+#:   ★`[가-하]` 같은 유니코드 범위는 안 쓴다 — 그 사이 수많은 무관한 한글
+#:     음절을 다 받는다. 명시적으로 나열한다.
+_LAW_CRIME_RIDER_EOL = re.compile(
+    r"\A[ \t]*"
+    r"(?:\([^()\n]{2,80}\)|（[^（）\n]{2,80}）)"
+    r"[ \t]*의[ \t]*죄[ \t]*"
+    r"(?:\r?\n|\Z)"
+)
+_LIST_ITEM_HEAD = re.compile(
+    r"^[ \t]*[가나다라마바사아자차카타파하]\.[ \t]*",
+    re.MULTILINE,
+)
+
+
+def _is_law_list_rider_reference(text: str, m: re.Match) -> bool:
+    """이 `_ARTICLE` 매치가 "가.~하." 법령 나열 항목 안의 형법 조문 열거인가."""
+    prefix = text[:m.start()]
+    starts = list(_LIST_ITEM_HEAD.finditer(prefix))
+    if not starts:
+        return False
+    current_item = prefix[starts[-1].start():]
+    return (
+        "「형법」" in current_item
+        and re.search(r"및[ \t]*\r?\n?[ \t]*\Z", current_item) is not None
+        and _LAW_CRIME_RIDER_EOL.match(text[m.end():]) is not None
+    )
+
+
+#: 약관요약서 표 행: "숫자\n항목명\n" 다음에 이 후보가 온다.
+_SUMMARY_ROW_PREFIX = re.compile(
+    r"(?:\A|\r?\n)"
+    r"[ \t]*\d{1,2}[ \t]*\r?\n"
+    r"[ \t]*[^\r\n,，、]{2,30}[ \t]*\r?\n"
+    r"[ \t]*\Z"
+)
+#: ★12자 슬라이스가 아니라 **남은 텍스트 전체**를 본다 — 12자로 자르면
+#:   "뒤에 본문이 있는데 우연히 12자 안에서 끝난 것"과 "진짜 블록 끝"을
+#:   못 가른다(Codex 지적).
+_SUMMARY_REF_AT_BLOCK_END = re.compile(r"\A[ \t]*[,，、][ \t\r\n]*\Z")
+
+
+def _is_summary_terminal_reference(text: str, m: re.Match, section: str | None) -> bool:
+    """이 `_ARTICLE` 매치가 "약관요약서" 표의, 쉼표로 끝나고 본문이 없는 참조인가."""
+    if re.sub(r"\s+", "", section or "") != "약관요약서":
+        return False
+    if not (m.group(3) or "").strip():
+        return False
+    return (
+        _SUMMARY_ROW_PREFIX.search(text[:m.start()]) is not None
+        and _SUMMARY_REF_AT_BLOCK_END.match(text[m.end():]) is not None
+    )
 
 
 def _norm(t: str) -> str:
@@ -106,9 +193,11 @@ def text_fidelity(source: str, blocks: list[str]) -> dict:
 def structure_faults(blocks: list[dict]) -> dict:
     """조 블록 목록에서 구조 모순을 센다.
 
-    blocks 원소: {no: int|None, kind: str, title: str, text: str}
+    blocks 원소: {no: int|None, kind: str, title: str, text: str, section: str?}
       kind — 번호 체계(`article` / `numbered`). ★섞어서 비교하면 안 된다.
              `제5조` 다음 `4-1.` 을 역행으로 세면 거짓 경고가 쏟아진다(코덱스 지적).
+      section — 부(部)/특약 이름. **있으면** kind 와 함께 시퀀스를 가른다(아래 §S1 참조).
+                없는 호출부(과거 v5 등)는 생략 가능 — 전부 같은 부로 보고 예전과 같이 동작한다.
     """
     n = len(blocks)
     if not n:
@@ -118,11 +207,19 @@ def structure_faults(blocks: list[dict]) -> dict:
     #:   결함 4개 때문에 문서의 조항 155개를 통째로 버리게 된다
     #:   (실측: 문서 게이트 897조항 0.42% → 조항 게이트 168,523조항 93.95%).
     gated: set[int] = set()
-    #: 번호 체계별로 따로 본다.
-    by_kind: dict[str, list[tuple[int, int]]] = collections.defaultdict(list)
+    #: ★★번호 체계뿐 아니라 **부(部)도 같이 갈라야 한다**(S1/S2 원인규명 리포트 §9-1).
+    #:
+    #:   고치기 전: `by_kind`가 `kind` 만으로 시퀀스를 묶어서, 새 특약이 시작해
+    #:   번호가 `제1조`로 재시작하면 **직전 특약의 "제N조"와 부딪혀 A-B-A로 오판**했다.
+    #:   실측(S1 리포트 §3): A-B-A 4,613건 중 **87.2%가 셋 다 진짜 헤더** — 즉
+    #:   `제4→제5→제4`가 아니라 `(특약X)제4→제5→(특약Y)제4`처럼 **부가 바뀐 자연스러운
+    #:   재시작**을 재진입으로 잘못 센 것이었다.
+    #:   `section` 이 없는 옛 호출부(`load_v5`)는 전부 `None`이라 한 그룹으로 뭉쳐
+    #:   **예전과 똑같이** 동작한다 — 이 변경으로 새로 깨지는 호출부가 없다.
+    by_kind: dict[tuple[str, str | None], list[tuple[int, int]]] = collections.defaultdict(list)
     for i, b in enumerate(blocks):
         if isinstance(b.get("no"), int):
-            by_kind[b.get("kind", "article")].append((i, b["no"]))
+            by_kind[(b.get("kind", "article"), b.get("section"))].append((i, b["no"]))
 
     for seq in by_kind.values():
         for i in range(2, len(seq)):
@@ -144,7 +241,32 @@ def structure_faults(blocks: list[dict]) -> dict:
         #: ★블록 **안**에 다른 조 머리가 매몰 — 경계를 놓친 확정 신호.
         #:   첫 줄(자기 머리)은 빼고 센다.
         tail = body.split("\n", 1)[1] if "\n" in body else ""
-        n_emb = len(re.findall(r"^[ \t]{0,6}제\s*\d{1,3}\s*조[（(\[【]", tail, re.M))
+        #: ★★자기참조·법령인용은 "파묻힌 머리"가 아니다(S1/S2 원인규명 §9-1 재조사
+        #:   중 발견). `제3조(전환후계약의 보장개시일) 제2항에도 불구하고 …` 처럼
+        #:   자기 조를 도로 인용하는 문장은 `to_clauses._ARTICLE` 의 머리 탐지에서
+        #:   `_REF_TAIL` 로 이미 걸러진다(제목이 있어도, §9-1 수정). 그런데 이 S3
+        #:   검사가 **옛 단순 정규식**(제목 캡처·참조꼬리 판단 없이 "제N조(" 만
+        #:   보는 것)을 그대로 쓰고 있어서, `heads` 에서 뺀 그 문장이 부모 조 본문
+        #:   안에 그대로 남으면 "파묻힌 머리"로 다시 걸렸다. 실측(전량 재빌드):
+        #:   `S3_embedded_header` 가 117 → 6,650 으로 튀었는데, 표본 4건 전부
+        #:   법령 인용·자기참조였다(진짜 파묻힌 조항 0건) — `to_clauses.py` 의
+        #:   `heads` 판정과 **어긋나 있었다**(모듈 상단 주석 "두 곳이 어긋나면
+        #:   감사와 산출물이 다른 말을 한다"가 정확히 이 상황).
+        #:   ★그래서 같은 판정(`_ARTICLE` + `_REF_TAIL` + 중첩괄호 예외)을 그대로
+        #:     가져와 쓴다 — 정규식을 다시 베끼지 않고 **정답 소스를 그대로 import**
+        #:     한다(모듈 순환 없음: `to_clauses.py` 모듈 최상단은 `struct_audit`
+        #:     를 안 쓰고, `build()` 안에서만 지연 import 한다).
+        n_emb = 0
+        for m in _ARTICLE.finditer(tail):
+            title = m.group(3) or ""
+            title_truncated = "(" in title or "（" in title
+            if not title_truncated and _REF_TAIL.match(tail[m.end():m.end() + 12]):
+                continue  # 자기참조·법령인용 — 파묻힌 머리가 아니다
+            if not title_truncated and _is_law_list_rider_reference(tail, m):
+                continue  # 법령 나열 항목 안의 형법 조문 열거 — S3 잔여26건 §1
+            if not title_truncated and _is_summary_terminal_reference(tail, m, b.get("section")):
+                continue  # 약관요약서 표의 쉼표종결 참조 — S3 잔여26건 §2
+            n_emb += 1
         if n_emb:
             embedded += n_emb
             #: ★삼킨 조항(carrier)은 끈다. 삼켜진 조항은 **복구되지 않는다** —
@@ -152,10 +274,16 @@ def structure_faults(blocks: list[dict]) -> dict:
             gated.add(bi)
         #: 부록 흡수 — 붙임·별표·분류표가 **줄머리에서** 시작하고
         #:   그 뒤로 본문이 이어지면 그 조가 부록을 삼킨 것이다.
-        m = _ANNEX.search(body)
-        if m and len(body) - m.start() >= ANNEX_MIN_TAIL:
-            annex += 1
-            gated.add(bi)
+        #:   ★★위 `_ANNEX_HEAD`/`_ANNEX_REF_TAIL` import 주석 참조 —
+        #:     참조 꼬리(`에서 정한` 등)면 부록 시작이 아니다.
+        for m in _ANNEX_HEAD.finditer(body):
+            tail = body[m.end():m.end() + 12]
+            if _ANNEX_REF_TAIL.match(tail):
+                continue
+            if len(body) - m.start() >= ANNEX_MIN_TAIL:
+                annex += 1
+                gated.add(bi)
+            break
 
     return {"gated_ordinals": sorted(gated),
             "S1_aba_reentry": aba, "S2_number_gap": gap,

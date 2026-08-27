@@ -11,8 +11,8 @@ from pathlib import Path
 
 import numpy as np
 
-from app.adapters import pgvector_clause_index as ix
-from app.adapters.pgvector_index import get_conn
+from db.postgres import pgvector_clause_index as ix
+from db.postgres.pgvector_index import get_conn
 
 
 ROOT = Path(__file__).resolve().parents[2]

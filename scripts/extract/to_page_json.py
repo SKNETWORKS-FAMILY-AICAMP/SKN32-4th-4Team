@@ -53,7 +53,26 @@ _OUT = _ROOT / "data" / "extracted"
 #: v2 — 텍스트 정규화(제어문자·사용자영역 글리프 제거). §_clean_text
 #: v3 — 서로게이트 제거 + 원자적 쓰기 + 목차·부 경계 수정
 #: v4 — 보조 PUA 원문자 복구(①~⑨) + 번호체계 점수 선택 + 사후 검증
-SCHEMA_VERSION = "5"
+#: v5L — **줄 단위 레이아웃**(글자크기·굵기·좌표) 추가. 기존 `text`(순수 텍스트)는
+#:   그대로 두고 `layout` 필드만 새로 얹는다 — 하류(`to_clauses.py`)가 아직 이걸
+#:   안 써도 깨지지 않는다.
+#:
+#:   ★왜 "6" 이 아니라 "5L" 인가 — `SCHEMA_VERSION` 을 "6" 으로 올리면 폴더가
+#:     `s6_pymupdf-...` 가 되는데, 이 프로젝트에서 **"s6"은 이미 확립된 이름**이다
+#:     (`to_clauses.py` 조항 구조화 산출물, `data/structured/*/s6_pymupdf-.../`).
+#:     서로 다른 디렉터리(`extracted` vs `structured`)라 실제로 안 겹치지만,
+#:     이름만 보고 "s6가 두 가지 다른 뜻"이라고 혼동하기 쉽다 — 이 프로젝트가
+#:     이미 s6/s7/v6/v7 이름 혼동으로 시간을 쓴 전례가 있다. 그래서 페이지
+#:     추출 계열임을 분명히 하면서 조항 스키마 "s6"과 안 겹치는 "5L"을 쓴다.
+#:
+#:   ★왜 필요한가 — s5(순수 텍스트)만으로는 부(部) 경계·러닝헤더·목차를 전부
+#:     정규식 휴리스틱으로 구분해야 했다(S1 §9-1, 13건 수정). 업계 연구도
+#:     "글자크기·굵기·들여쓰기 같은 시각 신호가 있어야 경계 검출 정확도가
+#:     오른다"고 한다(2026-08-26 웹리서치, arxiv 2107.08128 등) — 그래서
+#:     `page.get_text("dict")` 로 얻을 수 있는 span 정보를 **줄 단위로 요약**해
+#:     싣는다(런 단위 원본을 다 실으면 용량이 커지고, 지금 필요한 신호
+#:     — 이게 제목처럼 크거나 굵은가, 어디 있는가 — 는 줄 단위로 충분하다).
+SCHEMA_VERSION = "5L"
 #: 이 값이 바뀌면 같은 PDF 라도 결과가 달라진다. 산출물에 함께 기록한다.
 EXTRACTOR = f"pymupdf/{fitz.__doc__.split()[1] if fitz.__doc__ else 'unknown'}"
 
@@ -152,6 +171,55 @@ def _clean_text(s: str) -> tuple[str, int, int]:
     return s, n_ctl, n_pua
 
 
+#: ★굵기 판정 — PyMuPDF 는 폰트 데이터가 틀리거나 없을 때도 있어(문서화된 한계)
+#:   폰트명 문자열도 함께 본다. `flags & 2**4`(TEXT_FONT_BOLD)가 1차, 폰트명에
+#:   "bold"/"black"/"heavy" 가 섞여 있으면 보강 신호로 더한다 — 어느 하나만
+#:   믿으면 실측 없이도 놓치는 문서가 있을 걸로 예상돼(코드만으로는 검증 불가,
+#:   실제 산출물로 표본 검증 필요) 둘 다 본다.
+_BOLD_NAME = re.compile(r"bold|black|heavy", re.IGNORECASE)
+
+
+def _line_layout(page) -> tuple[list[dict], bool]:
+    """페이지를 **줄 단위**로 요약한 레이아웃 목록. `(줄 목록, 실패 여부)`.
+
+    ★span(글자 조각) 단위가 아니라 **줄** 단위로 합친다 — 조 제목 하나가
+      "제3조" 와 "(제목)" 두 span 으로 쪼개져도 한 레코드가 되게 하려는 것.
+      `size`·`bold` 는 그 줄 안 span 들 중 **가장 큰 값**(제목은 보통 줄
+      전체가 아니라 앞부분만 크게 조판되는 경우가 있어 최댓값이 더 안전).
+
+    ★"진짜 빈 페이지"와 "추출 실패"를 구분한다(CLAUDE.md §3 조용한 스킵 금지) —
+      후자만 실패로 세고 호출부가 `stats.layout_failed_pages` 에 남긴다.
+    """
+    try:
+        raw = page.get_text("dict")
+    except Exception:  # noqa: BLE001
+        return [], True
+    out: list[dict] = []
+    for block in raw.get("blocks", []):
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            text = "".join(s.get("text", "") for s in spans)
+            if not text.strip():
+                continue
+            size = max((s.get("size", 0.0) for s in spans), default=0.0)
+            bold = any(
+                (int(s.get("flags", 0)) & 16) or _BOLD_NAME.search(s.get("font", ""))
+                for s in spans
+            )
+            bbox = line.get("bbox") or [0.0, 0.0, 0.0, 0.0]
+            out.append({
+                "text": text,
+                "size": round(size, 1),
+                "bold": bool(bold),
+                #: [x0, y0, x1, y1] — 좌상단 원점, pt 단위. 소수 1자리로 반올림
+                #: (원본 정밀도는 하류 용도에 불필요, 용량만 늘린다).
+                "bbox": [round(v, 1) for v in bbox],
+            })
+    return out, False
+
+
 def _coord_tables(page):
     """좌표 기반 표 복원. **여기서만** import 한다 — 실패해도 나머지가 살게.
 
@@ -172,6 +240,9 @@ def extract(pdf: Path, meta: dict) -> dict:
     total_coord = 0
     #: 좌표 복원이 실패한 페이지 → 사유. **세어서 남긴다.**
     coord_failed: dict[int, str] = {}
+    #: 레이아웃(줄 단위 글자크기·굵기·좌표) 추출이 실패한 페이지 번호.
+    layout_failed: list[int] = []
+    total_layout_lines = 0
     n_ctl_all = n_pua_all = 0
     #: 되살리지 못한 보조 PUA — **지우지 않고 세어 남긴다.** 뭘 잃었는지 알아야 한다.
     unmapped: dict[str, int] = {}
@@ -182,6 +253,10 @@ def extract(pdf: Path, meta: dict) -> dict:
             unmapped[key] = unmapped.get(key, 0) + 1
         n_ctl_all += n_ctl
         n_pua_all += n_pua
+        layout, layout_err = _line_layout(page)
+        if layout_err:
+            layout_failed.append(i + 1)
+        total_layout_lines += len(layout)
         tables: list[list[list[str]]] = []
         try:
             for t in page.find_tables().tables:
@@ -200,6 +275,7 @@ def extract(pdf: Path, meta: dict) -> dict:
                 {
                     "page": i + 1,
                     "text": text,
+                    "layout": layout,
                     "tables": [],
                     "tables_coords": [],
                     "table_extraction_failed": True,
@@ -251,7 +327,7 @@ def extract(pdf: Path, meta: dict) -> dict:
             coord = []
             coord_failed[i + 1] = f"{type(exc).__name__}: {exc}"[:120]
         total_coord += len(coord)
-        pages.append({"page": i + 1, "text": text,
+        pages.append({"page": i + 1, "text": text, "layout": layout,
                       "tables": tables, "tables_coords": coord})
     n = doc.page_count
     doc.close()
@@ -280,6 +356,9 @@ def extract(pdf: Path, meta: dict) -> dict:
             #: ★좌표 복원 표와 그 실패. 합계만 보면 실패가 안 보인다.
             "tables_coords": total_coord,
             "tables_coords_failed_pages": coord_failed,
+            #: ★레이아웃(v5L) — 줄 수와 실패 쪽. 합계만 보면 실패가 안 보인다.
+            "layout_lines": total_layout_lines,
+            "layout_failed_pages": layout_failed,
             #: ★무엇을 지웠는지 남긴다. 조용한 변환은 나중에 원인을 못 찾게 한다.
             "normalized": {
                 "control_removed": n_ctl_all,

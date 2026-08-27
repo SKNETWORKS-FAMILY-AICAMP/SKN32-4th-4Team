@@ -15,11 +15,11 @@ from fastapi.testclient import TestClient
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
-from app.adapters.pg_insurance_repository import (
+from db.postgres.pg_insurance_repository import (
     PgInsuranceAdminRepository,
     PgInsuranceRepository,
 )
-from app.adapters.pg_agent_access import PgAgentAccess
+from db.postgres.pg_agent_access import PgAgentAccess
 from app.core.errors import ConflictErr, ValidationErr
 from app.core.domain.insurance import Verdict
 from app.core.domain.precheck_result import (
@@ -237,6 +237,8 @@ def test_subject부터_verified_evidence까지_한_transaction으로_추적된�
         document_sha256="1" * 64,
         source_kind="clause",
         ordinal=0,
+        #: ★내용 해시를 함께 준다 — 자리만 맞추면 그 자리가 밀렸을 때 다른 조항이 나온다.
+        content_hash="2" * 64,
         quote="covered body",
     )
     annex = repository.resolve_clause_reference(
@@ -244,6 +246,7 @@ def test_subject부터_verified_evidence까지_한_transaction으로_추적된�
         document_sha256="1" * 64,
         source_kind="annex",
         ordinal=0,
+        content_hash="6" * 64,
         quote="annex body",
     )
     assert policy.product_id == fx["product_id"]
@@ -514,7 +517,9 @@ def test_precheck_persistence는_uuid를_해소하고_원응답을_멱등재생�
                 clause_id="repo-clause",
                 qualified_no="1",
                 quote="covered body",
-                occurrence_id=f"repo-release:{'1' * 64}:clause:0",
+                #: ★occurrence_id v2 — 자리(`source_ordinal`) 뒤에 **내용 해시**가 붙는다.
+                #:   자리만으로는 그 자리가 밀렸는지 알 수 없기 때문이다(2026-08-27).
+                occurrence_id=f"v2:repo-release:{'1' * 64}:clause:0:{'2' * 64}",
                 tier=EvidenceTier.POLICY_CLAUSE,
             )
         ],
@@ -597,7 +602,9 @@ def test_public_precheck_api는_postgres에_원자저장하고_멱등재생한�
                 clause_id="repo-clause",
                 qualified_no="1",
                 quote="covered body",
-                occurrence_id=f"repo-release:{'1' * 64}:clause:0",
+                #: ★occurrence_id v2 — 자리(`source_ordinal`) 뒤에 **내용 해시**가 붙는다.
+                #:   자리만으로는 그 자리가 밀렸는지 알 수 없기 때문이다(2026-08-27).
+                occurrence_id=f"v2:repo-release:{'1' * 64}:clause:0:{'2' * 64}",
                 tier=EvidenceTier.POLICY_CLAUSE,
             )
         ],
@@ -682,7 +689,9 @@ def test_observation검수cohort가_postgres_api로_끝까지_연결된다(
                 clause_id="repo-clause",
                 qualified_no="1",
                 quote="covered body",
-                occurrence_id=f"repo-release:{'1' * 64}:clause:0",
+                #: ★occurrence_id v2 — 자리(`source_ordinal`) 뒤에 **내용 해시**가 붙는다.
+                #:   자리만으로는 그 자리가 밀렸는지 알 수 없기 때문이다(2026-08-27).
+                occurrence_id=f"v2:repo-release:{'1' * 64}:clause:0:{'2' * 64}",
                 tier=EvidenceTier.POLICY_CLAUSE,
             )
         ],
@@ -1008,5 +1017,18 @@ def test_registered_agent_precheck_outcome_and_ops_logs_are_postgres_atomic(
 def test_insurance_postgres_readiness_reports_migration_011(insurance_repository):
     result = insurance_repository["repository"].readiness()
     assert result["ready"] is True
-    assert result["migration_latest"] == "016_runtime_ownership_and_grants.sql"
+    #: ★★**마지막 마이그레이션 이름을 박지 않는다** (2026-08-26).
+    #:
+    #:   `== "016_runtime_ownership_and_grants.sql"` 로 굳어 있었다. 017·018·019 를
+    #:   더하자 이 시험이 깨졌고, 같은 값이 `readiness()` 에도 박혀 있어
+    #:   **운영이 `ready=false` 로 막혔다** — 스키마가 더 최신인데 「준비 안 됨」이다.
+    #:
+    #:   재려는 것은 「적용 기록이 있고 형식이 맞나」이지 「몇 번까지인가」가 아니다.
+    #:   번호는 앞으로도 늘어난다. 늘 때마다 시험을 고치게 만들면, 언젠가
+    #:   **시험을 고치는 대신 기능을 되돌리게** 된다.
+    import re
+
+    assert re.fullmatch(r"\d{3}_.*\.sql", result["migration_latest"] or ""), (
+        f"마이그레이션 적용 기록이 없거나 형식이 다르다: {result['migration_latest']!r}"
+    )
     assert result["missing_tables"] == []

@@ -444,16 +444,84 @@ def ensure_schema(conn) -> None:
             )
             """
         )
+        #: ★★**참조 무결성을 DB 가 지키게 한다** (2026-08-26).
+        #:
+        #:   이 저장소에는 외래키가 **0개**였다. 그래서 조각·발생이 본문 없이 들어가도
+        #:   아무도 안 막았고, 고아 발생이 45,816행 쌓였다.
+        #:   지금 안전한 것은 DB 가 막아서가 아니라 **적재 코드가 우연히 순서를 지켜서**다.
+        #:
+        #:   ★**지금 세울 수 있는 것부터 세운다.** 실측(2026-08-26 정리 후) —
+        #:     `chunk → content`      위반 **0**      → 세운다
+        #:     `occurrence → content` 위반 28,227     → 못 세운다(s5-mixed 22,436 · s6 5,791)
+        #:   못 세우는 것을 «나중에» 로 미루지 않고 **왜 못 세우는지 수를 적어 둔다.**
+        #:
+        #:   ★`ON DELETE RESTRICT` 다. `CASCADE` 로 두면 본문 한 줄을 지울 때
+        #:     그 벡터가 조용히 함께 사라진다 — 검색 결과가 줄어드는데 아무도 모른다.
+        #:     막고 사람이 보게 한다.
+        #: ★★**스키마를 함께 본다** (2026-08-26 · 코덱스 감사 A1).
+        #:   `conname` 만 보면 **다른 스키마의 같은 이름**을 보고 「이미 있다」고 판단해
+        #:   이 스키마에는 **외래키를 안 만든다.** 실제로 그랬다 — 임시 스키마에
+        #:   격리하니 PK 3개만 있고 FK 는 0개였다.
+        cur.execute(
+            """
+            SELECT 1 FROM pg_constraint
+             WHERE conname = 'policy_clause_chunk_content_fk'
+               AND connamespace = current_schema()::regnamespace
+            """
+        )
+        if not cur.fetchone():
+            cur.execute(
+                "SELECT count(*) FROM policy_clause_chunk c WHERE NOT EXISTS ("
+                "  SELECT 1 FROM policy_clause_content t"
+                "   WHERE t.content_hash = c.content_hash)"
+            )
+            violations = cur.fetchone()[0]
+            if violations:
+                #: ★조용히 건너뛰지 않는다. 못 세웠으면 **왜 못 세웠는지** 말한다.
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "policy_clause_chunk → policy_clause_content 외래키를 세우지 못했습니다: "
+                    "본문 없는 조각이 %d행 있습니다. 적재 정합을 먼저 맞추세요.", violations,
+                )
+            else:
+                cur.execute(
+                    "ALTER TABLE policy_clause_chunk "
+                    "ADD CONSTRAINT policy_clause_chunk_content_fk "
+                    "FOREIGN KEY (content_hash) "
+                    "REFERENCES policy_clause_content(content_hash) "
+                    "ON DELETE RESTRICT"
+                )
+
         #: ★★**인용 게이트에 필요한 것을 저장한다.**
         #:
         #:   전에는 이 필드들이 없어서 `pg_clause_store` 가 전 행을
         #:   "모른다 → 못 씀"으로 판정했다. 그래서 `load_clauses()` 가
         #:   **0건**을 돌려줬다(실측 2026-08-04) — 데이터는 있는데 못 쓰는 상태였다.
         #:   그건 정직한 상태이긴 하지만 **PG 경로를 쓸 수 없게** 만든다.
+        #: ★★**`ordinal` 이 여기 없었다** (2026-08-26 · 코덱스 감사 A1 이 드러냄).
+        #:
+        #:   운영 DB 에는 있다 — `backfill_occurrence_ordinal` 이 만들어 놨기 때문이다.
+        #:   그런데 `ensure_schema()` 는 안 만들었다. 즉 **새 환경을 세우면 없다.**
+        #:   `assign_ordinals` 가 `o.ordinal` 을 쓰므로 그 자리에서
+        #:   `UndefinedColumn: column o.ordinal does not exist` 로 죽는다.
+        #:
+        #:   ★시험을 **임시 스키마에 격리하자마자** 드러났다. 그전에는 시험이
+        #:     운영 테이블을 보고 있어서 이미 있는 열을 썼고, 그래서 안 보였다 —
+        #:     **격리를 안 한 것이 결함을 가리고 있었다.**
+        #:
+        #:   ★`occurrence_id` 가 이 값으로 만들어진다. 없으면 인용 검증이
+        #:     「정확히 한 행」을 특정 못 해 **전건 기권**한다.
         for col, typ in (("citation_eligible", "boolean"),
                          ("chunk_type", "text"),
                          ("is_statute", "boolean"),
-                         ("parse_status", "text")):
+                         ("parse_status", "text"),
+                         ("ordinal", "integer"),
+                         #: ★★산출물이 매긴 **원래** 순번. `occurrence_id` 는 이걸 쓴다.
+                         #:   위 `ordinal` 은 색인에 든 행만 다시 매긴 **검색용** 번호라
+                         #:   게이트 판정이 바뀌면 따라 바뀐다 — 영구 식별자로 쓸 수 없다
+                         #:   (2026-08-27, 마이그레이션 020 참조).
+                         ("source_ordinal", "integer")):
             cur.execute(
                 f"ALTER TABLE policy_clause_occurrence "
                 f"ADD COLUMN IF NOT EXISTS {col} {typ}"
@@ -502,7 +570,13 @@ def ensure_schema(conn) -> None:
             BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.key_column_usage
-                    WHERE table_name = 'policy_clause_chunk'
+                    --: ★★**스키마를 함께 본다** (2026-08-26 · 코덱스 감사 A1).
+                    --:   `table_name` 만 보면 **다른 스키마의 같은 이름**까지 센다.
+                    --:   임시 스키마를 만든 시험이 이 함수를 부르면 운영 쪽 제약을 보고
+                    --:   「이미 있다」로 판단하거나, 반대로 **운영 테이블에 DDL 을 건다.**
+                    --:   ★`policy_clause_*` 는 지금 19만행대다 — PK DROP/ADD 는 그만한 잠금이다.
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'policy_clause_chunk'
                       AND constraint_name = 'policy_clause_chunk_pkey'
                       AND column_name = 'embed_model'
                 ) THEN
@@ -526,7 +600,13 @@ def ensure_schema(conn) -> None:
             BEGIN
                 IF NOT EXISTS (
                     SELECT 1 FROM information_schema.key_column_usage
-                    WHERE table_name = 'policy_clause_occurrence'
+                    --: ★★**스키마를 함께 본다** (2026-08-26 · 코덱스 감사 A1).
+                    --:   `table_name` 만 보면 **다른 스키마의 같은 이름**까지 센다.
+                    --:   임시 스키마를 만든 시험이 이 함수를 부르면 운영 쪽 제약을 보고
+                    --:   「이미 있다」로 판단하거나, 반대로 **운영 테이블에 DDL 을 건다.**
+                    --:   ★`policy_clause_*` 는 지금 19만행대다 — PK DROP/ADD 는 그만한 잠금이다.
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'policy_clause_occurrence'
                       AND constraint_name = 'policy_clause_occurrence_pkey'
                       AND column_name = 'index_generation'
                 ) THEN
@@ -578,15 +658,61 @@ def existing_hashes(conn, *, model: str | None = None) -> set[str]:
         return {r[0] for r in cur.fetchall()}
 
 
-def drop_incomplete(conn) -> int:
+def drop_incomplete(conn, *, scope: str = "") -> dict:
     """미완성으로 남은 조각을 지운다. **다시 넣기 위해서다.**
 
     ★남겨 두면 검색에 반쪽짜리 본문이 근거로 올라온다.
 
     ★**저장소 전체를 훑는 정리 작업이다.** 적재 스크립트 시작 지점에서만 부른다.
-      테스트에서 부르면 남의 적재 결과까지 날린다 —
-      실제로 테스트가 조각 43,064개를 지웠다(2026-08-02).
+
+    ★★**그래서 `scope="all"` 을 명시해야 돈다**(2026-08-26 · 코덱스 감사 P0).
+
+        주석으로는 안 막혔다. **두 번 터졌다** —
+          · 2026-08-02: 시험이 조각 **43,064개**를 지웠다.
+          · 2026-08-26: 새 시험이 본문 **1,506행**을 지웠다.
+            같은 파일 20줄 위에 경고가 있었는데 읽고도 그랬다.
+
+        코덱스 감사의 표현이 정확하다 —
+        「**운영 작업의 의도는 전역이지만 재사용 API 에는 범위가 빠졌다.**
+          `conn` 하나로 실행되는 이상 테스트·REPL·새 스크립트가 운영 build 와
+          같은 권한을 갖는다.」
+
+        전역 정리 자체는 **필요하다**(반쪽 벡터를 다시 넣으려면 지워야 한다).
+        없애는 대신 **의도를 말하게** 한다. 실수로는 못 부르고, 일부러는 부를 수 있다.
+
+    ★★**고아를 만들지 않는다** (2026-08-25 실측으로 규명).
+
+        여기 마지막 문장이 「벡터 없는 본문」을 지우면서 **`occurrence` 는 안 지웠다.**
+        그래서 발생만 남고 본문이 사라진 행이 **38,326개** 쌓여 있었다
+        (고유 해시 15,469 · 문서 1,104 · 전부 게이트 NULL · 벡터 0건).
+
+        재임베딩으로 모델 이름이 바뀌면 옛 해시의 조각이 «현재 모델»에 없다.
+        그러면 본문이 「반쪽」으로 보여 지워지는데, 그 본문을 가리키던
+        옛 세대 발생은 그대로 남는다. 그게 고아의 정체였다.
+
+        **본문을 지우기 전에 그 해시를 가리키는 발생이 있는지 본다.**
+        · 가리키는 발생이 **없으면** 지운다 — 아무도 안 쓰는 반쪽이다.
+        · 가리키는 발생이 **있으면 남긴다.** 지우면 그 발생이 고아가 된다.
+          대신 **몇 건을 남겼는지 세어 돌려준다** — 조용히 넘기지 않는다(CLAUDE.md §3).
+
+    돌려주는 것 (앞서는 `int` 하나였다 — 무엇이 일어났는지 알 수 없었다)
+        ``chunks_deleted``   지운 조각 해시 수
+        ``content_deleted``  지운 본문 행 수(가리키는 발생이 없던 것)
+        ``content_kept``     ★본문이 반쪽이지만 **발생이 가리켜서 남긴** 행 수
+        ``orphans_before``   실행 전부터 있던 고아 발생 행 수(이 함수가 만든 것이 아니다)
+        ``orphaned_by_drop`` ★**이 실행의 조각 삭제가 «새로» 만든 고아 발생 행 수.**
+                             0 이 아니면 그만큼 다시 임베딩해야 한다 — 조용히 넘기지 않는다.
     """
+    if scope != "all":
+        #: ★기본값을 「안 함」으로 두지 않고 **거절**한다. 조용히 아무것도 안 하면
+        #:   호출자는 정리가 된 줄 안다 — 그게 더 나쁘다.
+        raise ValueError(
+            "drop_incomplete 는 저장소 전체를 훑어 지웁니다. "
+            'scope="all" 을 명시하세요. '
+            "시험에서 부른다면 임시 스키마로 격리하고(CREATE SCHEMA + SET search_path + "
+            "빈 테이블 확인) 나서 부르세요 — 안 그러면 운영 데이터가 지워집니다."
+        )
+
     done = existing_hashes(conn)
     with conn.cursor() as cur:
         #: ★**현재 모델 안에서만** 반쪽을 찾는다. 모델 전체를 섞어 보면
@@ -595,18 +721,70 @@ def drop_incomplete(conn) -> int:
                     "WHERE embed_model = %s", (current_embed_model(),))
         have = {r[0] for r in cur.fetchall()}
         bad = sorted(have - done)
+
+        #: ★★**이 삭제가 고아를 만든다** (2026-08-26 · DB10).
+        #:
+        #:   반쪽 조각을 지우는 것은 맞다 — 남겨 두면 검색에 잘린 본문이 올라온다.
+        #:   그런데 그 해시를 **발생행이 가리키고 있으면** 지우는 순간 고아가 된다.
+        #:   본문 삭제 쪽은 2026-08-25 에 막았는데(아래) **조각 삭제는 그대로였다.**
+        #:
+        #:   ★외래키(`chunk → content`)는 이걸 **안 막는다.** 그 제약은 「본문 없는
+        #:     조각을 못 넣게」 하는 것이지 「조각을 지우지 못하게」 하는 것이 아니다.
+        #:     `occurrence → content` 도 마찬가지다 — 발생이 가리키는 것은 **본문**이다.
+        #:
+        #:   ★그렇다고 안 지울 수는 없다. 반쪽을 남기면 그게 근거로 나간다.
+        #:     **지우되, 몇 건이 고아가 되는지 세어 보고한다.** 조용히 만들지 않는다.
+        orphaned_by_drop = 0
         if bad:
+            cur.execute(
+                "SELECT count(*) FROM policy_clause_occurrence o"
+                " WHERE o.content_hash = ANY(%s)"
+                #: 다른 모델 조각이 남아 있으면 고아가 안 된다.
+                "   AND NOT EXISTS (SELECT 1 FROM policy_clause_chunk c"
+                "                    WHERE c.content_hash = o.content_hash"
+                "                      AND c.embed_model <> %s)",
+                (bad, current_embed_model()),
+            )
+            orphaned_by_drop = cur.fetchone()[0]
             cur.execute("DELETE FROM policy_clause_chunk "
                         "WHERE content_hash = ANY(%s) AND embed_model = %s",
                         (bad, current_embed_model()))
         n = len(bad)
-        #: 본문만 있고 조각이 없는 것도 지운다(반대 방향의 반쪽).
+
+        #: 들어오기 전부터 있던 고아. 이 함수가 만든 것과 구분해 보고한다.
         cur.execute(
-            "DELETE FROM policy_clause_content ct WHERE NOT EXISTS ("
-            "  SELECT 1 FROM policy_clause_chunk ck WHERE ck.content_hash = ct.content_hash)"
+            "SELECT count(*) FROM policy_clause_occurrence o WHERE NOT EXISTS ("
+            "  SELECT 1 FROM policy_clause_content t WHERE t.content_hash = o.content_hash)"
         )
+        orphans_before = cur.fetchone()[0]
+
+        #: 본문만 있고 조각이 없는 것 — **가리키는 발생이 없을 때만** 지운다.
+        cur.execute(
+            "DELETE FROM policy_clause_content ct"
+            " WHERE NOT EXISTS ("
+            "   SELECT 1 FROM policy_clause_chunk ck WHERE ck.content_hash = ct.content_hash)"
+            " AND NOT EXISTS ("
+            "   SELECT 1 FROM policy_clause_occurrence o WHERE o.content_hash = ct.content_hash)"
+        )
+        content_deleted = cur.rowcount
+
+        #: 반쪽이지만 발생이 가리켜서 남긴 것 — 지웠다면 고아가 됐을 행들이다.
+        cur.execute(
+            "SELECT count(*) FROM policy_clause_content ct"
+            " WHERE NOT EXISTS ("
+            "   SELECT 1 FROM policy_clause_chunk ck WHERE ck.content_hash = ct.content_hash)"
+            " AND EXISTS ("
+            "   SELECT 1 FROM policy_clause_occurrence o WHERE o.content_hash = ct.content_hash)"
+        )
+        content_kept = cur.fetchone()[0]
     conn.commit()
-    return n
+    return {
+        "chunks_deleted": n,
+        "content_deleted": content_deleted,
+        "content_kept": content_kept,
+        "orphans_before": orphans_before,
+        "orphaned_by_drop": orphaned_by_drop,
+    }
 
 
 def upsert_content(conn, rows) -> int:
@@ -658,11 +836,132 @@ def upsert_chunks(conn, rows, *, model: str | None = None) -> int:
     return n
 
 
+def assign_ordinals(conn, *, generation: str, sha256s: list[str] | None = None,
+                    dry_run: bool = False, scope: str = "") -> int:
+    """발생행에 **수록 순번**을 매긴다. 문서·종류별 결정적 순위. **멱등**하다.
+
+    ★**왜 여기 있나** — `occurrence_id`(= `릴리스:sha256:source_kind:순번`)가 이 값으로
+      만들어진다. 비어 있으면 인용 검증이 "정확히 한 행"을 특정하지 못해 **기권**하고,
+      겹치면 그 키를 「못 쓰는 것」으로 표시해 근거에서 **버린다.**
+      즉 이 표에 행을 넣는 쪽이 **유일성을 책임져야 한다** — 호출자에게 맡기면 깨진다.
+
+    ★★**호출자가 준 번호를 쓰지 않는다(2026-08-25).**
+
+        조항 JSON 의 `ordinal` 을 그대로 넣어 봤다가 깨졌다. 발생행은 JSON 등장과
+        **1:1 이 아니다** — `ON CONFLICT` 키로 **합쳐지기** 때문이다. 합쳐진 행에
+        어느 번호를 줄지 고르는 순간 **다른 행이 이미 쓰는 번호와 겹친다.**
+        실제로 한 문서에 `…:clause:1` 이 둘이었다
+        (`tests/test_clause_store_parity.py::test_수록_식별자는_문서_안에서_유일하다`).
+
+        그래서 **표에 실제로 남은 행을 기준으로** 순위를 매긴다.
+        정렬 키 `(page_from, qualified_no, content_hash)` 는 `(sha256, generation)` 안에서
+        유일하다 — `ON CONFLICT` 키와 같은 조합이기 때문이다. 그래서 실행마다 같은 값이다.
+
+    ★`source_kind` 로 나눠 매긴다. `occurrence_id` 에 종류가 들어가므로
+      조항·부록·승인fact 가 서로 번호를 다투지 않는다.
+
+    ★문서 단위로 돌린다 — 21만 행을 한 문장으로 갱신하면 `statement_timeout` 에 걸리고
+      (실측 2026-08-25), 공유 DB 에서 긴 잠금을 잡게 된다.
+
+    Args:
+        sha256s: 대상 문서. `None` 이면 **그 세대 전체**.
+
+    Returns:
+        값이 실제로 바뀐 행 수.
+    """
+    with conn.cursor() as cur:
+        if sha256s is None:
+            cur.execute(
+                "SELECT DISTINCT sha256 FROM policy_clause_occurrence "
+                "WHERE index_generation = %s",
+                (generation,),
+            )
+            targets = [r[0] for r in cur.fetchall()]
+        else:
+            targets = sorted(set(sha256s))
+
+    #: ★★**세기만 하는 길을 둔다**(`dry_run`, 2026-08-26).
+    #:
+    #:   이 함수는 문서마다 `conn.commit()` 한다. 그래서 「값이 그대로인지 보자」는
+    #:   목적으로 부르면 **보는 순간 바꿔 버린다.** 실제로 시험
+    #:   `test_다시_매겨도_값이_그대로다` 가 운영 DB 의 순번 146,601행을 다시 매겼다
+    #:   (2026-08-26). 확인하려던 것이 확인 대상을 바꾼 것이다.
+    #:
+    #:   ★순번이 바뀌면 `occurrence_id` 가 바뀌고, 그건 **어제 발급한 판정의 근거를
+    #:     오늘 못 찾는다**는 뜻이다. 보는 일과 바꾸는 일을 갈라 놓는다.
+    #: ★★**`sha256s=None` 은 「그 세대 전체」다** — 쓰기 기본값으로는 너무 넓다
+    #:   (2026-08-26 · 코덱스 감사 P1).
+    #:
+    #:   순번이 바뀌면 `occurrence_id` 가 바뀌고, 그건 **어제 발급한 판정의 근거를
+    #:   오늘 못 찾는다**는 뜻이다. 실제로 시험 하나가 운영 순번 **146,601행**을
+    #:   다시 매겼다(그 시험은 `dry_run=True` 로 고쳤다).
+    #:
+    #:   ★정상 적재는 안전하다 — `upsert_occurrences` 가 **건드린 문서 목록**을 넘긴다.
+    #:     위험은 소급 CLI 와 새 직접 호출에 있다. 그쪽만 막는다.
+    #:   ★`dry_run` 은 안 막는다. 세는 것은 아무것도 안 바꾼다.
+    if sha256s is None and not dry_run and scope != "all_in_generation":
+        raise ValueError(
+            f"sha256s 없이 부르면 세대 '{generation}' 의 **모든 문서** 순번을 다시 매깁니다. "
+            "그러면 occurrence_id 가 바뀌어 이미 발급된 인용이 다른 조항을 가리킵니다. "
+            'scope="all_in_generation" 을 명시하거나, 문서 목록을 넘기거나, '
+            "dry_run=True 로 세기만 하세요."
+        )
+
+    changed = 0
+    if dry_run:
+        for sha in targets:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT count(*)
+                      FROM policy_clause_occurrence o
+                      JOIN (SELECT ctid,
+                                   row_number() OVER (
+                                       PARTITION BY source_kind
+                                       ORDER BY page_from, qualified_no, content_hash) - 1 AS rn
+                              FROM policy_clause_occurrence
+                             WHERE index_generation = %s AND sha256 = %s) r
+                        ON r.ctid = o.ctid
+                     WHERE o.ordinal IS DISTINCT FROM r.rn
+                    """,
+                    (generation, sha),
+                )
+                changed += cur.fetchone()[0]
+        return changed
+
+    for sha in targets:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE policy_clause_occurrence o
+                   SET ordinal = r.rn - 1
+                  FROM (SELECT ctid,
+                               row_number() OVER (
+                                   PARTITION BY source_kind
+                                   ORDER BY page_from, qualified_no, content_hash) AS rn
+                          FROM policy_clause_occurrence
+                         WHERE index_generation = %s AND sha256 = %s) r
+                 WHERE o.ctid = r.ctid
+                   --: 이미 맞으면 건드리지 않는다(멱등·불필요한 WAL 방지)
+                   AND o.ordinal IS DISTINCT FROM r.rn - 1
+                """,
+                (generation, sha),
+            )
+            changed += cur.rowcount
+        conn.commit()
+    return changed
+
+
 def upsert_occurrences(conn, rows, *, generation: str | None = None) -> int:
     """조항이 **어느 문서 어디에** 실렸는지. 같은 자리는 한 번만.
 
     ★`rows` 는 `(hash, sha, insurer, qualified_no, section, title, page_from, page_to)`
       또는 뒤에 `source_kind` 를 하나 더 붙인 9튜플.
+
+    ★★**넣은 뒤 수록 순번을 매긴다(2026-08-25).** 순번이 없으면 `occurrence_id` 가 비고,
+      그러면 **인용 검증이 전건 기권**한다 — `CLAUSE_STORE=pg` 판정이 통째로 죽는다.
+      호출자가 잊을 수 있는 일이 아니므로 **여기서 책임진다**(`assign_ordinals` 주석 참조).
+      건드린 문서만 다시 매기므로 비용은 그 문서 몫뿐이고, 멱등하다.
     """
     #: ★import 시점 기본값을 두지 않는다(코덱스). 부를 때 정한다.
     generation = generation or current_generation()
@@ -673,24 +972,62 @@ def upsert_occurrences(conn, rows, *, generation: str | None = None) -> int:
             #: ★인용 게이트 값. **없으면 `None`(=모른다)** 로 둔다 —
             #:   `True` 로 때우면 못 쓸 조항이 근거로 나간다.
             gate = r[9] if len(r) > 9 else {}
+            #: ★★산출물이 매긴 **원래** 순번(11번째). `occurrence_id` 가 이걸 쓴다.
+            #:   안 주면 `None` — 「모른다」다. 0 으로 때우면 **다른 조항을 가리킨다.**
+            #:   못 채운 행은 `occurrence_id` 가 빈 문자열이 되어 호출부가 기권한다.
+            source_ordinal = r[10] if len(r) > 10 else None
             cur.execute(
                 "INSERT INTO policy_clause_occurrence "
                 "(content_hash, sha256, insurer, qualified_no, section, title, "
                 " page_from, page_to, index_generation, source_kind, "
-                " citation_eligible, chunk_type, is_statute, parse_status) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                " citation_eligible, chunk_type, is_statute, parse_status, source_ordinal) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
                 "ON CONFLICT (content_hash, sha256, qualified_no, page_from, index_generation) "
+                #: ★★**아는 값을 모르는 값으로 덮지 않는다**(2026-08-25 실측으로 규명).
+                #:
+                #:   앞서는 `citation_eligible = EXCLUDED.citation_eligible` 였다.
+                #:   게이트를 안 주는 호출자(짧은 튜플 → `gate = {}`)가 같은 자리를
+                #:   다시 쓰면 **이미 채워져 있던 값이 NULL 로 덮였다.**
+                #:   NULL 은 「모른다」이므로 그 조항은 **인용 불가로 떨어진다** — 조용히.
+                #:
+                #:   실물 증거: `s6` 210,733행 중 청크가 있으면서 게이트 4필드가
+                #:   전부 NULL 인 발생이 **정확히 한 행** 있었다
+                #:   (`0cf7c85fc900` / 특별약관 제3조 · 보험금 지급에 관한 세부규정).
+                #:   그때는 1건이었지만 **막혀 있지 않았다.**
+                #:
+                #:   `COALESCE(EXCLUDED.x, 기존값)` — 새 값이 있으면 쓰고, 없으면 **둔다.**
+                #:   ★거꾸로가 아니다. 새로 «아는» 값이 오면 그건 반영해야 한다.
+                #:     `False` 는 NULL 이 아니므로 **정상 반영된다** — 인용 가능이던 조항이
+                #:     불가로 바뀌면 그대로 내려간다. 막히는 것은 NULL(=모른다) 뿐이다.
+                #:
+                #: ★★대가를 적어 둔다 — 이제 **「알던 것을 다시 모르게 되는」 전이는 못 쓴다.**
+                #:   재추출이 판단을 못 하게 돼 NULL 로 되돌려야 하는 경우, 이 경로로는
+                #:   안 된다. 그 상황이 실제로 생기면 **명시적으로 NULL 을 쓰는 경로**를
+                #:   따로 만들어야지, 여기를 되돌리면 안 된다 — 되돌리면 게이트를 안 주는
+                #:   호출이 다시 남의 값을 지운다.
                 "DO UPDATE SET "
-                "  citation_eligible = EXCLUDED.citation_eligible,"
-                "  chunk_type        = EXCLUDED.chunk_type,"
-                "  is_statute        = EXCLUDED.is_statute,"
-                "  parse_status      = EXCLUDED.parse_status",
+                "  citation_eligible = COALESCE(EXCLUDED.citation_eligible,"
+                "                               policy_clause_occurrence.citation_eligible),"
+                "  chunk_type        = COALESCE(EXCLUDED.chunk_type,"
+                "                               policy_clause_occurrence.chunk_type),"
+                "  is_statute        = COALESCE(EXCLUDED.is_statute,"
+                "                               policy_clause_occurrence.is_statute),"
+                "  parse_status      = COALESCE(EXCLUDED.parse_status,"
+                "                               policy_clause_occurrence.parse_status),"
+                #: ★같은 이유로 COALESCE — 원래 순번을 안 주는 호출자가
+                #:   이미 채워진 값을 NULL 로 덮으면 그 행은 **인용 불가**가 된다.
+                "  source_ordinal    = COALESCE(EXCLUDED.source_ordinal,"
+                "                               policy_clause_occurrence.source_ordinal)",
                 (*r[:8], generation, kind,
                  gate.get("citation_eligible"), gate.get("chunk_type"),
-                 gate.get("is_statute"), gate.get("parse_status")),
+                 gate.get("is_statute"), gate.get("parse_status"), source_ordinal),
             )
             n += cur.rowcount
     conn.commit()
+    #: ★넣은 문서만 다시 매긴다. 세대 전체를 훑으면 남의 문서까지 잠근다.
+    touched = {r[1] for r in rows if len(r) > 1 and r[1]}
+    if touched:
+        assign_ordinals(conn, generation=generation, sha256s=sorted(touched))
     return n
 
 
@@ -836,8 +1173,283 @@ def stats(conn) -> dict:
     }
 
 
+def demote_occurrences(conn, rows, *, generation: str) -> dict:
+    """게이트에 걸린 조항의 **기존 발생행만** 갱신한다. 새로 넣지 않는다.
+
+    ★왜 필요한가 (2026-08-26 · 코덱스 교차검증에서 잡혔다)
+
+        적재기는 게이트에 걸린 조항을 `continue` 로 건너뛰어 **발생을 아예 안 보냈다.**
+        그래서 어떤 조항이 인용 가능(`True`)이었다가 **불가로 바뀌면 DB 가 그 사실을
+        못 듣는다** — 옛 `True` 와 옛 청크가 그대로 남는다.
+
+        그리고 판정 경로(`pg_clause_store.load_clauses`)는 DB 의 그 `True` 를
+        **현재 값으로 읽는다.** 즉 **인용 불가가 된 조항이 근거로 나갈 수 있었다.**
+        이 프로젝트에서 가장 나쁜 방향의 결함이다(CLAUDE.md §0).
+
+        ★코덱스 실측: 현행 스냅샷에 그런 행은 **0 / 189,305** 다.
+          이미 오염된 것이 아니라 **막혀 있지 않았던** 것이다.
+
+    ★★**INSERT 하지 않는다.** 넣으면 청크 없는 발생행이 늘고, 그게 곧 고아다.
+      고치려는 것은 「없는 사실을 추가」가 아니라 **「낡은 사실을 갱신」**이다.
+      DB 에 없던 조항은 `matched` 에 안 잡히고, 그건 정상이다.
+
+    Args:
+        rows: ``(content_hash, sha256, gate_dict)`` 목록.
+
+    돌려주는 것
+        ``matched``   실제로 갱신한 행 수
+        ``was_true``  ★그중 `citation_eligible` 이 **True 였던** 행 수.
+                      0 이 아니면 그전까지 **잘못된 근거가 나갈 수 있었다**는 뜻이다.
+    """
+    out = {"matched": 0, "was_true": 0}
+    with conn.cursor() as cur:
+        for h, sha, gate in rows:
+            #: 바꾸기 **전에** 센다 — 바꾼 뒤에는 알 수 없다.
+            cur.execute(
+                "SELECT count(*) FROM policy_clause_occurrence "
+                " WHERE content_hash=%s AND sha256=%s AND index_generation=%s "
+                "   AND citation_eligible IS TRUE",
+                (h, sha, generation),
+            )
+            out["was_true"] += cur.fetchone()[0]
+            cur.execute(
+                "UPDATE policy_clause_occurrence SET "
+                #: ★여기서는 `COALESCE` 를 쓰지 않는다. **덮어쓰는 것이 목적**이다 —
+                #:   「이 조항은 이제 인용 불가다」를 확실히 기록한다.
+                "  citation_eligible = %s,"
+                #: 나머지 셋은 모르면 기존 값을 둔다(지어내지 않는다).
+                "  chunk_type   = COALESCE(%s, chunk_type),"
+                "  is_statute   = COALESCE(%s, is_statute),"
+                "  parse_status = COALESCE(%s, parse_status)"
+                " WHERE content_hash=%s AND sha256=%s AND index_generation=%s",
+                (gate.get("citation_eligible"), gate.get("chunk_type"),
+                 gate.get("is_statute"), gate.get("parse_status"),
+                 h, sha, generation),
+            )
+            out["matched"] += cur.rowcount
+    conn.commit()
+    return out
+
+
+def reconcile_occurrences(conn, *, generation: str, artifact_hashes,
+                          source_kinds=("clause", "annex"), apply: bool = False,
+                          backup_table: str | None = None,
+                          protect_usable: bool = True, reason: str = "",
+                          prune_missing_artifact: bool = False) -> dict:
+    """발생행을 **현행 산출물과 맞춘다.** 산출물에서 사라진 행을 골라낸다.
+
+    ★왜 필요한가 (2026-08-25 실측)
+
+        적재는 `upsert` 만 한다 — 산출물에서 **없어진** 조항의 발생행을 안 지운다.
+        추출기가 바뀌어 조항 경계가 달라지면 해시가 바뀌는데, 청크는 현행 산출물로
+        다시 만들어지므로 **옛 해시의 발생은 가리킬 청크가 없다.** 그게 고아다.
+        무작위 15문서 표본에서 고아 270행 중 **176행(65.2%)** 이 이 무리였다.
+
+    ★★**증거 없이 지우지 않는다.**
+
+        `artifact_hashes` 에 그 문서(`sha256`)의 항목이 **없으면 건너뛴다.**
+        「산출물을 못 읽었다」와 「산출물에 그 조항이 없다」는 전혀 다른 말인데,
+        뭉개면 **읽기에 실패했다는 이유로 멀쩡한 행을 지운다.**
+        건너뛴 문서 수를 세어 돌려준다 — 조용히 넘기지 않는다(CLAUDE.md §3).
+
+    ★★**산출물이 낳지 않은 행은 심판하지 않는다** (2026-08-25, 지우기 직전에 잡았다).
+
+        처음 판에는 `source_kind` 를 안 봤다. 그랬더니 삭제 후보 14,378행 중
+        **850행이 `citation_eligible=True` 이고 청크도 있었다** — 살아 있는 인용 가능 행이다.
+        정체는 S7.1 승인 OCR fact(`source_kind='approved_ocr_table_fact'`)로,
+        `load_s7_1_approved_facts.py` 가 **다른 출처에서** 넣은 것이다.
+        구조화 산출물에 없는 게 당연한데, 「산출물에 없으니 낡았다」로 읽어 지울 뻔했다.
+
+        그래서 대조 대상을 `source_kinds` 로 **명시해서 받는다**(기본 `clause`·`annex`).
+        내가 모르는 출처가 또 생겨도 그건 심판 대상이 아니다.
+
+    ★★안전장치를 하나 더 건다 — **청크가 있거나 인용 가능한 행은 안 지운다.**
+        위 `source_kinds` 만으로도 막히지만, 출처 라벨이 틀렸을 때를 대비한다.
+        지우려는 것은 「아무도 못 쓰는 낡은 행」이지 「쓰이는 행」이 아니다.
+        걸린 수를 `protected` 로 돌려준다 — 0이 아니면 **뭔가 잘못된 것이다.**
+
+    ★★★그런데 그 안전장치는 **전량 재생성 뒤에는 전제가 깨진다** (2026-08-27 실측).
+
+        이 장치는 「낡은 행 ⇒ 청크가 없다」를 전제한다. 조항 경계가 바뀌면 해시가
+        바뀌고 새 해시로만 청크를 만드니, 옛 해시는 가리킬 청크가 없다 —
+        **한 문서만 놓고 보면 맞다.**
+
+        그런데 내용은 **해시로 공유된다.** 실측(s6): 조항 등장의 65%가 중복이고
+        한 조항이 최대 170개 문서에 실린다. 그래서 A 문서에서 사라진 해시가
+        B 문서에는 그대로 남아 **청크도 남는다.** 인용 가능도 마찬가지다.
+
+        실제로 s6 전량 재생성 뒤 낡은 행 **64,171개 중 64,171개 전부**가 이 장치에
+        걸려 하나도 못 지웠다. 그 상태로 순번을 다시 매기면 낡은 행이 **섞인 채**
+        번호를 받아 산출물과 자리가 어긋난다 — 실측 일치율 **14.70%**.
+        즉 이 장치가 켜져 있으면 **재색인이 끝나지 않는다.**
+
+        그래서 끄는 갈래를 **명시적으로** 만든다(`protect_usable=False`).
+        ★그냥은 못 끈다 — `reason` 을 적어야 하고, 결과에 그대로 담아 돌려준다.
+        ★★끄더라도 `source_kinds` 밖(예: `approved_ocr_table_fact`)은 여전히
+          심판하지 않는다. 그 보호는 **끄는 대상이 아니다** — 850행을 지울 뻔했던
+          그 사고를 막는 것은 이쪽이지 이 장치가 아니었다.
+
+    ★★**되돌릴 수 있게 지운다.** `apply=True` 면 지우기 **전에** 지울 행을
+        `backup_table` 에 그대로 복사한다(같은 트랜잭션). 잘못됐으면
+
+            INSERT INTO policy_clause_occurrence SELECT * FROM <backup_table>;
+
+        한 줄로 돌아온다. 백업이 실패하면 **삭제도 안 한다** —
+        되돌릴 수 없는 삭제를 하지 않는다.
+
+    ★기본은 **조회만**(`apply=False`). 지우는 것은 명시적으로 켜야 한다.
+
+    Args:
+        artifact_hashes: ``{sha256: set[content_hash]}``. 그 문서의 현행 산출물이
+            담고 있는 내용 해시 전부(조항 + 부록).
+        apply: True 면 실제로 지운다. False 면 세기만 한다.
+
+    돌려주는 것
+        ``documents_checked``  대조한 문서 수
+        ``documents_skipped``  산출물이 없어 **건너뛴** 문서 수
+        ``stale_rows``         산출물에 없는 발생행 수
+        ``protected``          쓰이는 행이라 삭제에서 **뺀** 수(0 이 아니면 원인을 봐야 한다)
+        ``backup_table``       지운 행을 복사해 둔 테이블 이름
+        ``backed_up``          백업에 복사한 행 수(``deleted`` 와 같아야 한다)
+        ``deleted``            실제로 지운 행 수(``apply=False`` 면 0)
+        ``orphans_before``     실행 전 고아 발생 행 수
+        ``orphans_after``      실행 후 고아 발생 행 수(``apply=False`` 면 before 와 같다)
+    """
+    def _orphans() -> int:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM policy_clause_occurrence o WHERE NOT EXISTS ("
+                "  SELECT 1 FROM policy_clause_chunk c WHERE c.content_hash = o.content_hash)"
+            )
+            return cur.fetchone()[0]
+
+    kinds = sorted(source_kinds)
+    if not protect_usable and not str(reason).strip():
+        #: ★이유 없이 안전장치를 끄지 않는다. 나중에 「왜 껐나」를 답할 수 있어야 한다.
+        raise ValueError(
+            "protect_usable=False 로 부르려면 reason 을 적어야 합니다. "
+            "이 장치는 「낡은 행 ⇒ 청크 없음」을 전제하는데, 내용이 문서 사이에 "
+            "공유되면(실측 중복 65%) 그 전제가 깨집니다 — 그 사실을 적어 두세요."
+        )
+    if prune_missing_artifact and not str(reason).strip():
+        #: ★이쪽은 더 위험하다 — 문서를 **통째로** 지운다. 이유 없이는 안 된다.
+        raise ValueError(
+            "prune_missing_artifact=True 로 부르려면 reason 을 적어야 합니다. "
+            "「산출물이 없다」는 「제외됐다」와 「읽기에 실패했다」 둘 다일 수 있습니다. "
+            "전처리 대상 목록과 대조해 제외를 확인했다는 근거를 적으세요."
+        )
+    out = {"documents_checked": 0, "documents_skipped": 0, "stale_rows": 0,
+           "protected": 0, "deleted": 0, "source_kinds": kinds,
+           "protect_usable": bool(protect_usable), "reason": str(reason),
+           "prune_missing_artifact": bool(prune_missing_artifact),
+           "missing_artifact_rows": 0, "missing_artifact_deleted": 0,
+           "backup_table": None, "backed_up": 0,
+           "orphans_before": _orphans(), "orphans_after": 0}
+
+    if apply:
+        #: ★이름을 호출자가 준다 — 시각을 여기서 만들면 재실행 때 테이블이 흩어진다.
+        if not backup_table:
+            raise ValueError(
+                "지우려면 backup_table 을 줘야 합니다. 되돌릴 수 없는 삭제는 하지 않습니다."
+            )
+        if not backup_table.replace("_", "").isalnum():
+            #: ★이름을 SQL 에 그대로 넣으므로 형태를 좁힌다.
+            raise ValueError(f"백업 테이블 이름이 이상합니다: {backup_table!r}")
+        with conn.cursor() as cur:
+            cur.execute(
+                f"CREATE TABLE IF NOT EXISTS {backup_table} "
+                "(LIKE policy_clause_occurrence INCLUDING DEFAULTS)"
+            )
+        conn.commit()
+        out["backup_table"] = backup_table
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT DISTINCT sha256 FROM policy_clause_occurrence WHERE index_generation = %s",
+            (generation,),
+        )
+        shas = [r[0] for r in cur.fetchall()]
+
+    for sha in shas:
+        keep = artifact_hashes.get(sha)
+        if not keep:
+            #: ★산출물을 못 봤다. **모르는 것을 근거로 지우지 않는다.**
+            out["documents_skipped"] += 1
+            if prune_missing_artifact:
+                #: ★★**「없다」를 「제외됐다」로 읽는 갈래.** 기본은 꺼져 있다.
+                #:   부르는 쪽이 **전처리 대상 목록과 대조해** 정말 제외된 것인지
+                #:   확인한 뒤에만 켜야 한다 — 읽기에 실패한 경우와 구분이 안 되면
+                #:   멀쩡한 문서를 통째로 날린다.
+                #:   실측(2026-08-27): 이렇게 남은 11문서 664행(인용가능 646)은
+                #:   비의료실손 격리 5건 + 판매개시일 미상 6건이었고,
+                #:   `run_all --dry-run` 대상 1,355건 어디에도 없었다.
+                w = (" WHERE sha256 = %s AND index_generation = %s"
+                     "   AND source_kind = ANY(%s)")
+                p = (sha, generation, kinds)
+                with conn.cursor() as cur:
+                    cur.execute("SELECT count(*) FROM policy_clause_occurrence" + w, p)
+                    n = cur.fetchone()[0]
+                    out["missing_artifact_rows"] += n
+                    if n and apply:
+                        cur.execute(f"INSERT INTO {backup_table} "
+                                    "SELECT * FROM policy_clause_occurrence" + w, p)
+                        b = cur.rowcount
+                        cur.execute("DELETE FROM policy_clause_occurrence" + w, p)
+                        d = cur.rowcount
+                        if b != d:
+                            conn.rollback()
+                            raise RuntimeError(
+                                f"백업 {b}행 ≠ 삭제 {d}행 — 되돌렸습니다.")
+                        out["backed_up"] += b
+                        out["deleted"] += d
+                        out["missing_artifact_deleted"] += d
+                        conn.commit()
+            continue
+        out["documents_checked"] += 1
+        #: 대조 대상: 이 산출물이 낳은 출처만. 그 밖은 애초에 세지도 않는다.
+        where = (" WHERE sha256 = %s AND index_generation = %s AND source_kind = ANY(%s)"
+                 "   AND NOT (content_hash = ANY(%s))")
+        params = (sha, generation, kinds, sorted(keep))
+        #: ★안전장치 — 쓰이는 행(청크 있음 또는 인용가능)은 제외한다.
+        #: ★★`protect_usable=False` 면 이 절을 안 붙인다. 전량 재생성 뒤에는 전제가
+        #:   깨지기 때문이다(위 docstring 참조). `source_kinds` 보호는 **그대로 남는다** —
+        #:   위 `where` 에 이미 들어 있고 여기서 끄지 않는다.
+        safe = ("" if not protect_usable else
+                " AND NOT EXISTS (SELECT 1 FROM policy_clause_chunk c"
+                "                 WHERE c.content_hash = policy_clause_occurrence.content_hash)"
+                " AND citation_eligible IS DISTINCT FROM TRUE")
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM policy_clause_occurrence" + where, params)
+            n = cur.fetchone()[0]
+            cur.execute("SELECT count(*) FROM policy_clause_occurrence" + where + safe, params)
+            deletable = cur.fetchone()[0]
+            out["stale_rows"] += n
+            out["protected"] += n - deletable
+            if deletable and apply:
+                #: ★지우기 **전에** 그대로 복사한다. 같은 트랜잭션이라
+                #:   복사가 실패하면 삭제도 안 일어난다.
+                cur.execute(
+                    f"INSERT INTO {backup_table} "
+                    "SELECT * FROM policy_clause_occurrence" + where + safe, params)
+                out["backed_up"] += cur.rowcount
+                cur.execute("DELETE FROM policy_clause_occurrence" + where + safe, params)
+                out["deleted"] += cur.rowcount
+                if out["backed_up"] != out["deleted"]:
+                    conn.rollback()
+                    raise RuntimeError(
+                        f"백업 {out['backed_up']}행 ≠ 삭제 {out['deleted']}행 — 되돌렸습니다."
+                    )
+        if apply:
+            conn.commit()
+
+    out["orphans_after"] = _orphans() if apply else out["orphans_before"]
+    return out
+
+
 __all__ = [
     "ClauseHit",
+    "demote_occurrences",
+    "reconcile_occurrences",
     "CHUNK_SIZE",
     "CHUNK_OVERLAP",
     "ensure_schema",

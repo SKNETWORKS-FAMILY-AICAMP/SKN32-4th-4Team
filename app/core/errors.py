@@ -40,6 +40,29 @@ class InfraError(AppError):
     error_code = "infra_error"
 
 
+class ArtifactMissing(InfraError):
+    """**산출물이 아직 없다.** 저장소가 죽은 것이 아니다.
+
+    ★이 둘을 가르는 것이 핵심이다(`app/core/usecases/precheck.py`) —
+      「없다」는 **사실**이라 판정이 **기권**해야 하고(HTTP 200),
+      「죽었다」는 **장애**라 503 으로 올려야 한다.
+      재시도로 해결되는 것도 후자뿐이다. 「적재 전」을 503 으로 내보내면
+      클라이언트가 잠시 뒤 다시 부르지만 결과는 영원히 같다.
+
+    ★★**메시지 문자열로 가르던 것을 대체한다**(2026-08-25).
+      `_MISSING_HINTS` 로 문구를 맞춰 보는 방식이었는데, PG 조항 저장소가
+      「이 약관의 조항 기록이 없습니다」라고 **다른 문구**를 쓰는 바람에
+      그 경로만 503 이 나갔다 — 같은 상황에서 파일 저장소는 200 기권이었다.
+      **같은 사실에 두 응답**이 나가는 것은 계약 위반이다.
+      (교체 계획은 `usecases/precheck.py` 주석에 이미 적혀 있었다.)
+
+    상속은 `InfraError` 를 유지한다 — 유스케이스가 잡지 못하고 HTTP 까지 올라가면
+    그때는 503 이 맞다. 기권으로 바꾸는 책임은 **판정 유스케이스**에 있다.
+    """
+
+    error_code = "artifact_missing"
+
+
 class TransientInfraError(InfraError):
     """serialization/deadlock/일시적 자원 부족처럼 재시도 가능한 인프라 실패."""
 
@@ -97,20 +120,23 @@ class ConflictErr(AppError):
 
 
 class RateLimitErr(AppError):
-    """등록 에이전트 요청 한도 초과."""
+    """요청 한도 초과. 공급자의 Retry-After를 보존할 수 있다."""
 
     http_status = 429
     error_code = "rate_limit_exceeded"
 
-    def __init__(self, message: str, *, retry_after_seconds: int = 60):
-        retry_after = max(1, int(retry_after_seconds))
-        super().__init__(message, headers={"Retry-After": str(retry_after)})
-        self.retry_after_seconds = retry_after
+    def __init__(self, message: str, *, retry_after_seconds: int | str = 60):
+        retry_after = str(retry_after_seconds).strip()
+        if not retry_after or "\r" in retry_after or "\n" in retry_after:
+            retry_after = "60"
+        super().__init__(message, headers={"Retry-After": retry_after})
+        self.retry_after_seconds = int(retry_after) if retry_after.isdigit() else retry_after
 
 
 _PUBLIC_MESSAGES: dict[type[AppError], str] = {
     ConfigError: "서비스 설정이 준비되지 않았습니다.",
     InfraError: "서비스 의존 시스템을 사용할 수 없습니다.",
+    RateLimitErr: "요청 한도를 초과했습니다. 잠시 후 다시 시도하세요.",
     LLMOutputError: "응답 생성에 실패했습니다.",
 }
 

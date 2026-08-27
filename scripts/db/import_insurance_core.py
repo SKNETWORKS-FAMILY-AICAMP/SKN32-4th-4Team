@@ -22,8 +22,49 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
+#: ★★**한 보험사만 보고 있었다** (2026-08-27 실측하고 고쳤다).
+#:
+#:   기본값이 `data/structured/dbins/s7_hybrid-table-v1` 이었다 — dbins **236건**뿐이다.
+#:   그런데 현행 승인 `clause_tag` 는 `s6_pymupdf-1.28.0`(12개사 **1,355건**)이다.
+#:   그대로 두면 「적재 준비 안 됨」의 분모가 236 이라 **11개사가 통째로 안 보인다.**
+#:   ★경로를 박지 않는다 — 승인 릴리스(`config/accepted_extraction.json`)가 정한다.
 DEFAULT_STRUCTURED = ROOT / "data" / "structured" / "dbins" / "s7_hybrid-table-v1"
 DEFAULT_MANIFESTS = ROOT / "data" / "raw" / "manifests"
+_LEDGER = ROOT / "config" / "confirmed_documents.jsonl"
+
+
+def accepted_structured_dirs() -> list[Path]:
+    """승인 릴리스의 `clause_tag` 로 **12개사 전부**를 훑는다."""
+    from app.core.config import get_settings  # noqa: F401  (설정 로딩 부작용 방지용 지연 임포트)
+
+    cfg = json.loads((ROOT / "config" / "accepted_extraction.json").read_text(encoding="utf-8"))
+    tag = str(cfg.get("clause_tag") or "").strip()
+    if not tag:
+        #: ★기본값으로 때우지 않는다 — 어느 판을 넣는지가 안 정해진다.
+        raise ValueError("accepted_extraction.json 에 clause_tag 가 없습니다.")
+    dirs = sorted(p for p in (ROOT / "data" / "structured").glob(f"*/{tag}") if p.is_dir())
+    if not dirs:
+        raise ValueError(f"승인 clause_tag '{tag}' 산출물 디렉터리를 못 찾았습니다.")
+    return dirs
+
+
+def load_confirmation_ledger() -> dict[str, dict[str, Any]]:
+    """확정 원장. **여기가 「확정」의 단일 진실원**이다.
+
+    ★산출물 파일 안의 `identification`·`release_state` 는 **생성 시점 스냅샷**이라
+      확정 결과가 반영돼 있지 않다(실측 2026-08-27: s6·s7 전량 `unidentified`).
+      그렇다고 산출물을 고쳐 맞추면 **`manifest --verify` 가 통째로 깨진다** —
+      같은 경로에 다른 내용을 쓰는 것이기 때문이다(2026-08-26 에 실제로 겪었다).
+      그래서 **산출물은 그대로 두고, 확정은 원장에서 읽는다.**
+    """
+    if not _LEDGER.is_file():
+        return {}
+    out: dict[str, Any] = {}
+    for line in _LEDGER.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            out[str(row.get("sha256") or "")] = row
+    return out
 ALLOWED_LINES = {"standard", "senior", "simplified_issue", "travel", "unknown"}
 ALLOWED_DATE_CONFIDENCE = {"exact", "month", "unknown"}
 
@@ -83,7 +124,7 @@ def load_documents(structured_dir: Path, manifest_dir: Path) -> list[Document]:
     return documents
 
 
-def _release_blockers(document: Document) -> list[str]:
+def _release_blockers(document: Document, ledger: dict[str, Any] | None = None) -> list[str]:
     row = document.row
     source = row.get("source") or {}
     manifest = document.manifest.row
@@ -97,11 +138,41 @@ def _release_blockers(document: Document) -> list[str]:
         blockers.append("source_file_missing")
     if row.get("parse_status") != "ok":
         blockers.append(f"parse_status:{row.get('parse_status')}")
-    if row.get("identification") != "confirmed" or manifest.get("identification") != "confirmed":
+    #: ★★**확정은 원장에서 읽는다** (2026-08-27 에 바꿨다).
+    #:   앞서는 산출물 파일의 `identification` 을 봤는데, 그건 **생성 시점 스냅샷**이라
+    #:   s6·s7 **전량이 `unidentified`** 였다 — 확정 1,355건이 하나도 안 보였다.
+    #:   산출물을 고쳐 맞추는 길은 막혀 있다: 같은 경로에 다른 내용을 쓰면
+    #:   `manifest --verify` 가 통째로 깨진다(2026-08-26 에 실제로 겪었다).
+    entry = (ledger or {}).get(str(source.get("sha256") or ""))
+    if entry is None:
         blockers.append("identification_not_confirmed")
-    if release.get("approval") != "accepted":
+    else:
+        #: ★확정됐어도 **사람 승인 전이면 못 넣는다.** 게이트와 같은 판정을 쓴다 —
+        #:   여기서 문자열을 따로 비교하면 두 곳이 갈린다.
+        from app.core.domain import identification_mode as im
+
+        if im.is_pending_signoff(entry):
+            blockers.append("human_signoff_pending")
+    #: ★릴리스 승인도 산출물이 아니라 **승인 릴리스 파일**이 정한다.
+    #:   s6 산출물에는 `release_state` 필드 자체가 없다(실측).
+    if not _release_accepted():
         blockers.append(f"release_approval:{release.get('approval', '<missing>')}")
     return blockers
+
+
+def _hash_version() -> str:
+    """어느 추출 판으로 만든 해시인가. 승인 릴리스의 `clause_tag` 에서 온다."""
+    cfg = json.loads((ROOT / "config" / "accepted_extraction.json").read_text(encoding="utf-8"))
+    tag = str(cfg.get("clause_tag") or "").strip()
+    if not tag:
+        raise ValueError("accepted_extraction.json 에 clause_tag 가 없습니다.")
+    return tag
+
+
+def _release_accepted() -> bool:
+    """승인 릴리스가 확정 상태인가. `accepted_at` 이 있으면 확정으로 본다."""
+    cfg = json.loads((ROOT / "config" / "accepted_extraction.json").read_text(encoding="utf-8"))
+    return bool(str(cfg.get("accepted_at") or "").strip())
 
 
 def summarize(documents: list[Document]) -> dict[str, Any]:
@@ -109,23 +180,52 @@ def summarize(documents: list[Document]) -> dict[str, Any]:
     clauses = 0
     annexes = 0
     contents: set[str] = set()
+    ledger = load_confirmation_ledger()
+    #: ★★**전부 아니면 전무**였다 (2026-08-27 에 고쳤다).
+    #:
+    #:   `ready = not blockers` 라서, 조항 머리를 못 찾은 문서 **19건**이
+    #:   나머지 **1,336건 전부**를 막고 있었다. 그 19건은 고칠 수 있는 게 아니다 —
+    #:   `parse_status` 가 `ok` 가 아니면 인용할 조항 자체가 없다.
+    #:   ★색인(`build_clause_index._collect`)은 **같은 19건을 이미 세어서 건너뛴다.**
+    #:     두 경로가 다른 규칙을 쓰면 core 와 색인의 분모가 갈린다.
+    #:   그래서 여기서도 **문서 단위로** 가른다 — 다만 **조용히 넘기지 않는다**(§3):
+    #:   못 넣는 문서 수와 사유를 `skipped`·`blockers` 로 세어 돌려준다.
+    loadable: list[Document] = []
     for document in documents:
-        for blocker in _release_blockers(document):
+        marks = _release_blockers(document, ledger)
+        if not marks:
+            loadable.append(document)
+        for blocker in marks:
             blockers[blocker] = blockers.get(blocker, 0) + 1
+    #: ★세는 것은 **실제로 들어갈 것**만이다. 못 넣는 문서의 조항까지 세면
+    #:   「몇 건 들어가나」를 물었을 때 실제보다 많게 답한다.
+    for document in loadable:
         clauses += len(document.row.get("clauses") or [])
         annexes += len(document.row.get("annexes") or [])
         for item in (document.row.get("clauses") or []) + (document.row.get("annexes") or []):
             content_hash = str(item.get("content_hash") or "")
             if content_hash:
                 contents.add(content_hash)
+    #: ★**전역 차단과 문서별 차단을 가른다.** 릴리스가 승인 안 됐다면 아무것도 못 넣는다.
+    #:   반면 조항 머리를 못 찾은 문서 하나는 그 문서만 못 넣는 것이다.
+    fatal = {k: v for k, v in blockers.items() if k.startswith("release_approval")}
     return {
         "structured_documents": len(documents),
+        "loadable_documents": len(loadable),
+        "skipped_documents": len(documents) - len(loadable),
         "clauses": clauses,
         "annexes": annexes,
         "unique_contents": len(contents),
-        "ready": not blockers,
+        "ready": bool(loadable) and not fatal,
+        "fatal_blockers": dict(sorted(fatal.items())),
         "blockers": dict(sorted(blockers.items())),
     }
+
+
+def loadable_documents(documents: list[Document]) -> list[Document]:
+    """실제로 넣을 문서만. `summarize` 와 **같은 판정**을 쓴다."""
+    ledger = load_confirmation_ledger()
+    return [d for d in documents if not _release_blockers(d, ledger)]
 
 
 def _date_confidence(value: Any) -> str:
@@ -237,9 +337,21 @@ def _insert_document(conn, document: Document, identified_by: str) -> tuple[str,
         "generation_source,generation_confidence) VALUES (%s,%s,%s,NULL,NULL,NULL,%s,%s,%s,%s,%s,%s) "
         "ON CONFLICT (product_id,version_label) DO UPDATE SET confirmed_document_id=EXCLUDED.confirmed_document_id "
         "RETURNING id",
+        #: ★★자리표는 9개인데 **인자를 11개 넘기고 있었다** — `ProgrammingError` 로 죽는다.
+        #:   core 가 0행이라 이 경로는 **한 번도 실행된 적이 없어** 아무도 몰랐다
+        #:   (2026-08-27 에 처음 돌려 보고 발견).
+        #:
+        #: ★★★남는 두 인자는 `valid_from`/`valid_to` 자리였다. 그런데 SQL 은 그 둘을
+        #:   `NULL` 로 박아 뒀다. **SQL 쪽이 맞다** —
+        #:     `sales_from`/`sales_to` = 판매 기간
+        #:     `valid_from`/`valid_to` = **적용 구간** (사고일을 여기 맞춘다)
+        #:   핸드오프 16번이 이 둘을 섞으면 「사고일을 판매기간에 대조하는 버그」가
+        #:   된다고 못 박아 뒀다. 판매일을 적용구간에 복사하는 것은 **지어내는 것**이고,
+        #:   그 값으로 「이 약관이 적용된다」를 판정하면 틀린 근거가 나간다(§1).
+        #:   적용구간은 **모르므로 비워 둔다.**
         (
-            document_id, product, _version_label(source), _date(source.get("sale_start")),
-            _date(source.get("sale_end")), _date(source.get("sale_start")),
+            document_id, product, _version_label(source),
+            _date(source.get("sale_start")),
             _date(source.get("sale_end")), _date_confidence(manifest.get("date_confidence")),
             manifest.get("generation") if str(manifest.get("generation", "")).isdigit() else None,
             manifest.get("generation_basis"),
@@ -252,19 +364,39 @@ def _insert_document(conn, document: Document, identified_by: str) -> tuple[str,
 def _insert_clauses(conn, document: Document, extraction_id: str, version_id: str, document_id: str) -> tuple[int, int]:
     inserted_content = 0
     inserted_clause = 0
-    release = document.row.get("release_state") or {}
-    citeable = bool(release.get("citation_eligible") and document.row.get("citation_eligible"))
+    #: ★★**인용 가능 여부는 조항마다 다르다** (2026-08-27 실측하고 고쳤다).
+    #:
+    #:   앞서는 **문서 단위로 한 번** 계산했다 —
+    #:       citeable = release_state.citation_eligible AND 문서.citation_eligible
+    #:   그런데 s6 산출물에는 `release_state` 가 **아예 없다.** 그래서 `None and …` 이
+    #:   되어 **196,039행 전부 `false`** 로 들어갔다. 산출물은 182,330개를 인용가능으로
+    #:   표시하는데도 그렇다. 처음 적재해 보고서야 드러났다.
+    #:
+    #:   ★fail-closed 라 「보장됩니다」가 잘못 나가진 않았지만, 그 반대로
+    #:     **근거를 댈 수 있는 조항을 못 댄다.** 그것도 서비스가 죽는 길이다.
+    #:
+    #:   ★★`citeable` 은 NOT NULL 이라 「모른다」를 담을 수 없다.
+    #:     부록처럼 그 필드가 없는 것은 **인용 불가로 둔다** — 모르면 인용하지 않는다(§0).
+    #:     색인(`policy_clause_occurrence.citation_eligible`)은 NULL 을 허용해
+    #:     「모른다」를 구분하지만, 이 표는 못 한다. 그 차이를 알고 읽어야 한다.
     items = [("clause", x) for x in document.row.get("clauses") or []]
     items += [("annex", x) for x in document.row.get("annexes") or []]
     for source_kind, item in items:
         paragraphs = item.get("paragraphs") or []
         content_hash = item["content_hash"]
         conn.execute(
+            #: ★`hash_version` 이 `'s7-hybrid-table-v1'` 로 **박혀 있었다.**
+            #:   지금 넣는 것은 s6 다 — 어느 판으로 만든 해시인지를 틀리게 적으면
+            #:   나중에 「이 해시는 어느 추출기 것이냐」를 답할 수 없다(§1 버전 박기).
             "INSERT INTO core.clause_content(content_hash,hash_version,title,body,char_length,"
-            "paragraph_count,paragraphs) VALUES (%s,'s7-hybrid-table-v1',%s,%s,%s,%s,%s) "
-            "ON CONFLICT (content_hash) DO UPDATE SET title=EXCLUDED.title,body=EXCLUDED.body,"
+            "paragraph_count,paragraphs) VALUES (%s,%s,%s,%s,%s,%s,%s) "
+            #: ★`hash_version` 을 갱신 목록에 **넣는다.** 빠져 있어서 다시 넣어도 옛 값이
+            #:   남았다(실측 2026-08-27: s6 를 넣었는데 `s7-hybrid-table-v1` 그대로였다).
+            "ON CONFLICT (content_hash) DO UPDATE SET hash_version=EXCLUDED.hash_version,"
+            "title=EXCLUDED.title,body=EXCLUDED.body,"
             "char_length=EXCLUDED.char_length,paragraph_count=EXCLUDED.paragraph_count,paragraphs=EXCLUDED.paragraphs",
-            (content_hash, item.get("title") or item.get("label") or "", item.get("text") or "",
+            (content_hash, _hash_version(),
+             item.get("title") or item.get("label") or "", item.get("text") or "",
              int(item.get("char_length") or len(item.get("text") or "")), len(paragraphs), _jsonb(paragraphs)),
         )
         inserted_content += 1
@@ -281,7 +413,8 @@ def _insert_clauses(conn, document: Document, extraction_id: str, version_id: st
             (
                 document_id, extraction_id, version_id, source_kind, int(item.get("ordinal") or 0), content_hash,
                 item.get("qualified_no") or "", item.get("section") or "", item.get("clause_no") or "",
-                item.get("citation") or item.get("label") or "", citeable,
+                item.get("citation") or item.get("label") or "",
+                item.get("citation_eligible") is True,
                 bool(item.get("statute")), bool(item.get("paragraph_no_ambiguous")),
                 _jsonb(item.get("locator") or {}), len(item.get("tables") or []), _jsonb(item.get("tables_on_pages") or {}),
             ),
@@ -307,18 +440,35 @@ def apply(documents: list[Document], dsn: str, identified_by: str) -> dict[str, 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--structured-dir", type=Path, default=DEFAULT_STRUCTURED)
+    #: ★기본을 **승인 릴리스의 clause_tag 전량**으로 바꿨다(2026-08-27).
+    #:   `--structured-dir` 를 주면 그 한 곳만 본다(옛 동작, 디버그용).
+    parser.add_argument("--structured-dir", type=Path, default=None,
+                        help="한 곳만 볼 때. 기본은 승인 clause_tag 로 12개사 전량")
     parser.add_argument("--manifest-dir", type=Path, default=DEFAULT_MANIFESTS)
     parser.add_argument("--dsn", default=os.environ.get("PG_DSN", ""))
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--identified-by", help="ops.admin_user.id; --apply 시 필수")
     args = parser.parse_args(argv)
 
-    documents = load_documents(args.structured_dir, args.manifest_dir)
+    if args.structured_dir is not None:
+        dirs = [args.structured_dir]
+    else:
+        dirs = accepted_structured_dirs()
+    documents: list[Document] = []
+    for d in dirs:
+        documents.extend(load_documents(d, args.manifest_dir))
+    #: ★몇 곳을 봤는지 **찍는다.** 앞서 한 보험사만 보고 있던 것을 아무도 몰랐다.
+    print(f"[대상] 산출물 디렉터리 {len(dirs)}곳 · 문서 {len(documents):,}건", flush=True)
     report = summarize(documents)
     print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    if report["skipped_documents"]:
+        #: ★건너뛴 것을 **크게 말한다.** 조용히 빼면 다음 사람이 분모를 모른다(§3).
+        print(f"[건너뜀] {report['skipped_documents']:,}건은 넣지 않는다 — "
+              f"{report['blockers']}", flush=True)
     if not report["ready"]:
         print("blocked: 사람 검수·승인 전 자료는 core.confirmed_policy_document에 적재하지 않습니다.")
+        if report["fatal_blockers"]:
+            print(f"  전역 차단: {report['fatal_blockers']}")
         return 3 if args.apply else 0
     if not args.apply:
         print("dry-run: 변경 없음")
@@ -329,7 +479,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.identified_by:
         print("--apply에는 --identified-by가 필요합니다.")
         return 2
-    result = apply(documents, args.dsn, args.identified_by)
+    #: ★차단된 문서는 **넣지 않는다.** `summarize` 와 같은 판정을 쓴다 —
+    #:   여기서 따로 거르면 「보고한 수」와 「넣은 수」가 갈린다.
+    result = apply(loadable_documents(documents), args.dsn, args.identified_by)
     print(json.dumps({"applied": result}, ensure_ascii=False, sort_keys=True))
     return 0
 

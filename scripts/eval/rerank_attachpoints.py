@@ -57,7 +57,7 @@ def _body(c: dict, field: str) -> str:
 
 def _hits_from(rec: dict, field: str = "full_text"):
     """후보 → `ClauseHit`. 서비스가 받는 것과 같은 자료형으로 만든다."""
-    from app.adapters.pgvector_clause_index import ClauseHit
+    from db.postgres.pgvector_clause_index import ClauseHit
 
     out = []
     for i, c in enumerate(rec["candidates"]):

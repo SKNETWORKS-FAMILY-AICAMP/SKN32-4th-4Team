@@ -24,6 +24,7 @@ import json
 import pathlib
 import statistics
 import sys
+from db.postgres.pgvector_index import get_conn
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -46,7 +47,11 @@ def main() -> int:
     hashes = {c["content_hash"] for r in data["records"] for c in r["candidates"]}
     print(f"  고유 content_hash {len(hashes):,}")
 
-    with psycopg.connect(get_settings().PGVECTOR_DSN, connect_timeout=15) as conn:
+    #: ★★`get_conn()` 을 쓴다 — **직접 `psycopg.connect` 하면 `search_path` 가 안 걸린다**
+    #:   (2026-08-26). 조항 색인이 `insurance_real.vec` 로 옮겨진 뒤
+    #:   맨이름 SQL 이 `relation "policy_clause_chunk" does not exist` 로 깨진다.
+    #:   실제로 이 스크립트가 그렇게 죽었다. 스키마를 정하는 곳은 한 군데다.
+    with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT content_hash, text FROM policy_clause_content WHERE content_hash = ANY(%s)",

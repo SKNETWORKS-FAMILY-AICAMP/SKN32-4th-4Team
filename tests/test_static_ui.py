@@ -24,6 +24,9 @@ from app.main import _OPS_STATIC, create_app
 
 _STATIC = pathlib.Path(__file__).resolve().parents[1] / "app" / "static"
 
+#: 역슬래시와 n, **글자 두 개**. 소스에 직접 쓰면 도구마다 먹혀서 헷갈린다.
+LITERAL_NEWLINE = chr(92) + 'n'
+
 #: 화면이 호출하는 API 경로. 템플릿 문자열(`${...}`)은 앞부분만 본다.
 _API_CALL = re.compile(r"""["'`](/api/[a-zA-Z0-9_/-]+|/v1/[a-zA-Z0-9_/-]+)""")
 #: HTML 이 부르는 스크립트.
@@ -168,3 +171,29 @@ def test_입력창_포커스가_키보드_사용자에게_보인다():
             f"{selector}:focus 가 outline: none 인데 "
             f"{selector}:focus-visible 대체 규칙이 없다 — 키보드 포커스가 안 보인다"
         )
+
+
+#: HTML 속성 안의 설명풍선. 값 안에서 큰따옴표를 쓰지 않는다는 전제다.
+_DATA_TIP = re.compile(r'data-tip="([^"]*)"')
+
+
+def test_설명풍선에_리터럴_역슬래시n이_남아있지_않다():
+    """★HTML 속성의 `BSn` 은 **줄바꿈이 아니다** — 역슬래시와 n, 글자 두 개다.
+
+    실측 2026-08-26 — 풍선 문구를 HTML 에 적으면서 자바스크립트 문자열처럼
+    `BSn` 을 썼다. 화면에는 줄이 바뀌는 대신 **`BSn` 이 그대로 찍혔다**
+    (9곳). CSS `white-space: pre-line` 은 진짜 줄바꿈만 줄로 바꾼다.
+    자바스크립트가 `setAttribute` 로 넣는 값은 진짜 줄바꿈이라 멀쩡했고,
+    HTML 에 적어 둔 것만 깨져 있어서 한참 눈에 안 띄었다.
+
+    속성값은 여러 줄로 쓸 수 있다. 줄을 바꾸고 싶으면 **줄을 바꾸면 된다.**
+    """
+    offenders: list[str] = []
+    for html in sorted(_STATIC.glob("*.html")):
+        for tip in _DATA_TIP.findall(html.read_text(encoding="utf-8")):
+            if LITERAL_NEWLINE in tip:
+                offenders.append(f"{html.name}: {tip[:60]}")
+    assert not offenders, (
+        "설명풍선에 리터럴 역슬래시+n 이 있습니다 — 화면에 그대로 찍힙니다: "
+        + ", ".join(offenders)
+    )

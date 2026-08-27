@@ -12,6 +12,23 @@
        기록이 두 번 유실됐고(디스크 풀 / 배치 중간 사망) 그 잔재다.
        → 파일명에서 되살릴 수 있는 것만 넣는다.
 
+★★결함이었던 것 — "파일 없음" 판정을 `insurance_terms/{보험사}/` 안에서만 했다(2026-08-25 실측)
+
+    `classify_documents.py`(2026-08-03~)는 그 뒤로 "지우지 않는다 — 옮긴다"로 바뀌어
+    격리 파일을 `data/raw/excluded/{사유}/{보험사}/` 로 옮기고 `saved_as` 도
+    그 새 경로로 정확히 갱신한다. 그런데 이 도구는 그걸 몰랐다 — `on_disk` 를
+    `insurance_terms/{보험사}/*.pdf` 안에서만 만들어서, `saved_as` 가 옳게
+    `excluded/...` 를 가리키는 격리 행 336건 전부를 "파일 없음"으로 오판해 지웠다.
+    실제로 파일은 `saved_as` 가 가리키는 자리에 그대로 있었다.
+
+    ★**되풀이됐다** — dry-run 없이 한 번 실제로 지워졌고(2026-08-25), 되돌린 뒤
+    dry-run 을 다시 돌려도 **똑같이 356행을 지우겠다고 나왔다.** 일회성 사고가
+    아니라 재현되는 결함이었다.
+
+    → 파일 존재는 이제 `saved_as` 가 **실제로 기록한 경로**에서 확인한다
+      (`insurance_terms/` 로 고정하지 않는다). §1 의 원래 사례(파일을 지우고
+      기록을 안 지운 것)는 여전히 잡힌다 — `saved_as` 경로 자체가 없어졌으므로.
+
 ★지어내지 않는다
 
     고아 파일에서 확실한 것은 `sha256`·`bytes`·`saved_as`·`original_name` 뿐이다.
@@ -85,10 +102,14 @@ def main() -> None:
         on_disk = {p.name: p for p in d.glob("*.pdf")}
 
         # ── 1) 파일이 없는 행을 뺀다 ────────────────────────────────
+        #: ★`insurance_terms/{보험사}/` 안으로 좁히지 않는다 — `saved_as` 가
+        #:   가리키는 실제 경로에 있는지를 본다. 격리 파일은 `excluded/...` 로
+        #:   옮겨져 있고 `saved_as` 도 그리로 정확히 갱신돼 있다(위 결함 기록 참조).
         keep, dropped = [], []
         for r in rows:
-            name = Path(r.get("saved_as", "")).name
-            (keep if name in on_disk else dropped).append(r)
+            saved_as = r.get("saved_as", "")
+            exists = bool(saved_as) and (_ROOT / saved_as).exists()
+            (keep if exists else dropped).append(r)
 
         # ── 2) 기록이 없는 파일을 넣는다 ─────────────────────────────
         known = {r["sha256"][:12] for r in keep}

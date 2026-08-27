@@ -69,21 +69,27 @@ def _call(fn, *args, **kwargs) -> dict:
     try:
         out = fn(*args, **kwargs)
     except HTTPException as e:
-        return {
+        result = {
             "ok": False,
             "http_status": e.status_code,
             "error": str(e.detail),
             #: ★422(입력 잘못)와 503(우리 장애)을 구분해 준다 — 재시도 여부가 다르다.
             "retryable": e.status_code >= 500,
         }
+        if e.headers and e.headers.get("Retry-After"):
+            result["retry_after"] = e.headers["Retry-After"]
+        return result
     except AppError as e:
-        return {
+        result = {
             "ok": False,
             "http_status": e.http_status,
             "error_code": e.error_code,
             "error": e.message,
             "retryable": e.http_status >= 500,
         }
+        if e.headers.get("Retry-After"):
+            result["retry_after"] = e.headers["Retry-After"]
+        return result
     except ValidationError as e:
         return {
             "ok": False,

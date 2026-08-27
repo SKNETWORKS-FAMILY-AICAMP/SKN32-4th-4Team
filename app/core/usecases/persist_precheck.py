@@ -63,9 +63,32 @@ def _request_key_hash(command: PersistPrecheckCommand) -> str:
     return hmac.new(command.idempotency_secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
-def _occurrence(value: str) -> tuple[str, str, int]:
+def _occurrence(value: str) -> tuple[str, str, int, str]:
+    """`occurrence_id` 를 뜯는다. **v2 만 받는다.**
+
+    ★★v1(`릴리스:sha256:source_kind:ordinal`)은 **거절한다** (2026-08-27).
+
+        v1 의 `ordinal` 은 산출물의 순번이 아니라 **검색용 재번호**였다.
+        색인에 무엇이 드는지를 **인용 게이트**가 정하므로, 게이트 판정이 바뀌면
+        그 번호가 통째로 밀린다 — 어제 발급한 인용이 다른 조항을 가리킨다.
+
+        ★**조용히 v1 을 받아 주면 안 된다.** 형식이 비슷해서 파싱은 되는데
+          가리키는 곳이 다르다. 그런 것이 제일 위험하다 — 틀린 근거가 조용히 저장된다.
+          그래서 **모양을 보고 v1 이면 그렇다고 말하며 거절한다.**
+    """
+    if not isinstance(value, str) or not value.startswith("v2:"):
+        raise ValidationErr(
+            "인용 occurrence_id 가 v2 형식이 아닙니다"
+            "(v2:릴리스:sha256:source_kind:source_ordinal:content_hash). "
+            "옛 형식은 검색용 재번호를 쓰고 있어 게이트가 바뀌면 다른 조항을 가리킵니다 "
+            "— 받지 않습니다."
+        )
     try:
-        _release, sha256, source_kind, ordinal = value.rsplit(":", 3)
+        #: ★★**오른쪽부터 자른다.** `release_id` 에 콜론이 들어갈 수 있기 때문이다.
+        #:   왼쪽부터 자르면(`split(":", 5)`) 릴리스가 쪼개져 뒤 필드가 통째로 밀린다 —
+        #:   내가 v2 로 옮기면서 그렇게 썼고 `test_occurrence는_release에_colon이…` 가 잡았다.
+        #:   v1 은 `rsplit(":", 3)` 으로 이미 이 문제를 피하고 있었다(2026-08-27).
+        _release, sha256, source_kind, ordinal, content_hash = value[3:].rsplit(":", 4)
         parsed_ordinal = int(ordinal)
     except (AttributeError, TypeError, ValueError) as exc:
         raise ValidationErr("인용 occurrence_id 형식이 올바르지 않습니다.") from exc
@@ -73,7 +96,11 @@ def _occurrence(value: str) -> tuple[str, str, int]:
         raise ValidationErr("인용 occurrence_id의 SHA/source_kind가 올바르지 않습니다.")
     if parsed_ordinal < 0:
         raise ValidationErr("인용 occurrence ordinal은 0 이상이어야 합니다.")
-    return sha256, source_kind, parsed_ordinal
+    if not content_hash.strip():
+        #: ★내용 해시가 비면 「자리는 맞는데 내용이 뭔지 모른다」다. 그대로 두면
+        #:   자리가 밀렸는지 확인할 방법이 없다.
+        raise ValidationErr("인용 occurrence_id 에 content_hash 가 없습니다.")
+    return sha256, source_kind, parsed_ordinal, content_hash
 
 
 def _replay(
@@ -144,7 +171,7 @@ def persist(
     for citation in outcome.citations:
         if policy is None:
             raise ValidationErr("policy version 없이 citation을 저장할 수 없습니다.")
-        citation_sha, source_kind, ordinal = _occurrence(citation.occurrence_id)
+        citation_sha, source_kind, ordinal, content_hash = _occurrence(citation.occurrence_id)
         if not hmac.compare_digest(citation_sha, document_sha):
             raise ValidationErr("인용 occurrence가 적용 약관과 다른 문서를 가리킵니다.")
         reference = repository.resolve_clause_reference(
@@ -152,6 +179,10 @@ def persist(
             document_sha256=document_sha,
             source_kind=source_kind,
             ordinal=ordinal,
+            #: ★★자리와 **내용**을 함께 넘긴다. 자리만 맞추면 그 자리가 밀렸을 때
+            #:   다른 조항을 저장한다. 한 문서 안에 같은 내용이 두 번 실리는 자리가
+            #:   2,789개 있으므로 **내용만으로도 부족하다** — 둘 다 본다.
+            content_hash=content_hash,
             quote=citation.quote,
         )
         citations.append((citation, reference))

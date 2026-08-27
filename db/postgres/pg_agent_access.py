@@ -358,8 +358,30 @@ class PgAgentAccess:
         except Exception as exc:  # noqa: BLE001
             raise InfraError(f"에이전트 멱등 실패 상태를 기록하지 못했습니다: {exc}") from exc
 
+    def count_expired_history(self) -> list[dict]:
+        """보존기간이 지난 이력을 **세기만** 한다. 아무것도 안 지운다.
+
+        ★파기(`prune_history`)와 **같은 조건**을 쓰는 DB 함수를 부른다
+          (`ops.count_agent_history_expired`). 갈리면 미리보기가 거짓말이 된다.
+        """
+        try:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT relation_name, expired_rows "
+                    "FROM ops.count_agent_history_expired()"
+                ).fetchall()
+            return [{"relation": row[0], "expired": int(row[1])} for row in rows]
+        except InfraError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise InfraError(f"만료 이력 건수를 세지 못했습니다: {exc}") from exc
+
     def prune_history(self) -> list[dict]:
-        """보존기간이 지난 비식별 운영 이력을 admin 권한으로 파기한다."""
+        """보존기간이 지난 비식별 운영 이력을 admin 권한으로 파기한다.
+
+        ★**되돌릴 수 없다.** 부르기 전에 `count_expired_history()` 로 건수를 보라 —
+          CLI 는 그렇게 하도록 되어 있다(`scripts/agent_clients.py prune`).
+        """
 
         try:
             with self._connect() as conn:

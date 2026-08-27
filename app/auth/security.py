@@ -12,14 +12,12 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.orm import Session
-
 from app.auth.store import get_auth_store
+from app.auth.user_types import AuthStore, AuthUser
 from app.core.config import Settings, get_settings
 from app.core.config_validation import require_secret_key
 from app.core.errors import AuthErr
-from app.db.models import User
-from db.postgres.auth_repository import PgAuthStore, PgUser
+from db.postgres.auth_repository import PgAuthStore
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -119,15 +117,20 @@ def decode_token(token: str, settings: Settings | None = None) -> str:
     return username
 
 
-def _lookup_user(store: Session | PgAuthStore, username: str) -> User | PgUser | None:
+def _lookup_user(store: AuthStore, username: str) -> AuthUser | None:
     if isinstance(store, PgAuthStore):
         return store.get_user(username)
+    #: ★레거시 SQLite 분기 **안에서만** 적재한다. 모듈 최상단에서 부르면
+    #:   PostgreSQL 전용 배포에도 SQLAlchemy 가 통째로 딸려 온다
+    #:   (`app/auth/user_types.py` 참조 — 그것 때문에 기동이 막힌 적이 있다).
+    from db.sqlite_legacy.models import User
+
     return store.query(User).filter(User.username == username).first()
 
 
 def _user_from_token(
-    token: str, store: Session | PgAuthStore, *, require_stage: str | None
-) -> User | PgUser:
+    token: str, store: AuthStore, *, require_stage: str | None
+) -> AuthUser:
     payload = _decode(token)
     username = payload.get("sub")
     if not username:
@@ -144,8 +147,8 @@ def _user_from_token(
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
-    store: Session | PgAuthStore = Depends(get_auth_store),
-) -> User | PgUser:
+    store: AuthStore = Depends(get_auth_store),
+) -> AuthUser:
     """정상 접근 토큰만 허용 — pre2fa 단명 토큰은 거부(얼굴 단계 전용)."""
     payload = _decode(token)
     if payload.get("stage", STAGE_FULL) == STAGE_PRE2FA:
@@ -161,8 +164,8 @@ def get_current_user(
 
 def get_pre2fa_user(
     token: str = Depends(oauth2_scheme),
-    store: Session | PgAuthStore = Depends(get_auth_store),
-) -> User | PgUser:
+    store: AuthStore = Depends(get_auth_store),
+) -> AuthUser:
     """얼굴 2차인증 단계 전용 — pre2fa stage 토큰만 허용."""
     return _user_from_token(token, store, require_stage=STAGE_PRE2FA)
 
@@ -172,14 +175,14 @@ class Pre2FAChallenge:
 
     __slots__ = ("user", "payload")
 
-    def __init__(self, user: User | PgUser, payload: dict) -> None:
+    def __init__(self, user: AuthUser, payload: dict) -> None:
         self.user = user
         self.payload = payload
 
 
 def get_pre2fa_challenge(
     token: str = Depends(oauth2_scheme),
-    store: Session | PgAuthStore = Depends(get_auth_store),
+    store: AuthStore = Depends(get_auth_store),
 ) -> Pre2FAChallenge:
     """얼굴 2차인증 단계 전용 — pre2fa 토큰만 허용 + 이미 소비된 챌린지 거부(일회성).
 

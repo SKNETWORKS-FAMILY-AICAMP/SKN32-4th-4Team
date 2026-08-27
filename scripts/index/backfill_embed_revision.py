@@ -28,6 +28,7 @@ import argparse
 import json
 import pathlib
 import sys
+from db.postgres.pgvector_index import get_conn
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -70,6 +71,9 @@ def _keys() -> tuple[str, str, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
+    #: ★기본을 조회로 뒤집었다(2026-08-26). 인자 없이 돌리면 예상만 찍는다.
+    ap.add_argument("--apply", action="store_true",
+                    help="실제로 라벨을 바꾼다. 없으면 예상만 찍는다(기본).")
     ap.add_argument("--revert", action="store_true")
     a = ap.parse_args()
 
@@ -83,7 +87,11 @@ def main() -> int:
     print(f"    from  {src}")
     print(f"    to    {filled if not a.revert else missing}")
 
-    with psycopg.connect(get_settings().PGVECTOR_DSN, connect_timeout=15) as conn:
+    #: ★★`get_conn()` 을 쓴다 — **직접 `psycopg.connect` 하면 `search_path` 가 안 걸린다**
+    #:   (2026-08-26). 조항 색인이 `insurance_real.vec` 로 옮겨진 뒤
+    #:   맨이름 SQL 이 `relation "policy_clause_chunk" does not exist` 로 깨진다.
+    #:   실제로 이 스크립트가 그렇게 죽었다. 스키마를 정하는 곳은 한 군데다.
+    with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT embed_model, count(*) FROM policy_clause_chunk GROUP BY 1")
             rows = dict(cur.fetchall())
@@ -101,6 +109,15 @@ def main() -> int:
                 return 0
 
             n = rows[src]
+            #: ★★**기본이 실행이었다**(2026-08-26 · 코덱스 감사 P2).
+            #:   인자 없이 돌리면 일치하는 행을 **전부** 바꾸고 커밋했다.
+            #:   `embed_model` 은 검색이 「어느 모델 벡터인가」를 가르는 값이라,
+            #:   잘못 바꾸면 **옛 모델 벡터가 현행 행세를 한다.**
+            #:   → 기본을 조회로 뒤집는다. `--dry-run` 은 그대로 둬 기존 사용법을 안 깬다.
+            print(f"  [예상] {n:,}행을 바꾼다.")
+            if not a.dry_run and not a.apply:
+                print(f"★ 쓰려면 --apply 를 명시하라. {n:,}행의 embed_model 이 바뀐다.")
+                return 0
             if a.dry_run:
                 print(f"\n  (--dry-run) {n:,}행을 바꿀 것이다.")
                 return 0

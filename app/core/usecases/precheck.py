@@ -35,7 +35,7 @@ import json
 import re
 from dataclasses import asdict
 
-from app.core.errors import InfraError, ValidationErr
+from app.core.errors import ArtifactMissing, InfraError, ValidationErr
 from app.core.domain import kcd_ranges as kcd
 from app.core.ports.precheck import (
     ClauseRow,
@@ -43,6 +43,7 @@ from app.core.ports.precheck import (
     NotResolved,
     PolicyVersionRow,
     PolicyVersionSourcePort,
+    RelatedClausePort,
 )
 from app.core.domain.insurance import Verdict
 from app.core.domain.precheck_result import (
@@ -120,13 +121,20 @@ def _to_applied(v: PolicyVersionRow, parse_status: str = "") -> AppliedPolicyInf
 
 #: ★"산출물이 없다"와 "저장소가 죽었다"를 가른다.
 #:   전자는 **사실**이라 기권이 맞고, 후자는 **장애**라 503 으로 올려야 한다.
-#:   메시지로 가르는 것은 임시방편이다 — 어댑터가 별도 예외 타입을 던지는 편이 낫다.
-#:   (DB 적재 때 `ArtifactMissing` 을 만들어 교체한다)
+#:
+#: ★★**타입으로 가른다(2026-08-25).** 여기 원래 "메시지로 가르는 것은 임시방편이다 —
+#:   어댑터가 별도 예외 타입을 던지는 편이 낫다"고 적혀 있었고, 실제로 대가를 치렀다:
+#:   PG 조항 저장소가 「이 약관의 조항 기록이 없습니다」라는 **다른 문구**를 써서
+#:   문자열 대조를 통과하지 못했고, 그래서 **같은 상황에서 파일은 200 기권 · PG 는 503** 이었다.
+#:   → `docs/reports/2026-08-25_1530_pg판정경로_복구_완료보고.md`
+#:
+#: 문자열 목록은 **아직 타입을 안 쓰는 어댑터를 위해 남긴다.** 새 어댑터는
+#: `ArtifactMissing` 을 던진다 — 문구를 맞출 필요가 없다.
 _MISSING_HINTS = ("찾지 못했습니다", "산출물이 없습니다", "지정되지 않았습니다")
 
 
 def _is_missing_artifact(e: Exception) -> bool:
-    return any(h in str(e) for h in _MISSING_HINTS)
+    return isinstance(e, ArtifactMissing) or any(h in str(e) for h in _MISSING_HINTS)
 
 
 def _reason(code: str | None) -> ReasonCode | None:
@@ -160,6 +168,7 @@ def run(
     policies: PolicyVersionSourcePort,
     clauses: ClauseSourcePort,
     versions: list[PolicyVersionRow] | None = None,
+    related: RelatedClausePort | None = None,
 ) -> PrecheckOutcome:
     """사전판정 한 건.
 
@@ -167,6 +176,8 @@ def run(
         policies: 약관 버전 출처(포트). 어댑터가 주입한다.
         clauses: 조항 출처(포트).
         versions: 미리 읽어 둔 목록(성능·테스트용).
+        related: 참고 조항 의미검색(포트). **없어도 판정은 똑같이 나온다** —
+            안 주면 참고 조항만 안 붙는다. 주더라도 판정은 바뀌지 않는다.
     """
     if not req.kcd_codes:
         raise ValidationErr("질병기호가 비어 있습니다.")
@@ -181,7 +192,8 @@ def run(
     from app.core import release
 
     with release.pinned(release.current()):
-        return _run(req, policies=policies, clauses=clauses, versions=versions)
+        return _run(req, policies=policies, clauses=clauses, versions=versions,
+                    related=related)
 
 
 def _run(
@@ -190,6 +202,7 @@ def _run(
     policies: PolicyVersionSourcePort,
     clauses: ClauseSourcePort,
     versions: list[PolicyVersionRow] | None = None,
+    related: RelatedClausePort | None = None,
 ) -> PrecheckOutcome:
     trace = _trace_id(req)
     base = {
@@ -331,6 +344,14 @@ def _run(
     if applied.generation_confidence == "ambiguous":
         warnings.append("세대 판정이 경계에 걸쳐 있습니다.")
 
+    # ── 6) 참고 조항 (판정 뒤, 판정과 무관) ──────────────────────
+    #: ★★**순서가 곧 계약이다.** 판정은 위에서 이미 끝났다. 여기서 하는 일은
+    #:   사람이 읽을 자료를 덧붙이는 것뿐이고, `overall`·`rc`·`per_code`·
+    #:   `all_cites` 를 **읽지도 쓰지도 않는다.** 그래서 검색이 무엇을 물어 오든
+    #:   판정은 같다(`tests/test_precheck_related.py` 가 이걸 잰다).
+    rel_cites, rel_status, rel_warn = _related_clauses(related, got.sha256, req, per_code)
+    warnings.extend(rel_warn)
+
     return PrecheckOutcome(
         verdict=overall,
         abstained=overall == Verdict.NEEDS_EXPERT,
@@ -339,10 +360,69 @@ def _run(
         applied_policy=applied,
         per_code=per_code,
         citations=_dedupe(all_cites),
+        related_clauses=rel_cites,
+        related_search=rel_status,
         extractor=st.get("extractor", ""),
         warnings=warnings,
         **base,
     )
+
+
+#: 자유 서술이 없을 때 쓰는 고정 질의.
+#:   ★기존 답문이 「보장 여부는 '보상하는 사항' 조항이 정한다」고만 말하고
+#:     **그 조항을 보여 주지 않았다.** 그 자리를 메우는 질의다.
+_COVERAGE_QUERY = "보상하는 사항 보험금을 지급하는 사유 보장 범위"
+
+
+def _related_clauses(
+    related: RelatedClausePort | None,
+    sha256: str,
+    req: PrecheckInput,
+    per_code: list[CodeVerdict],
+) -> tuple[list[CitationRef], str, list[str]]:
+    """읽어 볼 만한 조항을 붙인다. **판정은 이미 끝났고, 여기서 바뀌지 않는다.**
+
+    돌려주는 것: (참고 인용, 검색 상태, 경고).
+
+    ★언제 도나 — `no_evidence` 로 끝난 코드가 있을 때만이다.
+      면책 조항을 실제로 짚은 판정(`excluded`·`exception`)은 근거가 이미 있다.
+      거기까지 벡터 결과를 얹으면 **근거 있는 답에 근거 아닌 것이 섞인다.**
+
+    ★실패를 빈 목록으로 만들지 않는다. 「관련 조항이 없다」와 「검색이 실패했다」는
+      사람에게 전혀 다른 말이다 — 상태와 경고로 갈라 낸다(CLAUDE.md §0).
+    """
+    if related is None:
+        return [], "", []
+    if not any(a.reason_code == ReasonCode.NO_EVIDENCE for a in per_code):
+        return [], "", []
+
+    query = (req.condition_text or "").strip() or _COVERAGE_QUERY
+    try:
+        rows = related.find(sha256, query, limit=5)
+    except Exception as exc:  # noqa: BLE001 — 참고 자료 때문에 판정을 죽이지 않는다
+        #: ★삼키되 **말한다.** 조용히 빈 목록이 되면 화면은 「관련 조항 없음」이라 읽는다.
+        return [], f"failed: {type(exc).__name__}: {exc}"[:200], [
+            "참고 조항 검색에 실패해 관련 조항을 함께 보여 주지 못했습니다. "
+            "판정 자체는 약관 조항 대조로 이뤄졌으며 영향받지 않았습니다."
+        ]
+
+    out = [
+        CitationRef(
+            clause_id=c.clause_id,
+            qualified_no=c.qualified_no,
+            section=c.section,
+            title=c.title,
+            scope=_citation_scope(c.text),
+            #: ★원문을 잘라 싣되 **판정 근거인 척하지 않는다** — 급이 다르다.
+            quote=(c.text or "")[:300],
+            page_from=c.page_from,
+            page_to=c.page_to,
+            occurrence_id=getattr(c, "occurrence_id", ""),
+            tier=EvidenceTier.RETRIEVED_CLAUSE,
+        )
+        for c in rows
+    ]
+    return _dedupe(out), "ok", []
 
 
 def verify_explanation(

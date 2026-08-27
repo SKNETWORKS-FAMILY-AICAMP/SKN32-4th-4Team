@@ -575,6 +575,18 @@ _DEFINES_TERM = re.compile(r"이하.{0,3}개인실손")
 _TERM_DEFINED_RIVAL = full_name_key("개인실손의료보험")
 
 
+#: ★★셀프섀도 채널낱말 우회(코덱스 반례, 삼성생명 실사례로 확인·2026-08-26) — 채널
+#:   낱말이 이름 **가운데** 끼면(예: "삼성생명"+"인터넷"+"실손의료비보장보험1.0")
+#:   `k in me`도 `me in k`도 둘 다 안 걸린다. 접두/접미가 아니라 중간 삽입이라
+#:   연속 부분문자열 관계 자체가 안 생기기 때문이다. 이 낱말들은 `_OPTIONAL_QUALIFIERS`
+#:   (CM·TM)와 같은 층 — **판매채널이지 상품 정체성이 아니다** — 이지만 괄호가 아니라
+#:   맨몸으로 이름 사이에 박혀 나온다는 점만 다르다.
+#:   실측(삼성생명, sha `b3b339438e49`): 제1조[보장종목] 원문에도 "인터넷" 없는
+#:   이름이 자기지칭으로 나오고, 제45~47조 content_hash 가 형제 sha와 완전 동일했다
+#:   — 진짜 경쟁 상품이 아니라 채널 표기 차이였다.
+_SELF_SHADOW_CHANNEL_WORDS = ("인터넷", "다이렉트", "온라인")
+
+
 def _rivals(row: dict, flat_doc: str, siblings: list[dict], *, full_flat: str = "") -> tuple[list[str], list[str]]:
     """이 문서 안에서 **같은 보험사의 다른 상품명**도 통째로 확인되는가.
 
@@ -643,6 +655,14 @@ def _rivals(row: dict, flat_doc: str, siblings: list[dict], *, full_flat: str = 
         if k in me:
             #: 참고 — 내 이름 안에 든 짧은 이름. 내 이름이 확인된 순간 **반드시** 걸린다.
             #:   증거가 아니므로 세지 않는다. 이건 완화가 아니라 잘못된 증거 제거다.
+            continue
+        if any(
+            k == me.replace(w, "", 1) or me == k.replace(w, "", 1)
+            for w in _SELF_SHADOW_CHANNEL_WORDS
+            if w in me or w in k
+        ):
+            #: ★★채널 낱말 하나만 넣거나 뺀 자기 자신이다 — `k in me`와 같은 이유로
+            #:   증거가 아니다(위 클래스 주석·삼성생명 실사례 참조).
             continue
         if me in k:
             #: 위험 — 거꾸로다. 내 이름이 이 긴 이름 때문에 걸렸을 수 있다 — **막는다.**

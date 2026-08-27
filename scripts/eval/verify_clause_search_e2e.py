@@ -99,7 +99,7 @@ def main() -> int:
         return 1
 
     # ── 3. 색인이 준비됐는가 ───────────────────────────────────────
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     check("색인 세대·모델 확인", bool(ix.current_generation()),
           f"{ix.current_generation()} / {ix.current_embed_model()[:40]}")
@@ -107,12 +107,32 @@ def main() -> int:
     # ── 4. 실제 검색 ──────────────────────────────────────────────
     reranker = None
     if a.rerank:
-        from app.adapters.reranker import CrossEncoderReranker
+        #: ★★**서비스와 같은 경로를 탄다.** 앞서 여기서 `CrossEncoderReranker` 를
+        #:   직접 만들었는데, 라우터는 `build_worker_from_settings()` 를 쓴다.
+        #:   경로가 갈리면 이 스크립트가 「돈다」고 해도 서비스가 도는지는 모른다 —
+        #:   그게 이 스크립트가 있는 이유 자체를 무너뜨린다(CLAUDE.md §4).
+        #:
+        #:   ★실제로 갈려 있어서 못 본 것이 있었다(2026-08-25 실측): 이 기계에서
+        #:     인프로세스 적재는 **세그폴트**(exit 139)로 죽는다 — 임베더 2.2GB 가
+        #:     이미 올라와 있어 RAM 이 모자란다(여유 3.9GB). 워커 경로(`process`)로
+        #:     가면 자식이 자기 주소공간을 쓰므로 **같은 기계에서 성공한다.**
+        from app.adapters import rerank_worker as rw
 
-        reranker = CrossEncoderReranker(
-            st.RERANKER_MODEL, device=st.RERANKER_DEVICE,
-            batch_size=st.RERANKER_BATCH_SIZE, max_length=st.CLAUSE_RERANK_MAX_LENGTH,
-            dtype=st.RERANKER_DTYPE, trust_remote_code=st.RERANKER_TRUST_REMOTE_CODE)
+        worker = rw.build_worker_from_settings()
+
+        class _WorkerReranker:
+            """유스케이스가 기대하는 모양으로 워커를 감싼다(라우터와 같다)."""
+
+            def rerank(self, query, evidence, top_n=None):
+                return worker.rerank(query, evidence, top_n=top_n,
+                                     timeout=st.CLAUSE_RERANK_TIMEOUT_SECONDS)
+
+        reranker = _WorkerReranker()
+        report["rerank_worker"] = {"mode": st.CLAUSE_RERANK_WORKER,
+                                   **{k: v for k, v in worker.stats().items()
+                                      if k in ("loaded", "load_seconds", "load_error")}}
+        print(f"  --  리랭크 워커({st.CLAUSE_RERANK_WORKER}) 준비 — "
+              f"적재 {worker.stats().get('load_seconds')}초")
 
     t0 = time.perf_counter()
     if http_ok:
@@ -138,7 +158,7 @@ def main() -> int:
             return 1
         d = res.json()
     else:
-        from app.adapters.pgvector_index import get_conn
+        from db.postgres.pgvector_index import get_conn
         from app.composition import build_clause_search_deps
         from app.core.usecases import clause_search
 
@@ -161,7 +181,41 @@ def main() -> int:
     report["body"] = {k: v for k, v in d.items() if k != "hits"}
     report["hits"] = d["hits"]
     check(f"검색 요청(rerank={a.rerank})", True, f"HTTP 200 · {elapsed}초")
-    check("근거 후보를 찾음", len(d["hits"]) > 0, f"{len(d['hits'])}건")
+    #: ★★**0건을 무조건 실패로 보지 않는다.**
+    #:
+    #:   「근거를 못 찾았다」와 「검색이 못 돈다」는 전혀 다른 말이다 —
+    #:   이 프로젝트가 가장 신경 쓰는 구분이다(CLAUDE.md §0: "확인 불가"가 정답인 경우가 있다).
+    #:   검색은 거리 상한(`MAX_DISTANCE`)을 넘는 것을 **버린다.** 질의가 코퍼스에서
+    #:   멀면 0건이 나오고, 그건 **옳은 동작**이다.
+    #:
+    #:   실측 2026-08-25: 「임신 중 초음파 검사는 보장되나요」의 최근접이 1.1433 으로
+    #:   상한 1.13 을 아슬하게 넘었다. 그 최근접은 「NH농협생명 · 준용규정」 —
+    #:   실제로 무관하다. 컷오프가 제 일을 한 것인데 스크립트가 **실패로 찍었다.**
+    #:
+    #:   그래서 상한을 풀고 다시 재 본다. 가까운 것이 있는데 0건이면 **진짜 결함**이고,
+    #:   가까운 것 자체가 없으면 **근거 없음**이다. 둘을 갈라 보고한다.
+    if d["hits"]:
+        check("근거 후보를 찾음", True, f"{len(d['hits'])}건")
+    else:
+        from db.postgres import pgvector_clause_index as _ix
+        from db.postgres.pgvector_index import get_conn as _get_conn
+
+        with _get_conn() as _c:
+            probe = _ix.search(_c, emb.encode(a.query), sha256s=None, limit=1,
+                               max_distance=0)          # 0 = 상한 없음
+        nearest = probe[0].distance if probe else None
+        report["nearest_distance_uncapped"] = nearest
+        if nearest is not None and nearest > _ix.MAX_DISTANCE:
+            #: 실패가 아니다 — 사실이다. 색인은 돌았고, 쓸 만큼 가까운 것이 없었다.
+            report["checks"].append({
+                "name": "근거 후보를 찾음", "ok": None,
+                "detail": f"0건 — 최근접 {nearest:.4f} 가 상한 {_ix.MAX_DISTANCE} 를 넘는다"})
+            print(f"  --  근거 후보 0건 — **근거 없음이지 장애가 아니다.** "
+                  f"최근접 {nearest:.4f} > 상한 {_ix.MAX_DISTANCE}")
+            print(f"      (그 최근접: {probe[0].insurer} · {probe[0].title[:40]})")
+        else:
+            check("근거 후보를 찾음", False,
+                  f"0건인데 최근접이 {nearest} — 상한 때문이 아니다. 색인·필터를 의심한다")
     check("재정렬 여부가 요청과 일치", d["reranked"] is a.rerank, f"reranked={d['reranked']}")
     check("어느 색인으로 찾았는지 남김", "index_generation" in (d.get("provenance") or {}),
           str(d.get("provenance", {}).get("index_generation")))

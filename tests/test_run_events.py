@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.db.database import SessionLocal
-from app.db.models import RunEvent
+from db.sqlite_legacy.connection import SessionLocal
+from db.sqlite_legacy.models import RunEvent
 from app.obs.events import record_event
 from app.obs.trace import set_trace_id
 

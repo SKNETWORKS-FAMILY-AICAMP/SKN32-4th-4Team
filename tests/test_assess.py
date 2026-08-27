@@ -66,6 +66,17 @@ def test_같은_문장의_코드와_명시적_지급선언이_있을_때만_긍�
     assert result.cited_clause_ids
 
 
+def test_같은_문장에_단서_제외가_있으면_긍정하지_않는다():
+    """코덱스 반례(2026-08-26) — "F32는 보장합니다(단, 계약 전 발병은 제외합니다)"가
+    `_NEGATIVE_PAYMENT`(보장하지 않)엔 안 걸려 LIKELY_COVERED 로 새는 걸 재현한다."""
+    result = assess(
+        _bundle(_row("제1조", "F32 질병의 치료비를 보상합니다(단, 계약 전 발병은 제외합니다).")),
+        _req("F32"),
+    )
+    assert result.verdict is not Verdict.LIKELY_COVERED
+    assert result.verdict is Verdict.NEEDS_EXPERT
+
+
 def test_일부_코드만_긍정이면_전체를_긍정하지_않는다():
     result = assess(
         _bundle(_row("제1조", "F32 질병의 치료비를 보상합니다.")),

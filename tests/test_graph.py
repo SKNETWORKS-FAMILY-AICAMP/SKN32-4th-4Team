@@ -291,6 +291,10 @@ def _row(**kw):
         #:   식별자가 없으면 기권하므로 픽스처도 채워야 한다 —
         #:   전에는 없어도 통과했는데, 그게 곧 **아무 행이나 대조**할 수 있다는 뜻이었다.
         ordinal=0,
+        #: ★★`occurrence_id` v2 는 **산출물이 매긴 자리**를 쓴다(2026-08-27).
+        #:   위 `ordinal` 은 검색용 재번호라 게이트 판정이 바뀌면 밀린다 —
+        #:   영구 식별자에 넣으면 어제 발급한 인용이 다른 조항을 가리킨다.
+        source_ordinal=0,
         release_id="test-release",
         #: 공통 게이트(`app/core/domain/eligibility.py`)가 보는 값
         citation_eligible=True,

@@ -33,7 +33,7 @@ def test_세대는_clause_tag_에서_파생된다():
 
 def test_릴리스를_바꾸면_모든_경로가_따라간다(tmp_path, monkeypatch):
     """★한 곳만 안 따라가면 그 경로가 옛 세대를 판정 근거로 쓴다."""
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     cfg = json.loads((release._FILE).read_text(encoding="utf-8"))
     cfg["clause_tag"] = "s99_fake-1.0"
@@ -120,7 +120,7 @@ def test_판정_한건_안에서_릴리스가_고정된다():
     세대는 새 것, 임베딩 프로필은 옛 것 — 그런 조합이 나오면
     "어느 약관 판으로 판정했나"를 답할 수 없다.
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     fake = release.AcceptedRelease(
         release_id="x", page_tag="", clause_tag="s99_t", document_count=0,
@@ -140,7 +140,7 @@ def test_판정_유스케이스가_릴리스를_고정한다(monkeypatch):
       문자열 검사는 구현을 조금만 바꿔도 거짓 실패를 내고,
       정작 중간 전환 경쟁은 못 잡는다(코덱스 라운드3 지적).
     """
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
     from app.core.domain.precheck_result import PrecheckInput
     from app.core.usecases import precheck
 
@@ -236,7 +236,7 @@ def test_그래프_전체가_릴리스를_고정한다():
 
 def test_중첩_pinned_는_바깥_스냅샷을_물려받는다():
     """`precheck.run()` 이 그래프 안에서 불려도 같은 릴리스를 봐야 한다."""
-    from app.adapters import pgvector_clause_index as ix
+    from db.postgres import pgvector_clause_index as ix
 
     outer = release.AcceptedRelease(
         release_id="o", page_tag="", clause_tag="s98_t", document_count=0,
@@ -286,11 +286,18 @@ def test_occurrence_id_는_모르면_비운다():
 
     base = dict(sha256="a" * 64, qualified_no="제1조", clause_no="1", section="",
                 title="", text="x", page_from=1, page_to=1, content_hash="h")
-    assert ClauseRow(**base, ordinal=0, release_id="r1").occurrence_id.startswith("r1:")
+    #: ★v2 — `source_ordinal`(산출물 자리) + `content_hash` 를 쓴다.
+    #:   검색용 `ordinal` 은 게이트가 바뀌면 밀리므로 영구 식별자에 안 넣는다(2026-08-27).
+    assert ClauseRow(**base, source_ordinal=0, release_id="r1").occurrence_id         == "v2:r1:" + "a" * 64 + ":clause:0:h"
     #: 릴리스를 모르면 빈 문자열
-    assert ClauseRow(**base, ordinal=0).occurrence_id == ""
-    #: ordinal 을 모르면 빈 문자열
+    assert ClauseRow(**base, source_ordinal=0).occurrence_id == ""
+    #: 산출물 자리를 모르면 빈 문자열
     assert ClauseRow(**base, release_id="r1").occurrence_id == ""
+    #: ★검색용 ordinal 만 있는 것으로는 안 된다 — 그게 v1 의 결함이었다
+    assert ClauseRow(**base, ordinal=0, release_id="r1").occurrence_id == ""
+    #: ★내용 해시를 모르면 빈 문자열 — 자리가 밀렸는지 확인할 수 없다
+    assert ClauseRow(**{**base, "content_hash": ""},
+                     source_ordinal=0, release_id="r1").occurrence_id == ""
 
 
 def test_인용_검증이_공통_게이트를_다시_부른다():

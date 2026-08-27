@@ -8,21 +8,23 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy.orm import Session
-
-from app.db.models import RunEvent
+from app.auth.user_types import AuthStore
 from app.obs.trace import get_trace_id
 from db.postgres.auth_repository import PgAuthStore
 from db.postgres.ops_repository import PgOpsStore
 
 
 def record_event(
-    db: Session | PgAuthStore | PgOpsStore, kind: str, detail: dict | None = None
-) -> RunEvent | None:
+    db: AuthStore | PgOpsStore, kind: str, detail: dict | None = None
+) -> object | None:
     """현재 trace_id로 이벤트를 append한다. detail은 요약 dict(원문·민감정보 금지)."""
     if isinstance(db, (PgAuthStore, PgOpsStore)):
         db.record_event(get_trace_id() or "no-trace", kind, detail)
         return None
+    #: ★레거시 SQLite 분기 **안에서만** 적재한다 — 최상단에서 부르면
+    #:   PostgreSQL 전용 배포에도 SQLAlchemy 가 딸려 온다(`app/auth/user_types.py`).
+    from db.sqlite_legacy.models import RunEvent
+
     event = RunEvent(
         trace_id=get_trace_id() or "no-trace",
         kind=kind,
