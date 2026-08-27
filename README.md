@@ -7,7 +7,7 @@
 
 ## 1. 팀 소개 — 팀명 "비서단"
 
-| <img src="https://github.com/kimji9663.png" width="120"> | <img src="https://github.com/cls15rn.png" width="120"> | <img src="https://github.com/changlike.png" width="120"> | <img src="https://github.com/jjh430" width="120"> | <img src="https://github.com/roroblack" width="120"> |
+| <img src="https://github.com/kimji9663.png" width="120"> | <img src="https://github.com/cls15rn.png" width="120"> | <img src="https://github.com/changlike.png" width="120"> | <img src="https://github.com/jjh430.png" width="120"> | <img src="https://github.com/roroblack.png" width="120"> |
 |:---:|:---:|:---:|:---:|:---:|
 | 김지혜 | 서유현 | 송채영 | 정재희 | 최연우 |
 |<a href="https://github.com/kimji9663"><img src="https://img.shields.io/badge/kimji9663-18171?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/cls15rn"><img src="https://img.shields.io/badge/cls15rn-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/changlike"><img src="https://img.shields.io/badge/changlike-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/jjh430"><img src="https://img.shields.io/badge/jjh430-181717?style=for-the-badge&logo=github&logoColor=white"></a>|<a href="https://github.com/roroblack"><img src="https://img.shields.io/badge/roroblack-181717?style=for-the-badge&logo=github&logoColor=white"></a>|
