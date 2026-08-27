@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<title>올바른 보험비서 — 데모 스토리보드 (사람 · 에이전트 2트랙)</title>
+<style>
+  :root{--fg:#1a1a1a;--mut:#666;--bd:#e2e2e2;--bg:#fff;--acc:#0b5fa5;--warn:#a54b0b;--dang:#a51b1b;--ok:#0b7a3b;--card:#fafafa;--gray:#777;--agent:#5b3fa5}
+  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--mut:#a0a0a0;--bd:#333;--bg:#161616;--acc:#6fb3ec;--warn:#e8a05a;--dang:#e88;--ok:#6cc48f;--card:#1e1e1e;--gray:#999;--agent:#b49ae8}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;font:15px/1.75 -apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:var(--fg);background:var(--bg)}
+  main{max-width:1100px;margin:0 auto}
+  h1{font-size:1.7rem;font-weight:600;margin:0 0 .3rem}
+  h2{font-size:1.25rem;font-weight:600;margin:2.8rem 0 .8rem;padding-bottom:.4rem;border-bottom:2px solid var(--bd)}
+  .sub{color:var(--mut);margin:0 0 2rem}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600}
+  code{background:var(--card);padding:.1rem .35rem;border-radius:3px;font:13px ui-monospace,Consolas,monospace}
+  pre{background:var(--card);border:1px solid var(--bd);border-radius:6px;padding:.9rem 1rem;overflow-x:auto;font:12.5px/1.6 ui-monospace,Consolas,monospace}
+  .box{border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:0 6px 6px 0;padding:.85rem 1.1rem;margin:1.1rem 0;background:var(--card)}
+  .box.w{border-left-color:var(--warn)} .box.d{border-left-color:var(--dang)} .box.k{border-left-color:var(--ok)}
+  .box b{display:block;margin-bottom:.3rem}
+  ul{padding-left:1.2rem} li{margin:.25rem 0} ol{padding-left:1.3rem}
+  .cut{border:1px solid var(--bd);border-radius:8px;margin:1.6rem 0;overflow:hidden}
+  .cut>.hd{background:var(--card);border-bottom:1px solid var(--bd);padding:.55rem .95rem;font-weight:600;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+  .cut>.hd .no{font-variant-numeric:tabular-nums;color:var(--acc)}
+  .cut>.hd .who{margin-left:auto;font-weight:400;font-size:.8rem;color:var(--mut)}
+  .cut>.bd{padding:.9rem 1.1rem}
+  .lanes{display:grid;grid-template-columns:1fr 1fr;gap:.9rem;margin:.2rem 0 .8rem;align-items:start}
+  /* ★2단 유지가 이 문서의 요점(사람 ↔ 에이전트 대조)이라, 좁아지면 접지 말고 글자를 줄인다.
+     실측: 730px 패널에서 11px 이면 레인 폭 309px · 가로 넘침 0. 640px 아래에서만 세로로 쌓는다. */
+  @media(max-width:900px){.lane pre{font-size:11px;line-height:1.55}}
+  @media(max-width:640px){.lanes{grid-template-columns:1fr} .lane pre{font-size:12px}}
+  .lane>.lh{font-size:.78rem;font-weight:700;letter-spacing:.02em;margin-bottom:.35rem}
+  .lane.human>.lh{color:var(--acc)} .lane.agent>.lh{color:var(--agent)}
+  .lane pre{margin:0;white-space:pre-wrap;word-break:break-word}
+  .lane.human pre{background:var(--bg);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .lane.agent pre{background:var(--card);border-left:3px solid var(--agent)}
+  @media(prefers-color-scheme:dark){.lane.human pre{background:#111;box-shadow:none}}
+  .why{font-size:.88rem;color:var(--mut);border-top:1px dashed var(--bd);padding-top:.6rem}
+  .why b{color:var(--fg)}
+  .pill{display:inline-block;padding:.05rem .5rem;border-radius:999px;font-size:.78rem;border:1px solid currentColor;font-weight:600}
+  .p-ok{color:var(--ok)} .p-cond{color:var(--warn)} .p-no{color:var(--dang)} .p-unk{color:var(--gray)}
+</style>
+
+</head><body><main>
+
+<h1>올바른 보험비서 — 데모 스토리보드</h1>
+<p class="sub">팀 비서단 · 2026-08-02 · <b>사람 화면 · 에이전트 JSON 2트랙</b> · 9컷<br>
+근거: <code>app/schemas/precheck.py</code>(실제 계약) · <code>06_계약_Agent.md</code> · <code>08_계약_프론트.md</code> · <code>MVP 기능선정 §5·§6</code></p>
+
+<div class="box d">
+  <b>왜 2트랙인가 — 화면만 그리면 우리 주장을 증명하지 못한다</b>
+  <code>MVP 기능선정 §6</code>: <b style="display:inline">"AI 에이전트가 화면 없이 직접 쓴다는 것이 이 프로젝트의 포지셔닝 전체이고,
+  그 주장의 유일한 증거가 에이전트 경로다. 증거 없는 포지셔닝은 발표에서 X."</b><br><br>
+  그래서 <b style="display:inline">같은 9컷을 두 표면으로 그린다.</b> 사람은 화면을 보고, 에이전트는 JSON을 받는다.
+  둘은 <b style="display:inline">같은 유스케이스(<code>precheck.run()</code>)</b>를 부르며 로직을 두 벌 만들지 않는다.
+</div>
+
+
+
+<h2>0. 두 표면 · 하나의 코어</h2>
+
+<pre>                        <span style="white-space:pre">	</span>┌────────────────────────────┐
+    사람   ──▶ 웹 화면 ──▶<span style="white-space:pre">	</span>│                            │
+                        <span style="white-space:pre">	</span>│      precheck.run()        │──▶ PrecheckResult
+    에이전트 ─▶ REST ─────▶<span style="white-space:pre">	</span>│      (동일 유스케이스)      │      · verdict / abstained
+             └─ MCP ────▶<span style="white-space:pre">	</span>│                            │      · applied_policy
+                        <span style="white-space:pre">	</span>└────────────────────────────┘      · citations[]
+                                <span style="white-space:pre">	</span>                            · warnings[]
+    REST  POST /v1/prechecks   ← 정본             <span style="white-space:pre">	</span>            · trace_id
+    MCP   insurance_precheck   ← 얇은 어댑터
+</pre>
+
+<table>
+<tbody><tr><th>MCP 도구 (3개면 충분하다)</th><th>대응 REST</th><th>scope</th></tr>
+<tr><td><code>insurance_precheck</code></td><td><code>POST /v1/prechecks</code></td><td><code>precheck:read</code></td></tr>
+<tr><td><code>policy_clause_search</code></td><td><code>POST /v1/terms/search</code></td><td><code>terms:read</code></td></tr>
+<tr><td><code>submit_case_observation</code></td><td><code>POST /v1/observations</code></td><td><code>observations:write</code></td></tr>
+</tbody></table>
+
+<div class="box">
+<b>★HTTP 상태 계약 — "확인 불가"는 오류가 아니다</b>
+<table style="margin:.4rem 0 0">
+<tbody><tr><th>코드</th><th>뜻</th></tr>
+<tr><td><code>200</code></td><td>판정했다. <b>기권(<code>abstained=true</code>)이어도 200</b> — 근거를 못 대서 기권한 것은 정상 결과다</td></tr>
+<tr><td><code>422</code></td><td>입력이 잘못됐다 (가입일 형식 등)</td></tr>
+<tr><td><code>503</code></td><td>검색·저장소 장애. <b>이때만 우리 잘못이다</b></td></tr>
+</tbody></table>
+<div style="margin-top:.5rem">이 구분이 무너지면 <b>클라이언트가 기권과 장애를 못 가린다.</b> 에이전트에게는 이게 화면보다 중요하다 — 5xx를 받으면 재시도 루프를 돈다.</div>
+</div>
+
+<h2>1. 전체 흐름</h2>
+<pre>                        사람 화면                      에이전트 JSON
+ ①  지원범위 선언        안내 카드                      <span style="white-space:pre">	</span>GET  /v1/support-manifest
+ ②  KCD 추출·승인        체크박스로 사용자 승인         <span style="white-space:pre">	</span>POST /v1/prechecks (kcd_codes[])
+ ③  되묻기               상품군 카드 3종                <span style="white-space:pre">	</span>200 + reason_code + candidates[]
+ ④  약관 버전 확정       "왜 이 약관인가" 표시           <span style="white-space:pre">	</span>applied_policy 블록
+ ⑤  판정 + 근거          근거 사슬 화면                  verdict + per_code[] + citations[]
+ ⑥  확인 불가            '확인 불가' 카드                200 + abstained=true    ← ★기권도 200
+ ⑦  경고                 ⚠ 배너 (숨기지 않음)           warnings[] + *_confidence
+ ⑧  코호트               실제 / DEMO 두 구역 분리        data_source 필드 필수
+ ⑨  증빙 제출 → 검수     제출 → 검수 대기                <span style="white-space:pre">	</span>POST /v1/observations (+멱등키)
+</pre>
+
+<h2>2. 컷</h2>
+
+<div class="cut">
+<div class="hd"><span class="no">①</span> 지원범위 — 무엇을 답할 수 있나<span class="who">최연우 · 정재희</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람 — 웹 화면</div>
+<pre> 올바른 보험비서
+ 진료비 내역서의 질병기호와 약관을 대조해
+ 보장 여부를 미리 확인합니다.
+
+ 지금 답할 수 있는 범위
+  · 보험사 12곳 · 판정 가능 약관 1,240건
+  · 세대 1~5세대
+  · 여행자보험 · 주택 풍수해보험은 대상이 아닙니다
+
+                 [ 시작하기 ]</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — GET /v1/support-manifest</div>
+<pre>{
+  "insurers": [
+    { "name": "DB손해보험",
+      "versions": 236,
+      "generations": [1,2,3,4],
+      "lines": ["medical_indemnity"],
+      "earliest": "20130102",
+      "latest":   "20260401" }
+  ],
+  "schema_version": "v1"
+}
+
+# MCP 리소스로도 같은 것
+insurance://support-manifest</pre></div>
+</div>
+<div class="why"><b>왜 이 컷이 먼저인가</b> — 범위를 선언하지 않으면 범위 밖 질문에도 답하는 것처럼 보인다.
+<b>에이전트에게 특히 중요하다</b> — 사람은 화면을 보고 포기하지만, 에이전트는 없는 보험사를 계속 물어본다.
+★<b>"1,367건 전부 지원"이라고 말하지 않는다.</b> 판정에 쓸 수 있는 것만 센다.</div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">②</span> 입력 — KCD 추출과 승인<span class="who">최연우 · 서유현</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람 — 확인 후 승인</div>
+<pre> 처방전을 올리거나 직접 입력하세요
+ [ 파일 선택 ]   또는   질병명 입력
+
+ 읽어낸 질병기호        ← 확인해 주세요
+  ☑ F32  우울에피소드    신뢰도 0.94
+  ☑ E66  비만           신뢰도 0.71 ⚠
+  ☐ S72  대퇴골 골절     신뢰도 0.42 ⚠
+
+ 보험사 [ DB손해보험 ▾ ] 가입일 [2020-03-01]
+
+           [ 이 내용으로 확인 ]</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — POST /v1/prechecks</div>
+<pre>Authorization: Bearer &lt;api-key&gt;
+Content-Type: application/json
+
+{
+  "insurer": "DB손해보험",
+  "enrolled_on": "20200301",
+  "kcd_codes": ["F32", "E66", "S72"],
+  "product_name": "프로미라이프 실손의료비",
+  "client_ref": "chatgpt-ins-agent/req-8812"
+}</pre></div>
+</div>
+<div class="why"><b>★두 트랙의 차이가 가장 큰 컷</b> — 사람 트랙에는 <b>승인 단계</b>가 있지만 에이전트 트랙에는 없다.
+그래서 <b>승인 책임이 에이전트 쪽으로 넘어간다.</b> 우리는 <code>client_ref</code> 로 누가 보냈는지만 남기고
+OCR 신뢰도 판단을 대신해 주지 않는다.<br>
+사람 트랙에서는 신뢰도 낮은 항목을 <b>기본 해제</b>로 둔다. 자동으로 켜 두면 사용자는 확인했다고 착각한다.
+(<code>case_diagnosis.user_corrected</code> 로 OCR 값과 승인 값을 구분해 저장한다.)</div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">③</span> 되묻기 — 1:N 이면 확정하지 않는다<span class="who">최연우 · 송채영</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람 — 카드로 고르게 한다</div>
+<pre> 어떤 실손보험인가요?
+ 같은 보험사라도 상품군에 따라 보장이 다릅니다.
+
+ ( 일반 실손 )  ( 노후 실손 )  ( 유병력자 실손 )
+
+ 모르겠어요 → 증권의 상품명을 확인해 주세요</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — 200 + candidates[]</div>
+<pre>HTTP/1.1 200 OK          ← 오류가 아니다
+
+{
+  "verdict": "needs_expert",
+  "abstained": true,
+  "reason_code": "ambiguous_product_line",
+  "message": "상품군이 여럿입니다",
+  "candidates": [
+    { "product_name": "프로미라이프 실손의료비",
+      "product_line": "general", "generation": 3 },
+    { "product_name": "…노후실손…",
+      "product_line": "senior",  "generation": 3 }
+  ],
+  "trace_id": "tr_01K9…"
+}</pre></div>
+</div>
+<div class="why"><b>왜 자동으로 안 고르나</b> — "우울증"은 코드 하나가 아니고(F32·F33·F34.1…), 상품군마다 판정이 다르다.
+자동으로 하나 고르면 <b>틀린 답을 확신 있게</b> 준다. 되묻는 화면이 있는 것은 결함이 아니라 <b>설계</b>다.<br>
+<b>에이전트 트랙에서는 이게 대화 턴이 된다</b> — 우리가 <code>candidates</code> 를 주면 에이전트가 자기 사용자에게 되묻는다.
+<b>되묻는 책임은 넘기되 후보와 근거는 우리가 준다.</b></div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">④</span> 적용 약관 버전 확정 — "왜 이 약관인가"<span class="who">송채영</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람</div>
+<pre> 적용 약관을 확정했습니다
+
+  가입일 2020-03-01 → 3세대 (착한실손)
+  DB손해보험 · 프로미라이프 실손의료비
+  판매기간 2017-04-01 ~ 2021-06-30
+
+  판매시점 근거: 사이트 판매기간 (exact)
+                         [ 원문 보기 ]</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — applied_policy</div>
+<pre>"applied_policy": {
+  "insurer": "DB손해보험",
+  "product_name": "프로미라이프 실손의료비",
+  "sale_start": "20170401",
+  "sale_end":   "20210630",
+  "generation": 3,
+  "generation_label": "3세대(착한실손)",
+  "product_line": "medical_indemnity",
+  "sha256": "d2d44ff8bfde…",
+  "date_confidence": "exact",
+  "generation_confidence": "exact",
+  "parse_status": "ok"
+}</pre></div>
+</div>
+<div class="why"><b>이 컷이 빠지면 제품이 아니다</b> — 현행 약관을 구계약에 조용히 대입하는 것이 오답의 직접 원인이다.
+무엇으로 판단했는지가 보여야 사용자가 틀린 걸 잡아낼 수 있다.<br>
+에이전트 트랙에는 <code>sha256</code> 까지 나간다 — <b>어느 파일로 판정했는지를 기계가 대조할 수 있어야</b>
+나중에 "왜 그때 그렇게 답했나"를 재현한다.</div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">⑤</span> ★판정 4단 + 근거 — 핵심 컷<span class="who">송채영 · 최연우</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람 — 근거 사슬</div>
+<pre> 조건부 확인 필요   F32 (우울에피소드)
+ 요양급여 해당 여부 확인이 필요합니다.
+
+ └ 적용 약관 : DB손해보험 · 3세대 · 2017-04-01
+ └ 근거     : 보통약관 4.1 (보상하지 않는 사항)
+              33~38쪽
+     "…정신 및 행동장애(F04∼F99). 다만,
+      F04∼F09, F20∼F29 … 는 보상합니다"
+ └ 조건     : 급여 항목에 한함 · 자기부담금 20%
+                         [ 원문 보기 ]
+
+ 부족한 서류
+  · 진단서(질병분류기호 기재)</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — verdict + citations[]</div>
+<pre>{
+  "schema_version": "v1",
+  "verdict": "needs_documents",
+  "abstained": false,
+  "reason_code": "exception_applies",
+  "per_code": [
+    { "code": "F32",
+      "verdict": "needs_documents",
+      "reason_code": "exception_applies" }
+  ],
+  "citations": [
+    { "clause_id": "d2d44ff8bfde/보통약관/4.1",
+      "qualified_no": "보통약관/4.1",
+      "section": "보통약관",
+      "title": "보상하지 않는 사항",
+      "quote": "…정신 및 행동장애(F04∼F99). 다만…",
+      "page_from": 33, "page_to": 38,
+      "tier": "policy_clause" }
+  ],
+  "rule_engine_version": "r1",
+  "extractor": "s4_pymupdf-1.28.0",
+  "trace_id": "tr_01K9…"
+}</pre></div>
+</div>
+<table>
+<tbody><tr><th><code>verdict</code> — 실제 코드 값</th><th>사람 화면 표시</th><th>뜻</th></tr>
+<tr><td><code>likely_covered</code></td><td><span class="pill p-ok">보장 가능</span></td><td>보장 조항 근거가 있다</td></tr>
+<tr><td><code>needs_documents</code></td><td><span class="pill p-cond">조건부 확인 필요</span></td><td>요양급여 해당 여부 등 확인이 필요하다</td></tr>
+<tr><td><code>unlikely</code></td><td><span class="pill p-no">면책 가능성</span></td><td>면책 조항 근거가 있다</td></tr>
+<tr><td><code>needs_expert</code></td><td><span class="pill p-unk">확인 불가</span></td><td>★근거가 부족하다. 사람이 봐야 한다 — <b>정상 결과</b></td></tr>
+</tbody></table>
+<div class="why"><b>필수 3요소</b> — 적용 약관 · 조항 번호와 쪽수 · 실제 인용문. 셋 중 하나라도 없으면 원문을 찾아갈 수 없다.
+그리고 <b>유리한 조항만 보여주지 않는다</b> — 보장 조항과 면책 조항을 함께 낸다.<br>
+에이전트에는 <code>clause_id</code> 와 <code>tier</code> 가 추가로 나간다 — <code>tier="policy_clause"</code> 인 것만 판정 근거이고,
+<code>external_report</code>·<code>statistics</code> 는 참고다.
+★<b>이진 판정(된다/안된다)은 만들지 않는다.</b> 값 자체에 그 원칙이 박혀 있다.</div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">⑥</span> ★확인 불가 — 이것도 정상 결과다<span class="who">최연우 · 정재희</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람</div>
+<pre> 확인 불가   S72 (대퇴골 골절)
+ 약관에서 근거를 찾지 못했습니다.
+ 보장 여부를 판단할 수 없습니다.
+
+ 왜 판단하지 못했나
+  · 이 질병기호를 다루는 조항을 찾지 못했습니다
+
+ 다음 중 하나를 해 보세요
+  · 상품명을 더 정확히 입력
+  · 전문가 상담 (약관 원문 확인 필요)</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — ★200이지 5xx가 아니다</div>
+<pre>HTTP/1.1 200 OK
+
+{
+  "verdict": "needs_expert",
+  "abstained": true,
+  "reason_code": "no_evidence",
+  "message": "근거 조항을 찾지 못했습니다",
+  "citations": [],
+  "applied_policy": { … },
+  "trace_id": "tr_01K9…"
+}
+
+# 다른 기권 사유
+#  document_not_reliable  parse_status != ok
+#  citation_unverified    인용 검증 실패 → 초안 폐기
+#  no_version_at_date     그 시점 약관 없음
+#  insurer_not_supported  미보유 보험사</pre></div>
+</div>
+<div class="box d" style="margin:.2rem 0 .6rem">
+<b>절대 하면 안 되는 것</b>
+<ul style="margin:.2rem 0 0">
+<li><code>needs_expert</code> 를 <b>"보장 안 됨"</b>으로 표시 — 전혀 다른 뜻이다</li>
+<li><code>needs_documents</code> 를 <b>"보장"</b>으로 표시 — 조건이 있다</li>
+<li><b>면책 목록에 없다</b>는 것을 "보장됩니다"로 표시 — 보장은 '보상하는 사항' 조항이 정한다</li>
+<li>기권을 <b><code>5xx</code></b> 로 내보내기 — 에이전트가 재시도 루프를 돈다</li>
+</ul>
+</div>
+<div class="why"><b>사람 트랙 주의</b> — 회색으로 흐리게 처리하면 "실패"로 읽힌다. 다른 판정과 크기·대비를 같게 둔다.<br>
+<b>에이전트 트랙 주의</b> — <code>abstained</code> 를 안 보고 <code>verdict</code> 만 읽는 클라이언트가 반드시 생긴다.
+그래서 <code>reason_code</code> 를 <b>항상</b> 채우고 스키마 리소스(<code>insurance://schemas/precheck-v1</code>)에 명시한다.</div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">⑦</span> 경고 — 조용히 숨기지 않는다<span class="who">최연우 · 정재희</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람 — 접지 않는다</div>
+<pre> ⚠ 판매시점을 월까지만 확인했습니다.
+   경계 시점 가입이면 세대가 다를 수 있습니다.
+
+ ⚠ 이 문서는 조항 구조화가 완전하지 않습니다.
+   근거 위치가 부정확할 수 있습니다.</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — warnings[] + 필드</div>
+<pre>"warnings": [
+  "date_confidence=month: 판매시점을 월까지만
+   확인했습니다. 경계 시점이면 세대가 다를 수
+   있습니다",
+  "parse_status=suspect: 조항 구조화가
+   불완전합니다"
+],
+"applied_policy": {
+  "date_confidence": "month",
+  "generation_confidence": "month",
+  "parse_status": "suspect"
+}</pre></div>
+</div>
+<div class="why"><b>규칙</b> — <code>warnings</code> 가 비어 있지 않으면 <b>반드시</b> 보여준다. 접거나 툴팁으로 숨기지 않는다.
+자동 복구를 하더라도 <b>감사 신호를 남긴다</b> — 신호 없는 자동 복구는 안전장치가 아니라 폴백이다.<br>
+★에이전트 트랙에서는 <b>사람이 읽을 문장과 기계가 읽을 필드를 둘 다</b> 준다.
+문자열만 주면 에이전트가 파싱하려 들고, 필드만 주면 최종 사용자에게 전달되지 않는다.</div>
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">⑧</span> 코호트 — 실제와 데모를 섞지 않는다<span class="who">김지혜 · 최연우</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람 — 두 구역 분리</div>
+<pre> 비슷한 사례
+
+ ── 실제 청구 결과 ──────────────
+    n = 0 · 비공개
+    아직 검증된 실제 사례가 없습니다.
+
+ ── DEMO / SYNTHETIC ────────────
+    합성 데이터입니다. 실제 통계가 아닙니다.
+    40건 중 33건 승인
+    ⚠ 표본이 적어 실제 비율과 다를 수 있습니다
+    ⚠ 지급받은 사람이 더 많이 제보합니다</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — 경로 자체가 다르다</div>
+<pre>GET /v1/cohorts          ← 실제
+{ "data_source": "verified_real",
+  "n": 0, "published": false,
+  "message": "검증된 실제 사례가 없습니다" }
+
+GET /v1/demo/cohorts     ← 합성
+{ "data_source": "synthetic",
+  "n": 40, "approved_n": 33, "denied_n": 7,
+  "min_sample": 30,            # 잠정치
+  "min_sample_met": true,
+  "approval_rate": 0.825,      # 표본 관측값 (모집단 추정 아님)
+  "approval_ci": [0.681, 0.913],   # ★95% 신뢰구간, 항상 짝으로
+  "headline": "검증된 과거 사례 40건 중 33건 승인 · 7건 부지급
+               (이 사례들의 승인 비율은 68%~91% 범위로 추정됩니다
+                · 95% 신뢰구간 · 본인의 결과를 예측하지 않습니다)",
+  "warnings": [
+    "합성 데이터입니다. 실제 지급 통계가 아닙니다.",
+    "제보 편향: 지급받은 사람이 부지급 사례보다
+     더 많이 제보하는 경향이 있습니다",
+    "이 수치는 우리가 수집·검증한 표본 기준이며
+     보험사 전체 통계가 아닙니다",
+    "에이전트 간 중복 제출은 감지하지 못합니다"
+  ],
+  "collection_path": "demo",
+  "as_of": "2026-08-02" }</pre></div>
+</div>
+<div class="why"><b>절대 규칙</b> — 두 구역을 <b>같은 목록에 합치지 않는다.</b> UNION 하는 뷰·쿼리·엔드포인트를 만들지 않는다.
+"승인율 82.5%"라고 쓰지 않고 <b>"40건 중 33건 승인"</b>과 경고를 함께 쓴다.
+생존 편향은 <b>사후 보정이 불가능한 구조적 편향</b>이라 숫자로 고칠 수 없고 말로 밝혀야 한다.<br>
+★<b>에이전트에게 <code>data_source</code> 를 생략하지 않는다.</b> 사람은 화면의 DEMO 배지를 보지만,
+에이전트는 필드를 안 보면 <b>합성 수치를 실제로 오해해 자기 사용자에게 전달한다.</b></div>
+
+<div class="box d" style="margin:.9rem 0 0">
+<b>★왜 "승인 확률"로 표시하지 않나 — 이유 셋</b>
+<ul style="margin:.25rem 0 .5rem">
+<li><b>빈도는 사실, 확률은 예측이다.</b> "40건 중 33건"은 과거 사실이지만 "82% 확률로 승인"은 예측이고, 우리 표본으로는 못 받친다</li>
+<li><b>개인 확률은 비범위다.</b> <code>MVP §4</code> — "개인 예상 지급액 제시(손해사정 유사행위 소지) · 과거 분포만 표시"</li>
+<li><b>확률로 말하면 편향이 숫자 안으로 숨는다.</b> 빈도로 말하면 편향 경고가 숫자 <b style="display:inline">바깥</b>에 남는다</li>
+</ul>
+★<b style="display:inline">그래서 문구에 주어를 박는다.</b> "승인 비율 68%~91%" 라고만 쓰면
+사용자는 <b style="display:inline">"내가 그 확률로 받는다"</b> 로 읽는다 — 신뢰구간은
+<b style="display:inline">모수(과거 사례들의 비율)</b> 에 대한 진술이지 개인에 대한 것이 아니다.
+<pre style="margin:.4rem 0 0">검증된 과거 사례 40건 중 33건 승인 · 7건 부지급
+(이 사례들의 승인 비율은 68%~91% 범위로 추정됩니다
+ · 95% 신뢰구간 · 본인의 결과를 예측하지 않습니다)</pre>
+</div>
+
+
+</div></div>
+
+<div class="cut">
+<div class="hd"><span class="no">⑨</span> ★증빙 제출 → 검수 — 제품의 증명<span class="who">김지혜 · 정재희</span></div>
+<div class="bd">
+<div class="lanes">
+<div class="lane human"><div class="lh">■ 사람</div>
+<pre>제출 직후
+  제출됨 → 정합성 확인
+  consistent
+  통계  n = 40   (그대로)
+  ⚠ 정합성 통과는 "검증"이 아닙니다.
+
+        ↓  관리자 검수
+
+관리자 검수 후
+  검증 완료
+  verified
+  통계  n = 41   (+1)
+  검증 방법 : 지급통지서
+  검수자   : admin_02</pre></div>
+<div class="lane agent"><div class="lh">▣ 에이전트 — POST /v1/observations</div>
+<pre>Authorization: Bearer &lt;api-key&gt;
+Idempotency-Key: 891f15ac-…      ← 쓰기엔 필수
+
+{
+  "client_ref": "chatgpt-ins-agent/obs-441",
+  "insurer": "DB손해보험",
+  "enrolled_on": "20200301",
+  "kcd_codes": ["F32"],
+  "outcome": "paid",
+  "outcome_reason": "요양급여 인정",
+  "precheck_trace_id": "tr_01K9…"
+}
+
+→ 201 { "verification": "unverified" }  ← ★기본값
+   통계 n 은 움직이지 않는다.
+   관리자가 verified 로 바꿔야 +1 된다.</pre></div>
+</div>
+<div class="box k" style="margin:.2rem 0 .6rem">
+<b>발표에서 관객이 눈으로 봐야 하는 것</b>
+증빙을 제출해도 <b>n이 그대로</b>이고, 관리자가 검증해야 <b>n이 오른다</b>.
+이 차이가 "우리는 정합성과 검증을 구분한다"는 주장의 <b>유일한 증거</b>다.
+</div>
+<div class="why"><b>구조로 강제된다</b> — 집계 뷰가 <code>evidence_verification</code> 을 조인하므로
+<code>unverified</code> 상태로는 통계에 들어갈 수 없다.<br>
+★<b>외부 에이전트가 준 사례는 판정 근거가 아니다</b>(<code>tier="external_report"</code>).
+통계·사후검증에만 쓰고 약관 조항과 같은 인덱스에 넣지 않는다.
+<code>precheck_trace_id</code> 가 있으면 <b>우리 판정과 실제 결과를 대조</b>할 수 있다 — 이게 이 제품의 학습 고리다.</div>
+
+<div class="box w" style="margin:.9rem 0 0">
+<b>★"사람이 검수한다"는 영구 전제가 아니다 — 확장 경로</b>
+지금은 관리자가 한 건씩 본다. <b style="display:inline">규모가 커지면 이건 못 버틴다.</b>
+적어 두지 않으면 "사람이 다 본다"가 영구 전제처럼 굳는다.
+
+<div style="margin:.55rem 0 .35rem"><b style="display:inline">병목 상한을 미리 안다</b> —
+1건 5분 · 하루 2시간이면 <b style="display:inline">하루 24건 · 월 500건 남짓</b>이 한계다.</div>
+
+<div style="margin:.55rem 0 .3rem">★핵심은 <b style="display:inline">"검증"이 한 덩어리가 아니라는 것</b>이다.
+등급을 쪼개면 사람 판단이 꼭 필요한 부분은 생각보다 작다.</div>
+<table style="margin:.3rem 0 .5rem">
+<tbody><tr><th>등급</th><th>실제로 하는 일</th><th>무엇이 대체하나</th></tr>
+<tr><td><code>self_reported</code></td><td>신원 확인</td><td><b>이미 자동</b> — <code>agent_client</code> 인증 + 동의 기록</td></tr>
+<tr><td><code>document_backed</code></td><td>문서가 붙었나, 말이 되나</td><td><b>규칙엔진</b> — 해시 중복 · OCR 필드 추출 · 금액/날짜/보험사/질병코드 정합성</td></tr>
+<tr><td><code>confirmed</code></td><td>발행처가 실제로 그렇게 결정했나</td><td><b>조회지 판단이 아니다</b> — 보험사·기관 API</td></tr>
+<tr><td>(나머지)</td><td>위 어디에도 안 걸리는 건</td><td>★<b>여기만 사람이 본다</b></td></tr>
+</tbody></table>
+<div style="margin:.2rem 0 .5rem">목표는 "사람을 없앤다"가 아니라
+<b style="display:inline">"사람이 전수가 아니라 예외만 본다"</b> 이다.</div>
+
+<pre style="margin:.3rem 0 .5rem">1단계 (지금)  전수 사람 검수                    n &lt; 500
+2단계         자동 정합성 검사 + 이상탐지       → 통과분은 표본 검수(예: 10%)
+3단계         발행처 API 확인                   → confirmed 자동 승격
+4단계         클라이언트 신뢰등급               → 이력 좋은 곳은 표본율 하향
+                                                (감사 추적은 100% 유지)</pre>
+
+<div style="margin:.35rem 0"><b style="display:inline">★스키마는 바뀌지 않는다</b> —
+<code>verification_method NOT NULL</code> 이 이미 "누가·무엇으로"를 요구한다.
+검증 주체가 사람이든 규칙엔진이든 API든 <b style="display:inline">같은 자리에 기록된다.</b>
+자동화는 스키마 변경이 아니라 값의 추가다:
+<code>admin_review | consistency_rules | issuer_api | cross_submission</code></div>
+
+<div style="margin:.35rem 0"><b style="display:inline">★대가 — 등급을 뭉뚱그리지 않는다.</b>
+자동 검증은 사람 검수보다 강도가 낮다. <code>verified</code> 하나로 합치면
+<b style="display:inline">자동화가 진행될수록 통계가 조용히 묽어진다.</b>
+그래서 코호트를 <code>verification_method</code> 별로 쪼개 보고, 화면에는
+"검증 40건"이 아니라 <b style="display:inline">"발행처 확인 12건 · 자동 정합성 28건"</b> 으로 쓴다.</div>
+
+<div><b style="display:inline">하지 않을 것</b> — LLM 이 지급통지서를 읽고 "검증됨"으로 올리는 것.
+그건 검증이 아니라 추측이다. LLM 은 <b style="display:inline">필드를 뽑는 데까지만</b> 쓰고,
+맞는지는 규칙·해시·외부 조회가 판단한다.
+검증 단계의 오류는 <b style="display:inline">판정 오류보다 범위가 넓다</b> — 통계 전체로 번진다.
+자세한 것은 <code>03_에이전트_데이터_축적_설계.md</code> §3-1.</div>
+</div>
+</div></div>
+
+<h2>3. 담당 매핑</h2>
+<table>
+<tbody><tr><th>컷</th><th>사람 트랙</th><th>에이전트 트랙</th><th>코어</th></tr>
+<tr><td>① 지원범위</td><td>최연우</td><td>정재희 (MCP 리소스)</td><td>김지혜</td></tr>
+<tr><td>② 입력·승인</td><td>최연우</td><td>정재희 (인증·scope)</td><td>서유현</td></tr>
+<tr><td>③ 되묻기</td><td>최연우</td><td>정재희</td><td>송채영</td></tr>
+<tr><td>④ 버전 확정</td><td>최연우</td><td>—</td><td>송채영</td></tr>
+<tr><td>⑤ 판정·근거</td><td>최연우</td><td>정재희</td><td>송채영 · 서유현</td></tr>
+<tr><td>⑥ 확인 불가</td><td>최연우</td><td>정재희 (200/422/503)</td><td>송채영</td></tr>
+<tr><td>⑦ 경고</td><td>최연우</td><td>정재희</td><td>전원</td></tr>
+<tr><td>⑧ 코호트</td><td>최연우</td><td>정재희</td><td>김지혜</td></tr>
+<tr><td>⑨ 증빙·검수</td><td>최연우</td><td>정재희 (멱등성)</td><td>김지혜</td></tr>
+</tbody></table>
+
+<h2>4. 시연 시나리오</h2>
+<div class="box">
+<b>같은 케이스를 두 번 보여준다</b>
+<ol style="margin:.3rem 0 0">
+<li><b>사람으로</b> — 웹 화면에서 ①→⑨ 를 끝까지 한 번</li>
+<li><b>에이전트로</b> — 보호 REST 계약에 맞는 curl/외부 HTTP client 로 같은 케이스를 JSON으로.
+같은 <code>verdict</code>·같은 <code>citations</code> 가 나오는 것을 나란히 띄운다</li>
+<li><b>기권 케이스</b> — 근거 없는 질병기호로 <code>needs_expert</code> + <code>200</code></li>
+<li><b>증빙 제출</b> — 제출해도 <code>n</code> 이 안 움직이고, 검수 후 <code>n+1</code></li>
+</ol>
+<div style="margin-top:.5rem">★2번이 포지셔닝을 증명하는 유일한 장면이다. <b>화면만 보여주면 약관 챗봇으로 보인다.</b></div>
+</div>
+
+<h2>5. 범위를 줄여야 한다면</h2>
+<div class="box w">
+<b>줄이는 순서</b>
+① 지원범위 화면 축소 → ③ 되묻기를 단일 상품 고정으로 → ② 처방전 업로드를 직접 입력만으로
+→ MCP 4종을 REST + <code>llms.txt</code> 만으로
+<br><br>
+<b style="display:inline">⑤ ⑥ ⑧ ⑨ 와 에이전트 트랙 자체는 줄이지 않는다.</b>
+앞의 넷은 정직성 장치이고, 에이전트 트랙은 포지셔닝의 증거다. 빼면 남는 것은 약관 챗봇이다.
+</div>
+
+<h2>6. 확인 방법</h2>
+<div class="box">
+<b>백엔드·테스트 통과만으로 "완료"라 하지 않는다</b>
+<ul style="margin:.3rem 0 0">
+<li>사람 트랙 — 매 컷마다 <b>실제로 브라우저를 열어</b> 확인하고 <code>docs/screenshots/</code> 에 남긴다</li>
+<li>에이전트 트랙 — <code>curl</code> 또는 외부 HTTP client 로 <b>응답 JSON 원문</b>을 확인한다.
+OpenAPI 문서(<code>/docs</code>)만 보고 넘어가지 않는다</li>
+<li>★<code>needs_expert</code> 는 <b>실제 기권 케이스로</b> 띄워 본다 — 정상 케이스만 보면 이 화면·이 응답은 끝까지 안 보인다</li>
+</ul>
+</div>
+
+<p class="sub" style="margin-top:2.5rem">
+관련 — <code>app/schemas/precheck.py</code>(단일 계약) · <code>06_계약_Agent.md</code> ·
+<code>08_계약_프론트.md</code> · <code>05_계약_AI2_판정.md</code> ·
+<code>03_에이전트_데이터_축적_설계.md</code> · <code>10_계약_모델_평가.md</code>
+</p>
+
+</main>
+</body></html>

@@ -1,0 +1,37 @@
+{
+  "schema_version": "s7-chatbot-negative-v1",
+  "mutants": [
+    {
+      "id": "unsupported-number", "case_index": 0,
+      "expected_failure_codes": ["unsupported_numeric_token"],
+      "response": {"intent": "term", "message": "가보험 약관에서 자기부담금은 1만원과 근거 없는 2만원입니다.", "quotes": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+    },
+    {
+      "id": "mixed-insurer", "case_index": 3,
+      "expected_failure_codes": ["insurer_mixed"],
+      "response": {"intent": "term", "message": "가보험 외래 공제액은 1만원이며 나보험 조건도 같습니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 외래 공제액은 1만원입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+    },
+    {
+      "id": "mutated-citation", "case_index": 1,
+      "expected_failure_codes": ["citation_mutated"],
+      "response": {"intent": "term", "message": "나보험의 공제액은 의료비의 20%입니다.", "quotes": [{"insurer": "나보험", "quote": "공제액은 의료비의 약 20%입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+    },
+    {
+      "id": "coverage-assertion", "case_index": 11,
+      "expected_failure_codes": ["coverage_asserted", "required_condition_missing"],
+      "response": {"intent": "precheck", "message": "보장 여부는 확인되었고 보험금이 지급됩니다.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}}
+    },
+    {
+      "id": "wrong-release-fingerprint", "case_index": 0,
+      "release_patch": {"fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"},
+      "expected_failure_codes": ["release_fingerprint_mismatch"],
+      "response": {"intent": "term", "message": "가보험 약관에서 자기부담금은 1만원으로 정합니다.", "quotes": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+    },
+    {
+      "id": "wrong-occurrence-count", "case_index": 0,
+      "release_patch": {"occurrence_count": 849},
+      "expected_failure_codes": ["occurrence_count_mismatch"],
+      "response": {"intent": "term", "message": "가보험 약관에서 자기부담금은 1만원으로 정합니다.", "quotes": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+    }
+  ]
+}

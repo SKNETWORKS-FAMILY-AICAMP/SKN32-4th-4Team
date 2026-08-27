@@ -1,0 +1,10 @@
+# docker/llm/ 사이드카 전용 — customer/admin 이미지에는 넣지 않는다(이미지 비대화 방지).
+# scripts/local_model_server.py를 그대로 실행하는 데 필요한 최소 의존성.
+# fastapi/uvicorn은 requirements/runtime.txt와 같은 버전으로 고정해 두 이미지 간
+# 버전 drift를 만들지 않는다. llama-cpp-python/huggingface_hub는 2026-08-26
+# PyPI 조회로 확인한 최신 버전(pypi.org/pypi/<pkg>/json)을 고정했다 — 실제 빌드 시
+# 호환성 문제가 생기면 그때 조정한다.
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+llama-cpp-python==0.3.35
+huggingface_hub==1.28.0

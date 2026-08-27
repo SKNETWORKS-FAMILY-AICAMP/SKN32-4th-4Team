@@ -1,0 +1,72 @@
+# Hidden paths are private/local by default.  The ignore rule itself is the only exception.
+.*
+!.gitignore
+
+# Local secrets and environments
+.env
+.env.*
+.venv/
+venv/
+
+# Python/test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime databases, logs, models and generated artifacts
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+*.onnx
+*.pt
+*.pth
+*.bin
+*.gguf
+artifacts/
+backups/
+legacy/
+
+# Internal documents and copyrighted/private/large data
+# ★docs/ 는 기본 차단이다 — 리포트·검수화면·전처리 시각화에 약관 원문이 인용돼 있다(저작물).
+#   아래 셋만 예외로 연다. 셋 다 원문 인용이 없는지 확인하고 넣었다:
+#     handoff/    팀 합의 계약 (md + 원문 없는 html)
+#     submission/ 제출 산출물 (md 만. 01_부록_전처리_시각화*.html 은 조항 본문 캡처라 제외)
+#     delivery/   화면 실캡처(인용 본문 가림) + 발표용 SVG
+#   ★새 파일을 넣기 전에 base64 이미지와 조항 본문이 없는지 먼저 확인한다.
+docs/*
+!docs/README.md
+!docs/handoff/
+docs/handoff/*
+!docs/handoff/*.md
+!docs/handoff/erd_briefing.html
+!docs/handoff/erd_tables.html
+!docs/handoff/storyboard.html
+!docs/handoff/system_diagrams.html
+!docs/handoff/19_담당자별_코드범위_및_구현현황.html
+!docs/handoff/20_문서확정_미확정107건_검토목록.html
+!docs/submission/
+docs/submission/*
+!docs/submission/*.md
+!docs/delivery/
+!docs/delivery/**
+data/*
+!data/raw/
+data/raw/*
+!data/raw/manifests/
+!data/raw/manifests/*.jsonl
+
+# Temporary files and archives
+*.bak
+*.backup
+*.tmp
+*.zip
+*~

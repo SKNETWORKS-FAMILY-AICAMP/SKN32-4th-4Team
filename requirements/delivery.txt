@@ -1,0 +1,28 @@
+# 전달 계층(Django BFF) — 진행 중인 전환 작업 전용.
+#
+# 계획: docs/plans/2026-08-25_0955_전달계층_Django분리_계획.md
+#
+# ★**별도 그룹으로 둔다.** `runtime.txt` 에 넣지 않는 이유:
+#   전달 계층은 `DELIVERY_MODE=direct`(기본값)면 **쓰이지 않는다.**
+#   FastAPI 단독으로 돌리는 사람에게 Django 를 강요할 이유가 없고,
+#   강요하면 「되돌릴 수 있다」는 이 전환의 전제가 흐려진다.
+#
+# ★없으면 **조용히 폴백하지 않는다** — `tests/delivery/test_django_passthrough.py` 는
+#   `pytest.importorskip("django")` 로 **건너뛴다는 사실을 드러내고** 넘어간다.
+#   운영에서 `DELIVERY_MODE=django` 인데 Django 가 없으면 기동이 실패해야 맞다.
+#
+# ★**루트 `requirements.txt` 집계에도 넣지 않는다.**
+#   루트는 여러 작업이 공유하는 파일이고, 이 전환은 끝날 때까지 격리해 두기로 했다.
+#   넣으면 `tests/test_requirements_groups.py` 의 「그룹당 소유자 하나」 규칙과도 부딪힌다 —
+#   `httpx` 를 `dev.txt` 가 이미 소유하는데, **둘 다 진짜로 필요하다**
+#   (dev 는 TestClient, delivery 는 운영 중 업스트림 호출). 같은 핀이라 충돌은 아니지만
+#   그 규칙은 「같은 핀이면 괜찮다」를 표현하지 못한다.
+#   → 전환이 확정되면 그때 소유권을 정리하고 집계에 넣는다.
+#
+# 설치:
+#   pip install -r requirements/runtime.txt -r requirements/delivery.txt
+
+Django==6.0.8
+# 업스트림(FastAPI) 호출용. keep-alive 로 커넥션을 재사용한다 —
+# ★요청마다 새로 연결하면 psycopg 풀 부재와 같은 실수를 한 층 더 만든다.
+httpx==0.28.1

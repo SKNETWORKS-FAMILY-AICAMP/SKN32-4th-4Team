@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>올바른 보험비서 — 발표용 시각화 5장</title>
+<style>
+  :root{--fg:#1a1a1a;--mut:#666;--bd:#e2e2e2;--bg:#fff;--acc:#0b5fa5;--warn:#a54b0b;--dang:#a51b1b;--ok:#0b7a3b;--card:#fafafa}
+  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--mut:#a0a0a0;--bd:#333;--bg:#161616;--acc:#6fb3ec;--warn:#e8a05a;--dang:#e88;--ok:#6cc48f;--card:#1e1e1e}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;font:15px/1.75 -apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:var(--fg);background:var(--bg)}
+  main{max-width:1060px;margin:0 auto}
+  h1{font-size:1.7rem;font-weight:600;margin:0 0 .3rem}
+  h2{font-size:1.25rem;font-weight:600;margin:3rem 0 .5rem;padding-bottom:.4rem;border-bottom:2px solid var(--bd)}
+  .sub{color:var(--mut);margin:0 0 2rem}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  code{background:var(--card);padding:.1rem .35rem;border-radius:3px;font:13px ui-monospace,Consolas,monospace}
+  .box{border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:0 6px 6px 0;padding:.85rem 1.1rem;margin:1.1rem 0;background:var(--card)}
+  .box.w{border-left-color:var(--warn)} .box.d{border-left-color:var(--dang)} .box.k{border-left-color:var(--ok)}
+  .box b{display:block;margin-bottom:.3rem}
+  ul{padding-left:1.2rem} li{margin:.25rem 0}
+  /* ── 시각화 계약 — docs/handoff/system_diagrams.html 과 같은 규칙 ──
+     · 인라인 SVG 만. CDN·외부 라이브러리 금지
+     · .ld-diagram 은 다크모드에서도 밝은 판으로 고정 (SVG 색이 하드코딩이라)
+     · 그림마다 role="img" + aria-label + 캡션 한 줄                       */
+  .ld-diagram{margin:22px 0 6px;padding:18px;overflow-x:auto;background:#fbfcfe;
+              border:1px solid #dfe5f0;border-radius:16px}
+  .ld-diagram svg{display:block;width:100%;min-width:760px;height:auto}
+  .ld-figure-caption{margin:8px 2px 26px;color:var(--mut);font-size:.9rem}
+</style>
+</head><body><main>
+
+<h1>올바른 보험비서 — 발표용 시각화 5장</h1>
+<p class="sub">팀 비서단 · 2026-08-04 · 인라인 SVG · 외부 라이브러리 없음<br>
+발표(PPT 캡처) · 문서(GitHub) · 영상(1920×1080) 세 용도를 같은 파일로 쓴다</p>
+
+<div class="box w">
+  <b>★이 문서는 <u>설명용 파생물</u>이다 — 계약이 아니다</b>
+  같은 사실이 두 곳에 있으면 갈라진다. 그림의 숫자가 아래 정본과 다르면 <b style="display:inline">정본이 이긴다.</b>
+  <table style="margin:.45rem 0 .4rem">
+  <tr><th>그림</th><th>수치 정본</th></tr>
+  <tr><td>1 판정 파이프라인</td><td><code>docs/submission/02_시스템_아키텍처.md</code></td></tr>
+  <tr><td>2 기권 결정 트리</td><td><code>app/core/domain/precheck_result.py</code> (<code>ReasonCode</code>)</td></tr>
+  <tr><td>3 리랭커 5종</td><td><code>docs/reports/2026-08-04_S6_Arctic-ko_리랭커5종_실측과_운영반영.md</code></td></tr>
+  <tr><td>4 임베딩 잘림</td><td><code>docs/handoff/13_임베딩모델_선정_브리핑.md</code> §3</td></tr>
+  <tr><td>5 OCR 승인·차단</td><td><code>docs/reports/2026-08-04_S7.1_OCR승격_최종결과.md</code></td></tr>
+  </table>
+</div>
+
+
+<h2>1. 판정 파이프라인 — 근거를 못 대면 생성하지 않는다</h2>
+
+<div class="ld-diagram" role="img" aria-label="사용자 입력이 판본 확정과 릴리스 게이트를 지나 dense 검색과 lexical 검색으로 갈라졌다가 RRF 로 합쳐지고, 리랭커와 부모 조항 복원, 인용 게이트를 거쳐 생성 모델로 간다. 판본을 못 정하거나 근거가 없거나 인용을 검증하지 못하면 각 지점에서 기권으로 빠져나가며, 그 경우 생성 모델은 호출되지 않는다는 흐름도">
+<svg viewBox="0 0 980 400" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs>
+<marker id="p1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker>
+<marker id="p2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#a51b1b"/></marker>
+</defs>
+
+<rect x="12" y="150" width="112" height="56" rx="12" fill="#fff" stroke="#c9d3e4"/>
+<text x="68" y="172" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">입력</text>
+<text x="68" y="189" text-anchor="middle" font-size="10" fill="#475467">보험사·계약일·KCD</text>
+
+<rect x="146" y="150" width="126" height="56" rx="12" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="209" y="172" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">판본 확정</text>
+<text x="209" y="189" text-anchor="middle" font-size="10" fill="#475467">상품·세대·유효구간</text>
+
+<rect x="294" y="150" width="118" height="56" rx="12" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="353" y="172" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">릴리스 게이트</text>
+<text x="353" y="189" text-anchor="middle" font-size="10" fill="#475467">승인된 것만 검색</text>
+
+<rect x="436" y="112" width="122" height="46" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="497" y="130" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">dense 검색</text>
+<text x="497" y="146" text-anchor="middle" font-size="10" fill="#475467">Arctic-ko 1024d</text>
+<rect x="436" y="198" width="122" height="46" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="497" y="216" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">lexical 검색</text>
+<text x="497" y="232" text-anchor="middle" font-size="10" fill="#475467">pg_trgm</text>
+
+<rect x="580" y="150" width="70" height="56" rx="12" fill="#fff" stroke="#c9d3e4"/>
+<text x="615" y="174" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">RRF</text>
+<text x="615" y="190" text-anchor="middle" font-size="10" fill="#475467">결합</text>
+
+<rect x="672" y="150" width="116" height="56" rx="12" fill="#f5f7fb" stroke="#c9d3e4" stroke-dasharray="4 3"/>
+<text x="730" y="170" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">리랭크</text>
+<text x="730" y="185" text-anchor="middle" font-size="10" fill="#475467">Qwen3-4B</text>
+<text x="730" y="199" text-anchor="middle" font-size="9.5" fill="#9a5b12">기본 OFF (오프라인)</text>
+
+<rect x="810" y="150" width="112" height="56" rx="12" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="866" y="170" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">부모 조항 복원</text>
+<text x="866" y="186" text-anchor="middle" font-size="10" fill="#475467">+ 인용 게이트</text>
+<text x="866" y="200" text-anchor="middle" font-size="9.5" fill="#475467">문서·쪽·SHA</text>
+
+<rect x="672" y="298" width="250" height="56" rx="12" fill="#eefaf2" stroke="#6cc48f" stroke-width="2"/>
+<text x="797" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#0b5c30">생성 — Gemma 4 E4B</text>
+<text x="797" y="337" text-anchor="middle" font-size="10" fill="#0b5c30">근거만 프롬프트에 넣는다 · 판정은 하지 않는다</text>
+
+<rect x="146" y="298" width="412" height="56" rx="12" fill="#fdeeee" stroke="#e08585" stroke-width="2"/>
+<text x="352" y="320" text-anchor="middle" font-size="12" font-weight="700" fill="#8a1c1c">기권 — HTTP 200 · abstained=true</text>
+<text x="352" y="337" text-anchor="middle" font-size="10" fill="#8a1c1c">★생성 모델을 호출하지 않는다. 오류 화면이 아니다</text>
+
+<path d="M124,178 H144" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M272,178 H292" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M412,178 C424,178 424,135 434,135" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M412,178 C424,178 424,221 434,221" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M558,135 C570,135 570,178 578,178" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M558,221 C570,221 570,178 578,178" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M650,178 H670" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M788,178 H808" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#p1)" fill="none"/>
+<path d="M866,206 V296" stroke="#0b7a3b" stroke-width="1.8" marker-end="url(#p1)" fill="none"/>
+<text x="878" y="256" font-size="10" fill="#0b5c30">근거 ≥ 1건</text>
+
+<path d="M209,206 V296" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#p2)" fill="none"/>
+<text x="216" y="240" font-size="9.5" fill="#8a1c1c">판본 못 정함</text>
+<text x="216" y="253" font-size="9.5" fill="#8a1c1c">ambiguous_product</text>
+<path d="M353,206 V296" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#p2)" fill="none"/>
+<text x="360" y="240" font-size="9.5" fill="#8a1c1c">확정 전 문서</text>
+<text x="360" y="253" font-size="9.5" fill="#8a1c1c">documents_not_confirmed</text>
+<path d="M497,244 C497,270 470,270 440,296" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#p2)" fill="none"/>
+<text x="500" y="266" font-size="9.5" fill="#8a1c1c">근거 0건 · no_evidence</text>
+<path d="M866,206 C960,230 960,270 560,320" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#p2)" fill="none"/>
+<text x="700" y="262" font-size="9.5" fill="#8a1c1c">인용 검증 실패 · citation_unverified</text>
+
+<rect x="12" y="20" width="910" height="62" rx="12" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="30" y="42" font-size="12" font-weight="800" fill="#3157d5">읽는 법</text>
+<text x="30" y="62" font-size="11" fill="#475467">실선 = 판정까지 가는 길 · 점선(빨강) = 기권으로 빠지는 길. 기권은 <tspan font-weight="700">네 지점</tspan>에서 일어나고, 어느 쪽이든 생성 모델은 호출되지 않는다.</text>
+<text x="30" y="76" font-size="11" fill="#9a5b12">리랭크는 점선 상자 — 선정·검증은 끝났지만 실시간 경로는 기본 OFF 다(RAG_RERANK_ENABLED=false).</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 1. 판정 파이프라인. 기권이 예외 처리가 아니라 <b>설계된 출구</b>라는 것이 이 그림의 요점이다.</p>
+
+
+<h2>2. 기권 결정 트리 — <code>reason_code</code> 는 왜 10개인가</h2>
+
+<div class="ld-diagram" role="img" aria-label="판정 요청이 지원 보험사인지, 확정된 문서가 있는지, 그 날짜에 유효한 판본이 있는지, 상품이 하나로 좁혀지는지, 문서 파싱 상태가 쓸 만한지, 근거 조항을 찾았는지, 인용을 검증했는지를 차례로 묻고 각 단계에서 갈라져 나오는 기권 사유 코드를 보여주는 결정 트리">
+<svg viewBox="0 0 980 470" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs>
+<marker id="t1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker>
+<marker id="t2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#a51b1b"/></marker>
+<marker id="t3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#0b7a3b"/></marker>
+</defs>
+
+<text x="16" y="26" font-size="12" font-weight="800" fill="#3157d5">묻는 순서 — 위에서 아래로</text>
+<text x="640" y="26" font-size="12" font-weight="800" fill="#8a1c1c">여기서 갈라지면 기권 (HTTP 200)</text>
+
+<rect x="16" y="40" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="65" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">① 우리가 가진 보험사인가</text>
+<rect x="16" y="96" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="121" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">② 확정된 문서가 있는가</text>
+<rect x="16" y="152" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="177" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">③ 그 날짜에 유효한 판본인가</text>
+<rect x="16" y="208" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="233" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">④ 상품이 하나로 좁혀지는가</text>
+<rect x="16" y="264" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="289" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">⑤ 코드·문서가 쓸 만한가</text>
+<rect x="16" y="320" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="345" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">⑥ 근거 조항을 찾았는가</text>
+<rect x="16" y="376" width="230" height="40" rx="10" fill="#fff" stroke="#c9d3e4"/>
+<text x="131" y="401" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">⑦ 그 인용이 우리 것인가</text>
+
+<rect x="16" y="428" width="230" height="34" rx="10" fill="#eefaf2" stroke="#6cc48f" stroke-width="2"/>
+<text x="131" y="450" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5c30">판정 — 4단 중 하나</text>
+
+<path d="M131,80 V94" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#t1)"/>
+<path d="M131,136 V150" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#t1)"/>
+<path d="M131,192 V206" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#t1)"/>
+<path d="M131,248 V262" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#t1)"/>
+<path d="M131,304 V318" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#t1)"/>
+<path d="M131,360 V374" stroke="#8a94a6" stroke-width="1.5" marker-end="url(#t1)"/>
+<path d="M131,416 V426" stroke="#0b7a3b" stroke-width="1.8" marker-end="url(#t3)"/>
+
+<path d="M246,60 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="57" font-size="11" font-weight="700" fill="#8a1c1c">insurer_not_supported</text>
+<text x="640" y="71" font-size="9.5" fill="#8a1c1c">보유하고 있지 않다 — 다른 곳을 찾아야 한다</text>
+
+<path d="M246,116 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="113" font-size="11" font-weight="700" fill="#8a1c1c">documents_not_confirmed</text>
+<text x="640" y="127" font-size="9.5" fill="#8a1c1c">★보유는 한다. 확정 전일 뿐 — 기다리면 된다</text>
+
+<path d="M246,172 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="176" font-size="11" font-weight="700" fill="#8a1c1c">no_version_at_date</text>
+
+<path d="M246,228 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="225" font-size="11" font-weight="700" fill="#8a1c1c">ambiguous_product / ambiguous_product_line</text>
+<text x="640" y="239" font-size="9.5" fill="#8a1c1c">★후보를 제시하고 되묻는다 — 실캡처 컷 3</text>
+
+<path d="M246,284 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="281" font-size="11" font-weight="700" fill="#8a1c1c">invalid_code / document_not_reliable</text>
+<text x="640" y="295" font-size="9.5" fill="#8a1c1c">parse_status ≠ ok 인 문서는 근거로 쓰지 않는다</text>
+
+<path d="M246,340 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="337" font-size="11" font-weight="700" fill="#8a1c1c">no_evidence</text>
+<text x="640" y="351" font-size="9.5" fill="#8a1c1c">★면책 목록에 없다 ≠ 보장된다</text>
+
+<path d="M246,396 H630" stroke="#a51b1b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#t2)"/>
+<text x="640" y="393" font-size="11" font-weight="700" fill="#8a1c1c">citation_unverified / ambiguous_citation</text>
+<text x="640" y="407" font-size="9.5" fill="#8a1c1c">근거를 댔지만 특정할 수 없다 — 통과도 폐기도 하지 않는다</text>
+
+<rect x="286" y="428" width="636" height="34" rx="10" fill="#eefaf2" stroke="#6cc48f"/>
+<text x="302" y="450" font-size="10.5" fill="#0b5c30">likely_covered (covered_by_clause) · unlikely (excluded_by_clause) · needs_documents (exception_applies) · needs_expert</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 2. 기권 결정 트리. <code>ReasonCode</code> 10종은 <b>「모른다」를 열 가지로 나눈 것</b>이다 — 사용자가 할 일이 저마다 다르기 때문이다.
+정본: <code>app/core/domain/precheck_result.py:44</code></p>
+
+<div class="box d">
+  <b>★이 그림이 발표의 핵심이다</b>
+  다른 팀은 「정확도 몇 %」를 보여준다. 우리는 <b style="display:inline">틀릴 수 있는 자리마다 문을 하나씩 달았다</b>는 것을 보여준다.
+  ②와 ①을 가르는 것이 특히 중요하다 — 1,367건을 갖고 있는데 “없습니다”라고 답하면 <b style="display:inline">사실을 잘못 전하는 것</b>이고,
+  사용자가 할 일도 다르다(전자는 기다리면 되고, 후자는 다른 곳을 찾아야 한다).
+</div>
+
+
+<h2>3. 리랭커 5종 실측 — 무엇을 보고 골랐나</h2>
+
+<div class="ld-diagram" role="img" aria-label="리랭커 다섯 종과 dense 기준선의 Hit@1 과 대체표현 Hit@1 을 가로 막대로 비교한 그림. Qwen3-Reranker-4B 가 Hit@1 84.71퍼센트, 대체표현 73.47퍼센트로 가장 높고, dense 기준선은 64.65퍼센트와 17.35퍼센트다. Qwen3-Reranker-0.6B 는 71.02퍼센트와 33.67퍼센트로 4B 보다 크게 낮다">
+<svg viewBox="0 0 980 400" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<text x="16" y="24" font-size="12" font-weight="800" fill="#3157d5">retrievable 314문항 · 2026-08-04 실측 · RTX 4000 Ada</text>
+<rect x="248" y="34" width="14" height="12" rx="2" fill="#3157d5"/>
+<text x="268" y="45" font-size="11" fill="#475467">Hit@1</text>
+<rect x="330" y="34" width="14" height="12" rx="2" fill="#e8a05a"/>
+<text x="350" y="45" font-size="11" fill="#475467">대체표현 Hit@1 — ★사용자는 약관 문구 그대로 묻지 않는다</text>
+
+<!-- 눈금 -->
+<line x1="248" y1="58" x2="248" y2="356" stroke="#dfe5f0"/>
+<line x1="398" y1="58" x2="398" y2="356" stroke="#eef1f6"/>
+<line x1="548" y1="58" x2="548" y2="356" stroke="#eef1f6"/>
+<line x1="698" y1="58" x2="698" y2="356" stroke="#eef1f6"/>
+<line x1="848" y1="58" x2="848" y2="356" stroke="#eef1f6"/>
+<text x="248" y="372" text-anchor="middle" font-size="10" fill="#98a2b3">0%</text>
+<text x="398" y="372" text-anchor="middle" font-size="10" fill="#98a2b3">25%</text>
+<text x="548" y="372" text-anchor="middle" font-size="10" fill="#98a2b3">50%</text>
+<text x="698" y="372" text-anchor="middle" font-size="10" fill="#98a2b3">75%</text>
+<text x="848" y="372" text-anchor="middle" font-size="10" fill="#98a2b3">100%</text>
+
+<!-- Qwen3-4B : 84.71 / 73.47  (px = 248 + pct*6) -->
+<text x="240" y="76" text-anchor="end" font-size="11.5" font-weight="700" fill="#172033">Qwen3-Reranker-4B</text>
+<text x="240" y="90" text-anchor="end" font-size="9.5" fill="#0b5c30">★채택 · 11.36 pair/s</text>
+<rect x="248" y="64" width="508" height="15" rx="3" fill="#3157d5"/>
+<text x="764" y="76" font-size="11" font-weight="700" fill="#3157d5">84.71%</text>
+<rect x="248" y="82" width="441" height="15" rx="3" fill="#e8a05a"/>
+<text x="697" y="94" font-size="11" font-weight="700" fill="#b06a1e">73.47%</text>
+
+<!-- BGE : 78.03 / 50.00 -->
+<text x="240" y="126" text-anchor="end" font-size="11.5" font-weight="700" fill="#172033">BGE-reranker-v2-m3</text>
+<text x="240" y="140" text-anchor="end" font-size="9.5" fill="#475467">저지연 폴백 · 40.69 pair/s</text>
+<rect x="248" y="114" width="468" height="15" rx="3" fill="#7f95dd"/>
+<text x="724" y="126" font-size="11" fill="#3157d5">78.03%</text>
+<rect x="248" y="132" width="300" height="15" rx="3" fill="#f0c193"/>
+<text x="556" y="144" font-size="11" fill="#b06a1e">50.00%</text>
+
+<!-- GTE : 71.02 / 45.92 -->
+<text x="240" y="176" text-anchor="end" font-size="11.5" font-weight="700" fill="#172033">GTE multilingual base</text>
+<text x="240" y="190" text-anchor="end" font-size="9.5" fill="#98a2b3">탈락 · 47.27 pair/s</text>
+<rect x="248" y="164" width="426" height="15" rx="3" fill="#b7c4e6"/>
+<text x="682" y="176" font-size="11" fill="#667085">71.02%</text>
+<rect x="248" y="182" width="276" height="15" rx="3" fill="#f6dcc2"/>
+<text x="532" y="194" font-size="11" fill="#98a2b3">45.92%</text>
+
+<!-- Qwen3-0.6B : 71.02 / 33.67 -->
+<text x="240" y="226" text-anchor="end" font-size="11.5" font-weight="700" fill="#172033">Qwen3-Reranker-0.6B</text>
+<text x="240" y="240" text-anchor="end" font-size="9.5" fill="#8a1c1c">★책상 위 권고였다 · 7.79 pair/s</text>
+<rect x="248" y="214" width="426" height="15" rx="3" fill="#b7c4e6"/>
+<text x="682" y="226" font-size="11" fill="#667085">71.02%</text>
+<rect x="248" y="232" width="202" height="15" rx="3" fill="#f6dcc2"/>
+<text x="458" y="244" font-size="11" fill="#98a2b3">33.67%</text>
+
+<!-- Jina : 66.56 / 33.67 -->
+<text x="240" y="276" text-anchor="end" font-size="11.5" font-weight="700" fill="#172033">Jina reranker v2 base</text>
+<text x="240" y="290" text-anchor="end" font-size="9.5" fill="#98a2b3">탈락 · 356.56 pair/s (초저지연)</text>
+<rect x="248" y="264" width="399" height="15" rx="3" fill="#b7c4e6"/>
+<text x="655" y="276" font-size="11" fill="#667085">66.56%</text>
+<rect x="248" y="282" width="202" height="15" rx="3" fill="#f6dcc2"/>
+<text x="458" y="294" font-size="11" fill="#98a2b3">33.67%</text>
+
+<!-- dense baseline : 64.65 / 17.35 -->
+<text x="240" y="326" text-anchor="end" font-size="11.5" font-weight="700" fill="#8a1c1c">dense Arctic-ko (기준선)</text>
+<text x="240" y="340" text-anchor="end" font-size="9.5" fill="#8a1c1c">리랭커 없음</text>
+<rect x="248" y="314" width="388" height="15" rx="3" fill="#c9d3e4"/>
+<text x="644" y="326" font-size="11" fill="#8a1c1c">64.65%</text>
+<rect x="248" y="332" width="104" height="15" rx="3" fill="#eddcc9"/>
+<text x="360" y="344" font-size="11" fill="#8a1c1c">17.35%</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 3. 리랭커 5종 실측. <b>주황 막대(대체표현)에서 갈렸다</b> — 4B 와 BGE 의 차이는 paired bootstrap 10,000회에서
+<code>+23.47%p · 95% CI [+11.22, +35.71]</code> 로 확인됐다.</p>
+
+<div class="box w">
+  <b>★책상 위 권고가 실측에 뒤집혔다</b>
+  2026-08-02 SOTA 조사는 12GB 예산에 맞춰 <code>Qwen3-Reranker-0.6B</code> 를 권고했다
+  (<i>“4B 급은 근거 없이 올리지 않는다”</i> — 옳은 절차였다).
+  그런데 실측에서 0.6B 는 대체표현 <b style="display:inline">33.67%</b> 로 4B 의 <b style="display:inline">73.47%</b> 에 크게 밀렸고,
+  <b style="display:inline">처리량마저 더 느렸다</b>(7.79 vs 11.36 pair/s). 결론을 바꿨다.
+  다만 4B 는 12GB 전부 상주 예산에 안 들어가 <b style="display:inline">오프라인 release 로만 쓴다.</b>
+</div>
+
+
+<h2>4. 임베딩 — 순위표가 아니라 <u>잘림</u>에서 갈렸다</h2>
+
+<div class="ld-diagram" role="img" aria-label="옛 배포 설정인 ko-sroberta 128토큰은 조항의 83.7퍼센트가 잘리고 조항 뒷부분 검색 MRR 이 0.133, 면책 표현 MRR 이 0.077 인 반면, Arctic-ko 8192토큰은 잘림이 0퍼센트이고 뒷부분 MRR 0.317, 면책 MRR 0.341 로 각각 2.4배와 4.4배 높다는 비교 그림. 면책 문구가 조항 뒷부분에 있어 잘림이 곧 검색 실패로 이어진다는 점을 조항 모식도로 함께 보여준다">
+<svg viewBox="0 0 980 430" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<text x="16" y="24" font-size="12" font-weight="800" fill="#3157d5">왜 잘림이 문제인가 — 우리가 찾아야 하는 문장은 조항 <tspan font-weight="800" fill="#a54b0b">뒤쪽</tspan>에 있다</text>
+
+<!-- 조항 모식도 -->
+<rect x="16" y="40" width="600" height="46" rx="8" fill="#fff" stroke="#c9d3e4"/>
+<rect x="16" y="40" width="96" height="46" rx="8" fill="#eef2ff" stroke="#7f95dd"/>
+<text x="64" y="60" text-anchor="middle" font-size="10.5" font-weight="700" fill="#172033">제N조 제목</text>
+<text x="64" y="76" text-anchor="middle" font-size="9.5" fill="#475467">보상하지 않는…</text>
+<text x="240" y="59" text-anchor="middle" font-size="10.5" fill="#475467">…본문 · 보장 범위 · 정의 …</text>
+<text x="240" y="75" text-anchor="middle" font-size="9.5" fill="#98a2b3">(길다)</text>
+<rect x="440" y="40" width="176" height="46" rx="8" fill="#fdf3e8" stroke="#e8a05a" stroke-width="2"/>
+<text x="528" y="59" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9a5b12">“다만 … 보상하지 않습니다”</text>
+<text x="528" y="75" text-anchor="middle" font-size="9.5" fill="#9a5b12">★면책의 실체가 여기 있다</text>
+
+<line x1="16" y1="98" x2="112" y2="98" stroke="#a51b1b" stroke-width="3"/>
+<text x="120" y="102" font-size="10.5" fill="#8a1c1c">← ko-sroberta @128토큰이 읽는 범위. 나머지는 <tspan font-weight="700">버려진다</tspan></text>
+<line x1="16" y1="114" x2="616" y2="114" stroke="#0b7a3b" stroke-width="3"/>
+<text x="624" y="118" font-size="10.5" fill="#0b5c30">← Arctic-ko @8192토큰</text>
+
+<!-- 비교 카드 -->
+<rect x="16" y="146" width="466" height="264" rx="14" fill="#fdf1f1" stroke="#e08585"/>
+<text x="40" y="176" font-size="13" font-weight="800" fill="#8a1c1c">옛 배포 설정 — ko-sroberta @128</text>
+
+<text x="40" y="212" font-size="11" fill="#8a1c1c">조항이 잘린 비율</text>
+<rect x="40" y="220" width="360" height="26" rx="4" fill="#f3dcdc"/>
+<rect x="40" y="220" width="301" height="26" rx="4" fill="#c0392b"/>
+<text x="352" y="238" font-size="13" font-weight="800" fill="#fff">83.7%</text>
+
+<text x="40" y="276" font-size="11" fill="#8a1c1c">조항 뒷부분 검색 MRR</text>
+<rect x="40" y="284" width="360" height="22" rx="4" fill="#f3dcdc"/>
+<rect x="40" y="284" width="120" height="22" rx="4" fill="#c0392b"/>
+<text x="172" y="300" font-size="12" font-weight="700" fill="#8a1c1c">0.133</text>
+
+<text x="40" y="336" font-size="11" fill="#8a1c1c">면책 표현 MRR</text>
+<rect x="40" y="344" width="360" height="22" rx="4" fill="#f3dcdc"/>
+<rect x="40" y="344" width="70" height="22" rx="4" fill="#c0392b"/>
+<text x="122" y="360" font-size="12" font-weight="700" fill="#8a1c1c">0.077</text>
+
+<text x="40" y="392" font-size="10.5" fill="#8a1c1c">→ 면책 조항을 찾아야 하는데 그 문장을 <tspan font-weight="700">읽지도 못했다</tspan></text>
+
+<rect x="498" y="146" width="466" height="264" rx="14" fill="#eefaf2" stroke="#6cc48f"/>
+<text x="522" y="176" font-size="13" font-weight="800" fill="#0b5c30">현재 — Arctic-ko @8192</text>
+
+<text x="522" y="212" font-size="11" fill="#0b5c30">조항이 잘린 비율</text>
+<rect x="522" y="220" width="360" height="26" rx="4" fill="#d9f0e3"/>
+<rect x="522" y="220" width="4" height="26" rx="2" fill="#0b7a3b"/>
+<text x="538" y="238" font-size="13" font-weight="800" fill="#0b5c30">0.0%</text>
+
+<text x="522" y="276" font-size="11" fill="#0b5c30">조항 뒷부분 검색 MRR</text>
+<rect x="522" y="284" width="360" height="22" rx="4" fill="#d9f0e3"/>
+<rect x="522" y="284" width="286" height="22" rx="4" fill="#0b7a3b"/>
+<text x="820" y="300" font-size="12" font-weight="700" fill="#0b5c30">0.317 <tspan font-size="10">(2.4배)</tspan></text>
+
+<text x="522" y="336" font-size="11" fill="#0b5c30">면책 표현 MRR</text>
+<rect x="522" y="344" width="360" height="22" rx="4" fill="#d9f0e3"/>
+<rect x="522" y="344" width="308" height="22" rx="4" fill="#0b7a3b"/>
+<text x="842" y="360" font-size="12" font-weight="700" fill="#0b5c30">0.341 <tspan font-size="10">(4.4배)</tspan></text>
+
+<text x="522" y="392" font-size="10.5" fill="#0b5c30">→ 순위표 1위여서가 아니라 <tspan font-weight="700">잘리지 않아서</tspan> 골랐다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 4. 임베딩 선정. 측정 21회(fp16 17 + 4bit 4)에서 상위 그룹은 <b>신뢰구간이 겹쳤다</b> —
+즉 “Arctic-ko 가 1등”이 아니라 <b>잘리는 모델을 뺀 것</b>이다.</p>
+
+<div class="box w">
+  <b>★이 그림이 주장하지 않는 것</b>
+  “Arctic-ko 가 최고다”가 아니다. 제목 검색 짝비교에서 상위 그룹은 <b style="display:inline">95% 신뢰구간이 0을 걸친다</b>
+  (예: <code>BGE-m3-ko −0.001 [−0.053, +0.051]</code>). 구간이 0을 걸치면 <b style="display:inline">“차이를 확인하지 못한 것”이지 “같다”가 아니다.</b>
+  브리핑 §3-3 은 배포 확정이 아니라 <b style="display:inline">예비 후보를 9개로 줄이는 단계</b>로 적혀 있다.
+</div>
+
+
+<h2>5. OCR 표 사실 — 승인된 것만 인덱스에 들어간다</h2>
+
+<div class="ld-diagram" role="img" aria-label="OCR 로 만든 표 후보 1066건이 사람 검수 29패턴을 거쳐 승인 24패턴 850건과 수정 필요 5패턴 216건으로 갈리고, 승인분만 청크 75개와 발생 850건으로 DB 에 적재된다. 별도로 B8 과 F4 에서 나온 미승인 후보 8622건은 파일로 보존되지만 DB 발생 수가 0 이라 검색과 인용에서 차단된다는 흐름도">
+<svg viewBox="0 0 980 400" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs>
+<marker id="o1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker>
+<marker id="o2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#0b7a3b"/></marker>
+<marker id="o3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#a51b1b"/></marker>
+</defs>
+
+<text x="16" y="24" font-size="12" font-weight="800" fill="#3157d5">전체 문서를 무조건 OCR 하지 않는다 — 행·열 관계가 의미를 정하는 표만 보낸다</text>
+
+<rect x="16" y="44" width="150" height="60" rx="12" fill="#fff" stroke="#c9d3e4"/>
+<text x="91" y="68" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">표 후보 선별</text>
+<text x="91" y="85" text-anchor="middle" font-size="10" fill="#475467">자기부담금·보장한도</text>
+<text x="91" y="98" text-anchor="middle" font-size="9.5" fill="#98a2b3">어려운 쪽만</text>
+
+<rect x="200" y="44" width="150" height="60" rx="12" fill="#fff" stroke="#c9d3e4"/>
+<text x="275" y="68" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">OCR · 유형별 추출</text>
+<text x="275" y="85" text-anchor="middle" font-size="10" fill="#475467">S7 후보 1,066건</text>
+<text x="275" y="98" text-anchor="middle" font-size="9.5" fill="#98a2b3">29패턴</text>
+
+<rect x="384" y="44" width="150" height="60" rx="12" fill="#fff5e6" stroke="#e8a05a" stroke-width="2"/>
+<text x="459" y="68" text-anchor="middle" font-size="11.5" font-weight="700" fill="#9a5b12">★사람 원문 검수</text>
+<text x="459" y="85" text-anchor="middle" font-size="10" fill="#9a5b12">29패턴 전량</text>
+<text x="459" y="98" text-anchor="middle" font-size="9.5" fill="#9a5b12">기계가 통과시키지 않는다</text>
+
+<rect x="576" y="20" width="180" height="56" rx="12" fill="#eefaf2" stroke="#6cc48f" stroke-width="2"/>
+<text x="666" y="42" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0b5c30">승인 approve</text>
+<text x="666" y="60" text-anchor="middle" font-size="11" font-weight="700" fill="#0b5c30">24패턴 · 850 facts</text>
+
+<rect x="576" y="90" width="180" height="56" rx="12" fill="#fdeeee" stroke="#e08585" stroke-width="2"/>
+<text x="666" y="112" text-anchor="middle" font-size="11.5" font-weight="700" fill="#8a1c1c">수정 필요 fix</text>
+<text x="666" y="130" text-anchor="middle" font-size="11" font-weight="700" fill="#8a1c1c">5패턴 · 216 facts → 격리</text>
+
+<rect x="790" y="20" width="176" height="56" rx="12" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="878" y="40" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">DB 적재</text>
+<text x="878" y="56" text-anchor="middle" font-size="10.5" fill="#475467">청크 75 · 발생 850 · 179문서</text>
+<text x="878" y="69" text-anchor="middle" font-size="9.5" fill="#0b5c30">locator 누락 0</text>
+
+<rect x="790" y="90" width="176" height="56" rx="12" fill="#f7f7f7" stroke="#c9d3e4" stroke-dasharray="4 3"/>
+<text x="878" y="114" text-anchor="middle" font-size="11" font-weight="700" fill="#667085">파일로 보존</text>
+<text x="878" y="131" text-anchor="middle" font-size="10" fill="#667085">DB · serving · citation 제외</text>
+
+<path d="M166,74 H198" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#o1)"/>
+<path d="M350,74 H382" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#o1)"/>
+<path d="M534,74 C556,74 556,48 574,48" stroke="#0b7a3b" stroke-width="1.8" marker-end="url(#o2)" fill="none"/>
+<path d="M534,74 C556,74 556,118 574,118" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#o3)" fill="none"/>
+<path d="M756,48 H788" stroke="#0b7a3b" stroke-width="1.8" marker-end="url(#o2)"/>
+<path d="M756,118 H788" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#o3)"/>
+
+<!-- shadow -->
+<rect x="16" y="200" width="290" height="86" rx="12" fill="#f7f7f7" stroke="#c9d3e4"/>
+<text x="161" y="224" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">별도 경로 — 미승인 후보</text>
+<text x="161" y="244" text-anchor="middle" font-size="10.5" fill="#475467">B8 장해분류표 지급률 8,586</text>
+<text x="161" y="260" text-anchor="middle" font-size="10.5" fill="#475467">F4 다열 차단표 대체복원 36</text>
+<text x="161" y="278" text-anchor="middle" font-size="11.5" font-weight="800" fill="#8a1c1c">합 8,622 facts</text>
+
+<rect x="384" y="200" width="220" height="86" rx="12" fill="#fff5e6" stroke="#e8a05a" stroke-width="2"/>
+<text x="494" y="228" text-anchor="middle" font-size="11.5" font-weight="700" fill="#9a5b12">사람 승인 대기</text>
+<text x="494" y="248" text-anchor="middle" font-size="10.5" fill="#9a5b12">B8 26패턴 검수 큐 생성됨</text>
+<text x="494" y="268" text-anchor="middle" font-size="10.5" fill="#9a5b12">승인 전까지 candidate-only</text>
+
+<rect x="682" y="200" width="284" height="86" rx="12" fill="#fdeeee" stroke="#e08585" stroke-width="2"/>
+<text x="824" y="226" text-anchor="middle" font-size="12" font-weight="800" fill="#8a1c1c">DB occurrence = 0</text>
+<text x="824" y="248" text-anchor="middle" font-size="10.5" fill="#8a1c1c">검색·인용 어디에도 들어가지 않는다</text>
+<text x="824" y="268" text-anchor="middle" font-size="10.5" fill="#8a1c1c">★파일 복사만으로 accepted 가 되지 않는다</text>
+
+<path d="M306,243 H382" stroke="#8a94a6" stroke-width="1.6" marker-end="url(#o1)"/>
+<path d="M604,243 H680" stroke="#a51b1b" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#o3)"/>
+
+<rect x="16" y="310" width="950" height="72" rx="12" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="34" y="334" font-size="12" font-weight="800" fill="#3157d5">이 흐름이 지키는 것</text>
+<text x="34" y="354" font-size="11" fill="#475467">· OCR 후보를 <tspan font-weight="700">버리지 않으면서</tspan> 승인 전 오염을 막는다 — 후보는 남고, 답변에는 안 들어간다.</text>
+<text x="34" y="372" font-size="11" fill="#475467">· 승인 순서는 <tspan font-weight="700">원문 검수 → 승인 manifest → 청크 → 임베딩 → DB 적재 → 회귀 → release</tspan> 다. 건너뛸 수 없다.</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 5. OCR 표 사실의 승인·차단 경로. 승인 850건이 실제로 검색에 들어갔고(6질의·23 pair),
+<b>기존 gold rank 회귀는 0건</b>이다. 미승인 8,622건의 DB 발생 수는 <b>0</b>(실측).</p>
+
+
+<h2>이 그림들이 주장하지 <u>않는</u> 것</h2>
+<div class="box d">
+<ul style="margin:.2rem 0">
+  <li><b style="display:inline">그림 3·4 는 검색 품질이고, 판정 정확도가 아니다.</b> 조항을 잘 찾는 것과 보장 여부를 옳게 답하는 것은 다르다.</li>
+  <li><b style="display:inline">그림 5 의 850 은 「승인 OCR facts」다.</b> 「확정 문서 850건」과 우연히 같은 수이지 같은 것이 아니다.</li>
+  <li><b style="display:inline">그림 1 의 리랭크 상자는 점선이다.</b> 실시간 경로는 기본 OFF 이며, 켜져 있다고 말하지 않는다.</li>
+  <li><b style="display:inline">신규 OCR facts 전용 정답셋은 없다.</b> 측정한 것은 기존 검색 <b style="display:inline">비회귀</b>까지다.</li>
+</ul>
+</div>
+
+<h2>수치 출처</h2>
+<table>
+<tr><th>그림</th><th>수치</th><th>근거</th></tr>
+<tr><td>1</td><td>파이프라인 구성 · 리랭크 기본 OFF</td><td><code>.env.example</code> · <code>docs/submission/02_시스템_아키텍처.md</code></td></tr>
+<tr><td>2</td><td><code>ReasonCode</code> 10종 · <code>Verdict</code> 4단</td><td><code>app/core/domain/precheck_result.py:44</code> · <code>insurance.py:60</code></td></tr>
+<tr><td>3</td><td>Hit@1 · 대체표현 · 처리량 · CI</td><td><code>docs/reports/2026-08-04_S6_Arctic-ko_리랭커5종_실측과_운영반영.md</code></td></tr>
+<tr><td>4</td><td>잘림 83.7%/0% · 뒷MRR · 면책MRR</td><td><code>docs/handoff/13_임베딩모델_선정_브리핑.md</code> §3</td></tr>
+<tr><td>5</td><td>24/850 · 5/216 · 75청크 · 8,622 · 발생 0</td><td><code>docs/reports/2026-08-04_S7.1_OCR승격_최종결과.md</code> + DB 실측 2026-08-04</td></tr>
+</table>
+
+<p class="sub" style="margin-top:2.5rem">
+제출 문서: <code>docs/submission/</code> · 화면 실캡처: <code>docs/delivery/storyboard.html</code> ·
+구조 시각화 6장: <code>docs/handoff/system_diagrams.html</code>
+</p>
+
+</main></body></html>

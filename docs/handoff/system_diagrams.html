@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>올바른 보험비서 — 시스템 시각화</title>
+<style>
+  :root{--fg:#1a1a1a;--mut:#666;--bd:#e2e2e2;--bg:#fff;--acc:#0b5fa5;--warn:#a54b0b;--dang:#a51b1b;--ok:#0b7a3b;--card:#fafafa}
+  @media(prefers-color-scheme:dark){:root{--fg:#e8e8e8;--mut:#a0a0a0;--bd:#333;--bg:#161616;--acc:#6fb3ec;--warn:#e8a05a;--dang:#e88;--ok:#6cc48f;--card:#1e1e1e}}
+  *{box-sizing:border-box}
+  body{margin:0;padding:2rem 1.25rem 5rem;font:15px/1.75 -apple-system,"Segoe UI","Malgun Gothic",sans-serif;color:var(--fg);background:var(--bg)}
+  main{max-width:1060px;margin:0 auto}
+  h1{font-size:1.7rem;font-weight:600;margin:0 0 .3rem}
+  h2{font-size:1.25rem;font-weight:600;margin:3rem 0 .5rem;padding-bottom:.4rem;border-bottom:2px solid var(--bd)}
+  h3{font-size:1.02rem;font-weight:600;margin:1.6rem 0 .4rem}
+  .sub{color:var(--mut);margin:0 0 2rem}
+  table{border-collapse:collapse;width:100%;margin:.8rem 0;font-size:.9rem}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;vertical-align:top}
+  th{background:var(--card);font-weight:600}
+  code{background:var(--card);padding:.1rem .35rem;border-radius:3px;font:13px ui-monospace,Consolas,monospace}
+  .box{border:1px solid var(--bd);border-left:4px solid var(--acc);border-radius:0 6px 6px 0;padding:.85rem 1.1rem;margin:1.1rem 0;background:var(--card)}
+  .box.w{border-left-color:var(--warn)} .box.d{border-left-color:var(--dang)} .box.k{border-left-color:var(--ok)}
+  .box b{display:block;margin-bottom:.3rem}
+  ul{padding-left:1.2rem} li{margin:.25rem 0}
+  /* ── 시각화 계약 (docs/pdf RULE.md §5) ─────────────────────────────
+     · 인라인 SVG 만 쓴다. CDN·외부 수식 라이브러리 금지
+     · .ld-diagram 은 다크모드에서도 밝은 판(plate)으로 고정 — SVG 색이 하드코딩이라
+     · 그림마다 role="img" + aria-label + 캡션 한 줄이 붙는다              */
+  .ld-diagram{margin:22px 0 6px;padding:18px;overflow-x:auto;background:#fbfcfe;
+              border:1px solid #dfe5f0;border-radius:16px}
+  .ld-diagram svg{display:block;width:100%;min-width:720px;height:auto}
+  .ld-figure-caption{margin:8px 2px 26px;color:var(--mut);font-size:.9rem}
+</style>
+</head><body><main>
+
+<h1>올바른 보험비서 — 시스템 시각화</h1>
+<p class="sub">팀 비서단 · 2026-08-02 · 그림 6장<br>
+작성 규칙: <code>docs/pdf/RULE.md §5 시각화 규칙</code> — 인라인 SVG · 외부 라이브러리 금지 · 그림마다 캡션</p>
+
+<div class="box d">
+  <b>이 문서가 답하는 것</b>
+  글로 여러 번 설명해도 반복해서 되묻게 되는 것들을 그림 한 장씩으로 고정한다 —
+  <b style="display:inline">무엇이 어디서 도는가 · 어디서 기권하는가 · 무엇이 잘못되면 사람이 손해를 보는가.</b>
+  숫자는 전부 <b style="display:inline">2026-08-02 실측</b>이며, 근거 문서를 그림마다 달았다.
+</div>
+
+<div class="box w">
+  <b>★이 문서는 <u>설명용 파생물</u>이다 — 계약이 아니다</b>
+  같은 사실이 두 곳에 있으면 반드시 갈라진다. 그래서 <b style="display:inline">어느 쪽이 정본인지 먼저 못박는다.</b>
+  <table style="margin:.45rem 0 .4rem">
+  <tr><th>사실</th><th>정본</th><th>이 문서</th></tr>
+  <tr><td><code>verdict</code> 값·화면 문구</td><td><code>08_계약_프론트.md</code></td><td>그림으로 다시 보여줄 뿐</td></tr>
+  <tr><td>테이블·컬럼</td><td><code>02_ERD_및_스키마.md</code></td><td>〃</td></tr>
+  <tr><td>검증 등급·확장 경로</td><td><code>03_에이전트_데이터_축적_설계.md</code></td><td>〃</td></tr>
+  <tr><td>모델·VRAM</td><td><code>2026-08-02_1500_SOTA_모델_조사_코덱스합의.md</code></td><td>〃</td></tr>
+  </table>
+  <b style="display:inline">충돌하면 정본이 이긴다.</b> 그리고 갈라지는 것을 사람 규율에 맡기지 않는다 —
+  <code>tests/test_handoff_consistency.py</code> 가 <code>verdict</code> 값이 코드·마크다운·HTML 세 곳에서
+  일치하는지 매번 검사한다. 그림을 고칠 때 값이 어긋나면 <b style="display:inline">테스트가 먼저 걸린다.</b>
+</div>
+
+<h2>1. 전체 아키텍처 — 두 표면, 하나의 코어</h2>
+
+<div class="ld-diagram" role="img" aria-label="사람은 웹 화면으로 에이전트는 REST와 MCP로 들어오지만 둘 다 같은 precheck 유스케이스를 부르고, 그 유스케이스는 포트를 통해서만 약관 저장소와 코호트 저장소에 닿는다는 구조도">
+<svg viewBox="0 0 980 330" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs>
+<marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker>
+<marker id="a1b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#5b3bb0"/></marker>
+</defs>
+
+<rect x="14" y="14" width="290" height="150" rx="16" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="34" y="40" font-size="13" font-weight="800" fill="#3157d5">들어오는 쪽 &#183; 두 표면</text>
+<rect x="34" y="56" width="120" height="44" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="94" y="75" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">사람</text>
+<text x="94" y="91" text-anchor="middle" font-size="10.5" fill="#475467">웹 화면</text>
+<rect x="166" y="56" width="120" height="44" rx="11" fill="#f3eefe" stroke="#b49ae8"/>
+<text x="226" y="75" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">에이전트</text>
+<text x="226" y="91" text-anchor="middle" font-size="10.5" fill="#5b3bb0">REST &#183; MCP</text>
+<text x="160" y="124" text-anchor="middle" font-size="10.5" fill="#667085">같은 유스케이스를 부른다 — 로직을 두 벌 만들지 않는다</text>
+<text x="160" y="142" text-anchor="middle" font-size="10.5" fill="#9a5b12">기권도 200 &#183; 입력오류 422 &#183; 장애만 503</text>
+
+<rect x="330" y="14" width="300" height="150" rx="16" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="350" y="40" font-size="13" font-weight="800" fill="#3157d5">app/core &#8212; 안쪽 (프레임워크를 모른다)</text>
+<rect x="350" y="56" width="260" height="40" rx="10" fill="#fff" stroke="#7f95dd"/>
+<text x="480" y="81" text-anchor="middle" font-size="12.5" font-weight="700" fill="#172033">usecases/precheck.run()</text>
+<rect x="350" y="104" width="125" height="36" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="412" y="127" text-anchor="middle" font-size="11" fill="#172033">domain/ 규칙</text>
+<rect x="485" y="104" width="125" height="36" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="547" y="127" text-anchor="middle" font-size="11" fill="#172033">ports/ 인터페이스</text>
+<text x="480" y="156" text-anchor="middle" font-size="10.5" fill="#667085">fastapi &#183; sqlalchemy &#183; openai 를 import 하지 않는다</text>
+
+<rect x="656" y="14" width="310" height="150" rx="16" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="676" y="40" font-size="13" font-weight="800" fill="#3157d5">나가는 쪽 &#183; 어댑터</text>
+<rect x="676" y="56" width="132" height="44" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="742" y="75" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">약관 조항</text>
+<text x="742" y="91" text-anchor="middle" font-size="10.5" fill="#475467">file / pgvector</text>
+<rect x="820" y="56" width="126" height="44" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="883" y="75" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">코호트</text>
+<text x="883" y="91" text-anchor="middle" font-size="10.5" fill="#475467">real / demo 분리</text>
+<text x="811" y="124" text-anchor="middle" font-size="10.5" fill="#667085">유스케이스는 구현 클래스를 모른다 — 포트만 안다</text>
+<text x="811" y="142" text-anchor="middle" font-size="10.5" fill="#a54b0b">real 과 demo 를 UNION 하는 경로는 만들지 않는다</text>
+
+<line x1="94" y1="102" x2="94" y2="118" stroke="#8a94a6"/>
+<line x1="226" y1="102" x2="226" y2="118" stroke="#5b3bb0"/>
+<line x1="306" y1="89" x2="326" y2="89" stroke="#8a94a6" marker-end="url(#a1)"/>
+<line x1="632" y1="89" x2="652" y2="89" stroke="#8a94a6" marker-end="url(#a1)"/>
+
+<rect x="14" y="188" width="952" height="126" rx="16" fill="#fafafa" stroke="#e6e6e6"/>
+<text x="34" y="214" font-size="13" font-weight="800" fill="#374151">지금 실제로 열려 있는 문 &#8212; 5개 (2026-08-02 실측)</text>
+<rect x="34" y="230" width="176" height="34" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="122" y="252" text-anchor="middle" font-size="11" fill="#172033">POST /v1/prechecks</text>
+<rect x="222" y="230" width="196" height="34" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="320" y="252" text-anchor="middle" font-size="11" fill="#172033">GET /v1/support-manifest</text>
+<rect x="430" y="230" width="196" height="34" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="528" y="252" text-anchor="middle" font-size="11" fill="#172033">POST /v1/observations</text>
+<rect x="638" y="230" width="150" height="34" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="713" y="252" text-anchor="middle" font-size="11" fill="#172033">GET /v1/cohorts</text>
+<rect x="800" y="230" width="146" height="34" rx="9" fill="#fff" stroke="#c9d3e4"/>
+<text x="873" y="252" text-anchor="middle" font-size="11" fill="#172033">/v1/demo/cohorts</text>
+<text x="34" y="288" font-size="11" fill="#a54b0b">아직 없는 것 &#8212; MCP 서버 &#183; /v1/terms/search &#183; 보험 화면 &#183; DDL(.sql 0개)</text>
+<text x="34" y="305" font-size="11" fill="#667085">나머지 /api/* 34개는 커머스&#183;부트캠프 잔재이며 제거 작업 진행 중이다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 1. 사람과 에이전트는 서로 다른 문으로 들어오지만 <b>같은 판정 코어</b>를 부른다 — 그래서 답이 갈라지지 않는다. 근거: <code>06_계약_Agent.md</code> · <code>storyboard.html</code></p>
+
+<h2>2. 오프라인과 온라인을 나눈다</h2>
+
+<div class="ld-diagram" role="img" aria-label="약관 수집부터 색인까지는 오프라인에서 미리 끝내고, 사용자 요청 시점에는 검색과 규칙 판정과 설명 생성만 온라인으로 돈다는 흐름도">
+<svg viewBox="0 0 980 300" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs><marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker></defs>
+
+<rect x="14" y="14" width="952" height="126" rx="16" fill="#f6faf7" stroke="#cfe3d6"/>
+<text x="34" y="40" font-size="13" font-weight="800" fill="#0f766e">오프라인 &#8212; 미리 끝내 둔다 (사용자를 기다리게 하지 않는다)</text>
+<rect x="34" y="56" width="126" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="97" y="76" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">원본 PDF</text>
+<text x="97" y="93" text-anchor="middle" font-size="10.5" fill="#475467">고유 1,367건</text>
+<rect x="186" y="56" width="140" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="256" y="76" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">페이지 JSON</text>
+<text x="256" y="93" text-anchor="middle" font-size="10.5" fill="#475467">PyMuPDF</text>
+<rect x="352" y="56" width="170" height="48" rx="11" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="437" y="76" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">조항 구조화 s5</text>
+<text x="437" y="93" text-anchor="middle" font-size="10.5" fill="#3157d5">조항 211,131개</text>
+<rect x="548" y="56" width="150" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="623" y="76" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">청킹 &#183; 임베딩</text>
+<text x="623" y="93" text-anchor="middle" font-size="10.5" fill="#475467">e5-large</text>
+<rect x="724" y="56" width="150" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="799" y="76" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">벡터 색인</text>
+<text x="799" y="93" text-anchor="middle" font-size="10.5" fill="#475467">Chroma</text>
+<line x1="162" y1="80" x2="182" y2="80" stroke="#8a94a6" marker-end="url(#a2)"/>
+<line x1="328" y1="80" x2="348" y2="80" stroke="#8a94a6" marker-end="url(#a2)"/>
+<line x1="524" y1="80" x2="544" y2="80" stroke="#8a94a6" marker-end="url(#a2)"/>
+<line x1="700" y1="80" x2="720" y2="80" stroke="#8a94a6" marker-end="url(#a2)"/>
+<text x="34" y="128" font-size="11" fill="#a54b0b">★사람 확정(식별 검수)이 여기 끼어든다 &#8212; 확정 안 된 문서는 판정에 못 쓴다. 지금 확정 0건</text>
+
+<rect x="14" y="160" width="952" height="126" rx="16" fill="#fff7ed" stroke="#e3b98a"/>
+<text x="34" y="186" font-size="13" font-weight="800" fill="#9a5b12">온라인 &#8212; 요청이 올 때만 돈다</text>
+<rect x="34" y="202" width="140" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="104" y="222" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">약관 버전 확정</text>
+<text x="104" y="239" text-anchor="middle" font-size="10.5" fill="#475467">가입일 &#8594; 세대</text>
+<rect x="200" y="202" width="140" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="270" y="222" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">조항 검색</text>
+<text x="270" y="239" text-anchor="middle" font-size="10.5" fill="#475467">버전으로 가둔다</text>
+<rect x="366" y="202" width="150" height="48" rx="11" fill="#eef2ff" stroke="#7f95dd" stroke-width="2"/>
+<text x="441" y="222" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">규칙 판정</text>
+<text x="441" y="239" text-anchor="middle" font-size="10.5" fill="#3157d5">★LLM 아님</text>
+<rect x="542" y="202" width="150" height="48" rx="11" fill="#f3eefe" stroke="#b49ae8"/>
+<text x="617" y="222" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">설명문 생성</text>
+<text x="617" y="239" text-anchor="middle" font-size="10.5" fill="#5b3bb0">LLM &#183; 설명만</text>
+<rect x="718" y="202" width="156" height="48" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="796" y="222" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">인용 검증</text>
+<text x="796" y="239" text-anchor="middle" font-size="10.5" fill="#475467">불일치면 폐기</text>
+<line x1="176" y1="226" x2="196" y2="226" stroke="#8a94a6" marker-end="url(#a2)"/>
+<line x1="342" y1="226" x2="362" y2="226" stroke="#8a94a6" marker-end="url(#a2)"/>
+<line x1="518" y1="226" x2="538" y2="226" stroke="#8a94a6" marker-end="url(#a2)"/>
+<line x1="694" y1="226" x2="714" y2="226" stroke="#8a94a6" marker-end="url(#a2)"/>
+<text x="34" y="274" font-size="11" fill="#9a5b12">★판정(verdict)은 규칙이 소유한다. LLM 은 설명만 쓰고, 그 설명이 근거를 벗어나면 버려진다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 2. <b>판정은 규칙엔진이, 설명은 LLM이</b> 맡는다 — LLM이 판정을 소유하면 근거 없는 "보장됩니다"를 막을 방법이 없다. 근거: <code>05_계약_AI2_판정.md</code> · <code>11_AI_구조_지도.md</code></p>
+
+<h2>3. 어디서 기권하는가 — 게이트 6개</h2>
+
+<div class="ld-diagram" role="img" aria-label="판정 요청이 들어와 여섯 개의 게이트를 차례로 지나며 어느 하나라도 통과하지 못하면 사유 코드와 함께 기권하고, 전부 통과해야 판정이 나온다는 흐름도">
+<svg viewBox="0 0 980 336" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs>
+<marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker>
+<marker id="a3r" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#a51b1b"/></marker>
+</defs>
+
+<rect x="14" y="14" width="112" height="46" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="70" y="42" text-anchor="middle" font-size="12" font-weight="700" fill="#172033">판정 요청</text>
+
+<rect x="150" y="14" width="128" height="46" rx="11" fill="#eef2ff" stroke="#7f95dd"/>
+<text x="214" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">보험사 보유</text>
+<text x="214" y="49" text-anchor="middle" font-size="10" fill="#3157d5">지원범위</text>
+<rect x="302" y="14" width="128" height="46" rx="11" fill="#eef2ff" stroke="#7f95dd"/>
+<text x="366" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">약관 버전 확정</text>
+<text x="366" y="49" text-anchor="middle" font-size="10" fill="#3157d5">가입일 기준</text>
+<rect x="454" y="14" width="128" height="46" rx="11" fill="#eef2ff" stroke="#7f95dd"/>
+<text x="518" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">문서 신뢰</text>
+<text x="518" y="49" text-anchor="middle" font-size="10" fill="#3157d5">확정 &#183; 날짜 &#183; 파싱</text>
+<rect x="606" y="14" width="128" height="46" rx="11" fill="#eef2ff" stroke="#7f95dd"/>
+<text x="670" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">근거 있음</text>
+<text x="670" y="49" text-anchor="middle" font-size="10" fill="#3157d5">조항 &#8805; 1</text>
+<rect x="758" y="14" width="128" height="46" rx="11" fill="#eef2ff" stroke="#7f95dd"/>
+<text x="822" y="33" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">인용 검증</text>
+<text x="822" y="49" text-anchor="middle" font-size="10" fill="#3157d5">실재 &#183; 원문 일치</text>
+
+<line x1="128" y1="37" x2="146" y2="37" stroke="#8a94a6" marker-end="url(#a3)"/>
+<line x1="280" y1="37" x2="298" y2="37" stroke="#8a94a6" marker-end="url(#a3)"/>
+<line x1="432" y1="37" x2="450" y2="37" stroke="#8a94a6" marker-end="url(#a3)"/>
+<line x1="584" y1="37" x2="602" y2="37" stroke="#8a94a6" marker-end="url(#a3)"/>
+<line x1="736" y1="37" x2="754" y2="37" stroke="#8a94a6" marker-end="url(#a3)"/>
+<line x1="888" y1="37" x2="906" y2="37" stroke="#8a94a6" marker-end="url(#a3)"/>
+<rect x="908" y="14" width="58" height="46" rx="11" fill="#eefaf2" stroke="#6cc48f" stroke-width="2"/>
+<text x="937" y="42" text-anchor="middle" font-size="11" font-weight="800" fill="#0b7a3b">판정</text>
+
+<line x1="214" y1="62" x2="214" y2="110" stroke="#a51b1b" marker-end="url(#a3r)"/>
+<line x1="366" y1="62" x2="366" y2="110" stroke="#a51b1b" marker-end="url(#a3r)"/>
+<line x1="518" y1="62" x2="518" y2="110" stroke="#a51b1b" marker-end="url(#a3r)"/>
+<line x1="670" y1="62" x2="670" y2="110" stroke="#a51b1b" marker-end="url(#a3r)"/>
+<line x1="822" y1="62" x2="822" y2="110" stroke="#a51b1b" marker-end="url(#a3r)"/>
+
+<rect x="14" y="116" width="952" height="96" rx="16" fill="#fdf3f3" stroke="#e8bcbc"/>
+<text x="34" y="142" font-size="13" font-weight="800" fill="#a51b1b">기권 &#8212; <tspan font-family="ui-monospace,Consolas,monospace">verdict = needs_expert</tspan> &#183; <tspan font-family="ui-monospace,Consolas,monospace">abstained = true</tspan> &#183; HTTP <tspan font-weight="800">200</tspan></text>
+<text x="154" y="168" font-size="10.5" fill="#7a2020">insurer_not_supported</text>
+<text x="306" y="168" font-size="10.5" fill="#7a2020">no_version_at_date</text>
+<text x="452" y="168" font-size="10.5" fill="#7a2020">document_not_reliable</text>
+<text x="622" y="168" font-size="10.5" fill="#7a2020">no_evidence</text>
+<text x="762" y="168" font-size="10.5" fill="#7a2020">citation_unverified</text>
+<text x="34" y="196" font-size="11" fill="#7a2020">★기권은 실패가 아니라 <tspan font-weight="700">정상 결과</tspan>다. 5xx 로 내보내면 에이전트가 재시도 루프를 돈다</text>
+
+<rect x="14" y="232" width="952" height="90" rx="16" fill="#fafafa" stroke="#e6e6e6"/>
+<text x="34" y="258" font-size="13" font-weight="800" fill="#374151">지금 실측 &#8212; 모든 요청이 첫 게이트에서 멈춘다</text>
+<text x="34" y="282" font-size="11.5" fill="#374151"><tspan font-family="ui-monospace,Consolas,monospace">GET /v1/support-manifest</tspan> &#8594; <tspan font-family="ui-monospace,Consolas,monospace" font-weight="700">total_policy_versions: 0</tspan> &#8212; 판정 가능한 약관이 0건</text>
+<text x="34" y="304" font-size="11" fill="#667085">수집&#183;전처리는 끝났고, <tspan font-weight="700">"이 파일이 무엇인가"를 사람이 확정하는 절차</tspan>가 남았다. 파이프라인은 정직하게 동작 중이다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 3. 게이트 다섯 중 <b>하나라도 못 넘으면 기권</b>한다 — 그리고 지금은 첫 게이트에서 전부 멈춘다. 근거: <code>app/core/ports/precheck.py</code> · <code>2026-08-02_1200_전체기능_검수_체크리스트.md</code></p>
+
+<h2>4. 실패 전파 — 한 줄이 오판정까지 가는 길</h2>
+
+<div class="ld-diagram" role="img" aria-label="매니페스트에 date_confidence 필드가 없을 때 기본값이 exact로 채워져 신뢰도 게이트를 그대로 통과하고, 결국 잘못된 세대의 약관으로 판정이 나가는 경로를 단계별로 보여 주는 실패 전파도">
+<svg viewBox="0 0 980 268" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs><marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#a51b1b"/></marker></defs>
+
+<rect x="14" y="14" width="952" height="112" rx="16" fill="#fdf3f3" stroke="#e8bcbc"/>
+<text x="34" y="40" font-size="13" font-weight="800" fill="#a51b1b">확인된 결함 &#8212; <tspan font-family="ui-monospace,Consolas,monospace">date_confidence</tspan> fail-open</text>
+<rect x="34" y="56" width="176" height="52" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="122" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">매니페스트에</text>
+<text x="122" y="93" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">필드가 없다</text>
+<rect x="242" y="56" width="196" height="52" rx="11" fill="#fff7ed" stroke="#e3b98a" stroke-width="2"/>
+<text x="340" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#9a5b12">기본값 &quot;exact&quot; 로 채워짐</text>
+<text x="340" y="93" text-anchor="middle" font-size="10" font-family="ui-monospace,Consolas,monospace" fill="#9a5b12">r.get(&#8230;, &quot;exact&quot;)</text>
+<rect x="470" y="56" width="186" height="52" rx="11" fill="#fff" stroke="#c9d3e4"/>
+<text x="563" y="76" text-anchor="middle" font-size="11" font-weight="700" fill="#172033">신뢰도 게이트</text>
+<text x="563" y="93" text-anchor="middle" font-size="10.5" fill="#a51b1b">그대로 통과한다</text>
+<rect x="688" y="56" width="258" height="52" rx="11" fill="#fdeaea" stroke="#d08b8b" stroke-width="2"/>
+<text x="817" y="76" text-anchor="middle" font-size="11.5" font-weight="800" fill="#a51b1b">엉뚱한 세대 약관으로 판정</text>
+<text x="817" y="93" text-anchor="middle" font-size="10.5" fill="#7a2020">사용자가 손해를 본다</text>
+<line x1="212" y1="82" x2="238" y2="82" stroke="#a51b1b" marker-end="url(#a4)"/>
+<line x1="440" y1="82" x2="466" y2="82" stroke="#a51b1b" marker-end="url(#a4)"/>
+<line x1="658" y1="82" x2="684" y2="82" stroke="#a51b1b" marker-end="url(#a4)"/>
+
+<rect x="14" y="146" width="466" height="106" rx="16" fill="#f6faf7" stroke="#cfe3d6"/>
+<text x="34" y="172" font-size="12.5" font-weight="800" fill="#0f766e">바로 옆 줄은 반대로 돼 있다 (fail-closed)</text>
+<text x="34" y="196" font-size="11" font-family="ui-monospace,Consolas,monospace" fill="#374151">identification = r.get(&#8230;) or &quot;unidentified&quot;</text>
+<text x="34" y="218" font-size="11" fill="#0f766e">모르면 &#8594; 미확정으로 본다 &#8594; 판정에서 빠진다 &#9989;</text>
+<text x="34" y="240" font-size="11" fill="#667085">같은 함수 안에서 한 줄은 안전하게, 한 줄은 위험하게 기본값을 잡았다</text>
+
+<rect x="500" y="146" width="466" height="106" rx="16" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="520" y="172" font-size="12.5" font-weight="800" fill="#3157d5">원칙 &#8212; 모르는 값의 기본값은 &quot;모른다&quot; 여야 한다</text>
+<text x="520" y="196" font-size="11" fill="#374151">확신 없는 값을 기본값으로 채우면 <tspan font-weight="700">그 오류가 조용히 판정까지 간다.</tspan></text>
+<text x="520" y="218" font-size="11" fill="#374151">폴백은 안전장치가 아니라 <tspan font-weight="700">감지되지 않는 고장</tspan>이다.</text>
+<text x="520" y="240" font-size="11" fill="#a54b0b">자동 복구를 하더라도 감사 신호를 남긴다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 4. 기본값 한 줄이 <b>"모른다"를 "확실하다"로</b> 바꿔 게이트를 무력화한다 — 같은 함수의 바로 옆 줄은 올바르게 fail-closed다. 근거: <code>app/adapters/manifest_policy_resolver.py:51</code> · <code>app/core/ports/precheck.py:95</code></p>
+
+<h2>5. 검증은 사람이 계속 할 수 없다 — 확장 경로</h2>
+
+<div class="ld-diagram" role="img" aria-label="검증 등급을 신원확인 문서정합성 발행처확인 예외판단 넷으로 쪼개면 앞의 셋은 자동화할 수 있고 마지막 하나만 사람이 보면 된다는 것과, 전수검수에서 표본검수 발행처API 신뢰등급으로 이어지는 4단계 확장 순서를 보여 주는 그림">
+<svg viewBox="0 0 980 320" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<defs><marker id="a5" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#8a94a6"/></marker></defs>
+
+<rect x="14" y="14" width="952" height="140" rx="16" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="34" y="40" font-size="13" font-weight="800" fill="#3157d5">&quot;검증&quot;은 한 덩어리가 아니다 &#8212; 쪼개면 사람이 꼭 필요한 부분은 작다</text>
+<rect x="34" y="56" width="216" height="76" rx="11" fill="#eefaf2" stroke="#6cc48f" stroke-width="2"/>
+<text x="142" y="78" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">신원 확인</text>
+<text x="142" y="96" text-anchor="middle" font-size="10.5" fill="#0b7a3b">이미 자동</text>
+<text x="142" y="115" text-anchor="middle" font-size="10" fill="#475467">agent_client 인증 &#183; 동의</text>
+<rect x="262" y="56" width="216" height="76" rx="11" fill="#eefaf2" stroke="#6cc48f" stroke-width="2"/>
+<text x="370" y="78" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">문서 정합성</text>
+<text x="370" y="96" text-anchor="middle" font-size="10.5" fill="#0b7a3b">규칙엔진으로 가능</text>
+<text x="370" y="115" text-anchor="middle" font-size="10" fill="#475467">해시 &#183; OCR 필드 &#183; 금액&#183;날짜 대조</text>
+<rect x="490" y="56" width="216" height="76" rx="11" fill="#fff7ed" stroke="#e3b98a" stroke-width="2"/>
+<text x="598" y="78" text-anchor="middle" font-size="11.5" font-weight="700" fill="#172033">발행처 확인</text>
+<text x="598" y="96" text-anchor="middle" font-size="10.5" fill="#9a5b12">조회지 판단이 아니다</text>
+<text x="598" y="115" text-anchor="middle" font-size="10" fill="#475467">보험사&#183;기관 API (제휴 필요)</text>
+<rect x="718" y="56" width="228" height="76" rx="11" fill="#fdf3f3" stroke="#d08b8b" stroke-width="2"/>
+<text x="832" y="78" text-anchor="middle" font-size="11.5" font-weight="800" fill="#a51b1b">애매한 건</text>
+<text x="832" y="96" text-anchor="middle" font-size="10.5" fill="#a51b1b">★여기만 사람이 본다</text>
+<text x="832" y="115" text-anchor="middle" font-size="10" fill="#7a2020">전수가 아니라 예외만</text>
+
+<rect x="14" y="176" width="500" height="130" rx="16" fill="#fafafa" stroke="#e6e6e6"/>
+<text x="34" y="202" font-size="12.5" font-weight="800" fill="#374151">확장 순서 &#8212; 병목 상한을 미리 안다</text>
+<text x="34" y="226" font-size="11" fill="#374151">1단계 (지금)  전수 사람 검수</text>
+<text x="34" y="246" font-size="11" fill="#374151">2단계  자동 정합성 + 이상탐지 &#8594; 표본 10%</text>
+<text x="34" y="266" font-size="11" fill="#374151">3단계  발행처 API &#8594; confirmed 자동 승격</text>
+<text x="34" y="286" font-size="11" fill="#374151">4단계  클라이언트 신뢰등급 &#8594; 표본율 하향</text>
+<text x="306" y="226" font-size="11" font-weight="800" fill="#a54b0b">n &#60; 500</text>
+<text x="306" y="246" font-size="10.5" fill="#667085">1건 5분 &#215; 2시간/일</text>
+<text x="306" y="266" font-size="10.5" fill="#667085">= 하루 24건</text>
+<text x="306" y="286" font-size="10.5" fill="#667085">= 월 500건이 한계</text>
+
+<rect x="534" y="176" width="432" height="130" rx="16" fill="#f6faf7" stroke="#cfe3d6"/>
+<text x="554" y="202" font-size="12.5" font-weight="800" fill="#0f766e">★스키마는 바뀌지 않는다</text>
+<text x="554" y="226" font-size="11" fill="#374151"><tspan font-family="ui-monospace,Consolas,monospace">verification_method NOT NULL</tspan> 이 이미</text>
+<text x="554" y="245" font-size="11" fill="#374151">&quot;누가&#183;무엇으로&quot;를 요구한다. 자동화는 값의 추가일 뿐.</text>
+<text x="554" y="270" font-size="10" font-family="ui-monospace,Consolas,monospace" fill="#0f766e">admin_review | consistency_rules | issuer_api | cross_submission</text>
+<text x="554" y="294" font-size="10.5" fill="#a54b0b">단 등급을 뭉뚱그리면 자동화할수록 통계가 조용히 묽어진다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 5. 목표는 <b>"사람을 없앤다"가 아니라 "사람이 예외만 본다"</b>이다 — 그리고 자동화해도 스키마는 그대로다. 근거: <code>03_에이전트_데이터_축적_설계.md §3-1</code></p>
+
+<h2>6. 모델 스택과 12GB 예산</h2>
+
+<div class="ld-diagram" role="img" aria-label="RTX 4070 SUPER 12기가 안에서 OCR 두 종류와 임베딩과 리랭커와 생성 모델을 동시에 상주시켰을 때 가중치 합이 8.8기가이고 실행 피크가 10.5에서 11.6기가라는 예산 배분도와, 외부 클라우드에 올려도 되는 것과 안 되는 것의 경계">
+<svg viewBox="0 0 980 306" xmlns="http://www.w3.org/2000/svg" font-family="inherit">
+<rect x="14" y="14" width="952" height="150" rx="16" fill="#f7f9ff" stroke="#dfe5f0"/>
+<text x="34" y="40" font-size="13" font-weight="800" fill="#3157d5">RTX 4070 SUPER 12GB &#8212; 전부 상주 가능한 조합</text>
+
+<rect x="34" y="56" width="240" height="26" rx="6" fill="#7f95dd"/>
+<text x="154" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">OCR PaddleOCR-VL 1.79</text>
+<rect x="278" y="56" width="24" height="26" rx="6" fill="#a8b8e0"/>
+<rect x="306" y="56" width="142" height="26" rx="6" fill="#8fb8a8"/>
+<text x="377" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">e5-large 1.05</text>
+<rect x="452" y="56" width="150" height="26" rx="6" fill="#b49ae8"/>
+<text x="527" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">리랭커 1.11</text>
+<rect x="606" y="56" width="340" height="26" rx="6" fill="#e3b98a"/>
+<text x="776" y="74" text-anchor="middle" font-size="11" font-weight="700" fill="#5c3a0d">Gemma-4-E4B Q4 (text only) 4.80</text>
+
+<text x="34" y="104" font-size="11.5" fill="#374151">상주 가중치 합 <tspan font-weight="800">약 8.8 GiB</tspan> &#8594; KV캐시&#183;활성 포함 실행 피크 <tspan font-weight="800">10.5 &#8764; 11.6 GiB</tspan></text>
+<rect x="34" y="116" width="760" height="16" rx="5" fill="#dfe5f0"/>
+<rect x="34" y="116" width="620" height="16" rx="5" fill="#7f95dd"/>
+<text x="800" y="129" font-size="10.5" fill="#667085">여유 0.8&#8764;1.5 GiB 필수</text>
+<text x="34" y="152" font-size="11" fill="#a54b0b">조건: 생성 4K &#183; 리랭크 1K &#183; 배치 1&#8764;4 &#183; ★Gemma 멀티모달 projector 미로드(992MB 추가)</text>
+
+<rect x="14" y="184" width="466" height="110" rx="16" fill="#fdf3f3" stroke="#e8bcbc"/>
+<text x="34" y="210" font-size="12.5" font-weight="800" fill="#a51b1b">12GB 에서도 전부 상주는 불가</text>
+<text x="34" y="234" font-size="11" fill="#374151">Qwen3.5-4B <tspan font-weight="700">BF16 8.70</tspan> + 나머지 = 가중치만 <tspan font-weight="700">12.7 GiB</tspan></text>
+<text x="34" y="256" font-size="11" fill="#374151">&#8594; 검색&#183;리랭크 후 <tspan font-weight="700">GPU 해제 &#8594; 순차 로드</tspan> 로만 가능</text>
+<text x="34" y="280" font-size="11" fill="#7a2020">Gemma BF16(16GB)은 순차 로드로도 불가능</text>
+
+<rect x="500" y="184" width="466" height="110" rx="16" fill="#fff7ed" stroke="#e3b98a"/>
+<text x="520" y="210" font-size="12.5" font-weight="800" fill="#9a5b12">★RunPod 은 연산 확장 자원이 아니다</text>
+<text x="520" y="234" font-size="11" fill="#374151">올려도 됨 &#8212; 공개 가중치 &#183; 코드 &#183; <tspan font-weight="700">완전 합성</tspan> 데이터</text>
+<text x="520" y="256" font-size="11" fill="#a51b1b">안 됨 &#8212; 실제 의료문서 &#183; OCR 결과 &#183; 청크 &#183; 로그 &#183; 약관 원문</text>
+<text x="520" y="280" font-size="10.5" fill="#7a2020">암호화해도 GPU 메모리에서는 평문으로 처리된다</text>
+</svg>
+</div>
+<p class="ld-figure-caption">그림 6. 12GB의 값어치는 "더 큰 모델"이 아니라 <b>"파이프라인 전체를 한 번에 올릴 수 있다"</b>는 것이다. 근거: <code>2026-08-02_1500_SOTA_모델_조사_코덱스합의.md §13</code></p>
+
+<h2>그림을 고칠 때</h2>
+<div class="box">
+<b>지켜야 할 것 — <code>docs/pdf/RULE.md §5</code></b>
+<ul>
+<li><b>인라인 SVG 만 쓴다.</b> CDN·외부 수식 라이브러리는 금지다(MathJax·KaTeX 포함)</li>
+<li>그림마다 <code>role="img"</code> + <b>aria-label</b> + <b>캡션 한 줄</b>을 붙인다</li>
+<li>시각화는 <b>입력 · 처리 · 출력 · 데이터 방향 · 오프라인/온라인 · 무엇이 신경망이고 무엇이 코드인지</b>를 드러내야 한다</li>
+<li><code>viewBox</code> 여유를 <b>눈으로 확인하지 말고</b> 마지막 baseline + 글자 높이로 계산한다 — 넘치면 잘려 보인다</li>
+<li>폰트에 없을 수 있는 글자(수학 볼드 등)를 쓰지 않는다. <code>Σ θ β ∈ Δ</code> 는 안전하다</li>
+</ul>
+</div>
+<div class="box w">
+<b>숫자를 고칠 때</b>
+이 그림들의 수치는 <b>2026-08-02 실측</b>이다. 전처리 재실행·재색인·구현이 진행되면 <b>같이 바뀐다.</b>
+숫자를 옮겨 적기 전에 근거 문서를 다시 열어 확인한다 — 그림이 문서보다 오래 사는 경우가 많다.
+</div>
+
+<p class="sub" style="margin-top:2.5rem">
+관련 — <code>01_데이터_현황.md</code> · <code>02_ERD_및_스키마.md</code> · <code>03_에이전트_데이터_축적_설계.md</code> ·
+<code>05_계약_AI2_판정.md</code> · <code>11_AI_구조_지도.md</code> · <code>storyboard.html</code> · <code>erd_briefing.html</code>
+</p>
+
+</main></body></html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>마이페이지 — {{BRAND}}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <h1>🙍 마이페이지 · 얼굴 로그인</h1>
+    <p class="sub">비밀번호 로그인 + 선택적 얼굴 2차 인증(패시브 라이브니스 포함)</p>
+    <nav class="top-nav">
+      <a href="/static/mypage.html" class="active">🙍 마이페이지</a>
+    </nav>
+  </header>
+
+  <main>
+    <p class="auth-status" id="authStatusBar"></p>
+    <p class="ai-disclaimer">
+      ⚠️ 얼굴 인증은 <strong>학습·포트폴리오용</strong> 구현입니다. 패시브 라이브니스(정지 사진·화면
+      재촬영 억제)를 포함하지만, 재생영상·딥페이크·카메라 주입 방어나 공인 PAD(iBeta 등) 성능은
+      보장하지 않습니다. 관리자 승격은 여전히 CLI 전용입니다.
+    </p>
+
+    <!-- 1) 로그인 (비인증 상태) -->
+    <div class="panel" id="loginPanel">
+      <h2>1. 로그인</h2>
+      <div class="row">
+        <div class="field">아이디
+          <input id="loginUser" type="text" autocomplete="username" />
+        </div>
+        <div class="field">비밀번호
+          <input id="loginPass" type="password" autocomplete="current-password" />
+        </div>
+        <button id="loginBtn" type="button">로그인</button>
+      </div>
+      <p class="hint" id="loginHint">얼굴을 등록한 계정은 로그인 후 얼굴 2차 인증이 요구됩니다.</p>
+    </div>
+
+    <!-- 2) 얼굴 2차 인증 단계 (로그인 응답이 2FA 요구할 때만) -->
+    <div class="panel" id="twofaPanel" hidden>
+      <h2>2. 얼굴 2차 인증</h2>
+      <p class="hint">등록한 얼굴로 본인 확인을 완료해야 로그인이 끝납니다(무폴백 — 비밀번호만으로는 접근 불가).</p>
+      <div class="face-cam-wrap">
+        <video id="twofaVideo" autoplay playsinline muted></video>
+      </div>
+      <div class="row">
+        <button id="twofaCaptureBtn" type="button">📸 촬영해서 인증</button>
+        <button id="twofaCancelBtn" type="button" class="secondary">취소</button>
+      </div>
+      <p class="voice-status" id="twofaStatus"></p>
+    </div>
+
+    <!-- 3) 얼굴 등록 관리 (로그인 상태) -->
+    <div class="panel" id="facePanel" hidden>
+      <h2>3. 얼굴 등록 관리</h2>
+      <p class="hint">
+        상태: <strong id="faceStatusText">확인 중…</strong>
+        <span class="hint">— 등록은 로그인된 이 세션에서만 가능합니다(체인 잠김 방지).</span>
+      </p>
+      <div class="face-cam-wrap">
+        <video id="regVideo" autoplay playsinline muted></video>
+      </div>
+      <div class="row">
+        <button id="regCameraBtn" type="button">📷 카메라 켜기</button>
+        <button id="regCaptureBtn" type="button" hidden>📸 촬영해서 등록</button>
+        <button id="regDeleteBtn" type="button" class="danger" hidden>얼굴 등록 삭제</button>
+        <button id="logoutBtn" type="button" class="secondary">로그아웃</button>
+      </div>
+      <p class="voice-status" id="regStatus"></p>
+    </div>
+  </main>
+
+  <script src="/static/common.js"></script>
+  <script src="/static/mypage.js"></script>
+</body>
+</html>

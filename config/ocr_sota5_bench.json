@@ -1,0 +1,112 @@
+{
+  "created_at": "2026-08-03T18:50:00+09:00",
+  "render_dpi": 200,
+  "models": [
+    {
+      "slug": "ovisocr2",
+      "model_id": "ATH-MaaS/OvisOCR2",
+      "adapter": "chat",
+      "model_class": "multimodal",
+      "prompt": "Extract all readable content from the image in natural human reading order and output one Markdown document. Format tables as HTML. Preserve the original Korean text and codes exactly without translation or paraphrasing.",
+      "max_new_tokens": 8192
+    },
+    {
+      "slug": "paddleocr_vl_1_6",
+      "model_id": "PaddlePaddle/PaddleOCR-VL-1.6",
+      "adapter": "paddle_element",
+      "model_class": "image_text",
+      "prompt": "Table Recognition:",
+      "max_new_tokens": 4096
+    },
+    {
+      "slug": "paddleocr_vl_1_6_4bit",
+      "model_id": "PaddlePaddle/PaddleOCR-VL-1.6",
+      "adapter": "paddle_element_4bit",
+      "model_class": "image_text",
+      "prompt": "Table Recognition:",
+      "max_new_tokens": 4096
+    },
+    {
+      "slug": "mineru_2_5_pro_2605",
+      "model_id": "opendatalab/MinerU2.5-Pro-2605-1.2B",
+      "adapter": "mineru",
+      "model_class": "qwen2_vl",
+      "prompt": "",
+      "max_new_tokens": 8192
+    },
+    {
+      "slug": "glm_ocr",
+      "model_id": "zai-org/GLM-OCR",
+      "adapter": "chat",
+      "model_class": "image_text",
+      "prompt": "Table Recognition:",
+      "max_new_tokens": 8192
+    },
+    {
+      "slug": "bizonai_ocr",
+      "model_id": "ONTHEIT/BizOnAI-OCR",
+      "adapter": "chat_4bit",
+      "model_class": "image_text",
+      "prompt": "이 문서 이미지의 모든 내용을 원래 읽기 순서대로 정확히 전사하세요. 표는 행·열·병합 관계를 보존한 HTML로 출력하고, 한글·영문 코드·금액을 번역하거나 바꾸지 마세요.",
+      "max_new_tokens": 8192
+    }
+  ],
+  "samples": [
+    {
+      "id": "kcd_gold_heungkukfire_p109",
+      "insurer": "heungkukfire",
+      "sha12": "ff0521a99902",
+      "page_1based": 109,
+      "kind": "kcd_gold",
+      "expected_tokens": ["심장질환", "I00~I02", "뇌혈관질환", "I60~I69", "유산", "O00~O08"]
+    },
+    {
+      "id": "selfpay_nhlife_p26",
+      "insurer": "nhlife",
+      "sha12": "21b40ddc9987",
+      "page_1based": 26,
+      "kind": "selfpay",
+      "expected_tokens": ["공제금액", "8천원", "급여", "비급여"]
+    },
+    {
+      "id": "selfpay_nhlife_p27",
+      "insurer": "nhlife",
+      "sha12": "21b40ddc9987",
+      "page_1based": 27,
+      "kind": "selfpay_continued",
+      "expected_tokens": ["공제금액", "8천원", "급여", "비급여"]
+    },
+    {
+      "id": "selfpay_samsungfire_p40",
+      "insurer": "samsungfire",
+      "sha12": "99cedca23be0",
+      "page_1based": 40,
+      "kind": "selfpay",
+      "expected_tokens": ["공제기준금액", "1만5천원", "2만원", "8천원"]
+    },
+    {
+      "id": "selfpay_samsungfire_p41",
+      "insurer": "samsungfire",
+      "sha12": "99cedca23be0",
+      "page_1based": 41,
+      "kind": "selfpay_continued",
+      "expected_tokens": ["공제기준금액", "급여", "비급여"]
+    },
+    {
+      "id": "selfpay_lotteins_p15",
+      "insurer": "lotteins",
+      "sha12": "16061a35637e",
+      "page_1based": 15,
+      "kind": "selfpay",
+      "expected_tokens": ["자기부담금", "급여", "비급여"]
+    },
+    {
+      "id": "selfpay_dbins_p35",
+      "insurer": "dbins",
+      "sha12": "586d721a612a",
+      "page_1based": 35,
+      "kind": "selfpay",
+      "expected_tokens": ["공제", "급여", "비급여"]
+    }
+  ]
+}

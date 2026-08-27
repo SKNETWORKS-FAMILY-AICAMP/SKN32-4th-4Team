@@ -1,0 +1,137 @@
+{
+  "schema_version": "s7-chatbot-golden-v1",
+  "description": "Offline synthetic S7 grounding cases; no policy corpus text or model output.",
+  "expected_release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850},
+  "cases": [
+    {
+      "id": "s7-01-deductible-amount", "axis": "자기부담금·금액", "insurer": "가보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+      "evidence": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}],
+      "required_tokens": ["1만원"], "required_conditions": ["자기부담금"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "가보험 약관에서 자기부담금은 1만원으로 정합니다.", "quotes": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "자기부담금은 가보험 약관상 1만원입니다.", "quotes": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "인용된 가보험 문구는 자기부담금을 1만원으로 정합니다.", "quotes": [{"insurer": "가보험", "quote": "자기부담금은 1만원으로 정합니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+      ]
+    },
+    {
+      "id": "s7-02-copay-rate", "axis": "공제액·비율", "insurer": "나보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+      "evidence": [{"insurer": "나보험", "quote": "공제액은 의료비의 20%입니다."}],
+      "required_tokens": ["20%"], "required_conditions": ["공제액"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "나보험의 공제액은 의료비의 20%입니다.", "quotes": [{"insurer": "나보험", "quote": "공제액은 의료비의 20%입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "공제액은 나보험 원문에서 의료비의 20%로 적혀 있습니다.", "quotes": [{"insurer": "나보험", "quote": "공제액은 의료비의 20%입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "인용 기준으로 나보험 공제액은 20%입니다.", "quotes": [{"insurer": "나보험", "quote": "공제액은 의료비의 20%입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+      ]
+    },
+    {
+      "id": "s7-03-outpatient-max", "axis": "통원 자기부담금·금액·비율", "insurer": "가보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+      "evidence": [{"insurer": "가보험", "quote": "통원 자기부담금은 2만원과 의료비의 30% 중 큰 금액입니다."}],
+      "required_tokens": ["2만원", "30%"], "required_conditions": ["중 큰 금액"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "통원 자기부담금은 2만원과 의료비의 30% 중 큰 금액입니다.", "quotes": [{"insurer": "가보험", "quote": "통원 자기부담금은 2만원과 의료비의 30% 중 큰 금액입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "가보험은 통원 자기부담금을 의료비의 30%와 2만원 중 큰 금액으로 설명합니다.", "quotes": [{"insurer": "가보험", "quote": "통원 자기부담금은 2만원과 의료비의 30% 중 큰 금액입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "원문 조건은 통원 자기부담금 2만원과 30% 중 큰 금액입니다.", "quotes": [{"insurer": "가보험", "quote": "통원 자기부담금은 2만원과 의료비의 30% 중 큰 금액입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+      ]
+    },
+    {
+      "id": "s7-04-insurer-selected", "axis": "보험사 지정", "insurer": "가보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+      "evidence": [{"insurer": "가보험", "quote": "가보험의 외래 공제액은 1만원입니다."}, {"insurer": "나보험", "quote": "나보험의 외래 공제액은 3만원입니다."}],
+      "required_tokens": ["1만원"], "required_conditions": ["가보험"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "가보험의 외래 공제액은 1만원입니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 외래 공제액은 1만원입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "선택한 가보험 약관에는 외래 공제액이 1만원으로 적혀 있습니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 외래 공제액은 1만원입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}},
+        {"intent": "term", "message": "외래 공제액은 가보험 기준 1만원입니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 외래 공제액은 1만원입니다."}], "llm": {"used": true, "provider": "fixture", "model": "deterministic-v1"}}
+      ]
+    },
+    {
+      "id": "s7-05-insurer-unspecified", "axis": "보험사 미지정", "insurer": null,
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [{"insurer": "가보험", "quote": "가보험의 한도는 10만원입니다."}, {"insurer": "나보험", "quote": "나보험의 한도는 20만원입니다."}],
+      "required_tokens": ["10만원", "20만원"], "required_conditions": ["가보험", "나보험"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "보험사별 원문이 다릅니다. 가보험 한도는 10만원, 나보험 한도는 20만원입니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 한도는 10만원입니다."}, {"insurer": "나보험", "quote": "나보험의 한도는 20만원입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "가보험은 10만원이고 나보험은 20만원이므로 보험사를 구분해야 합니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 한도는 10만원입니다."}, {"insurer": "나보험", "quote": "나보험의 한도는 20만원입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "한도는 가보험 10만원, 나보험 20만원으로 서로 다릅니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 한도는 10만원입니다."}, {"insurer": "나보험", "quote": "나보험의 한도는 20만원입니다."}], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-06-limit-and-date", "axis": "한도·날짜", "insurer": "다보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [{"insurer": "다보험", "quote": "2025-01-01 이후 연간 한도는 100만원입니다."}],
+      "required_tokens": ["2025-01-01", "100만원"], "required_conditions": ["연간 한도"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "2025-01-01 이후 연간 한도는 100만원입니다.", "quotes": [{"insurer": "다보험", "quote": "2025-01-01 이후 연간 한도는 100만원입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "다보험 원문은 연간 한도를 2025-01-01 이후 100만원으로 둡니다.", "quotes": [{"insurer": "다보험", "quote": "2025-01-01 이후 연간 한도는 100만원입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "연간 한도는 100만원이며 기준일은 2025-01-01입니다.", "quotes": [{"insurer": "다보험", "quote": "2025-01-01 이후 연간 한도는 100만원입니다."}], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-07-duplicate-definition", "axis": "동일 정의 반복 문서", "insurer": null,
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [{"insurer": "가보험", "quote": "통원은 입원하지 않고 치료받는 것을 말합니다."}, {"insurer": "나보험", "quote": "통원은 입원하지 않고 치료받는 것을 말합니다."}],
+      "required_tokens": [], "required_conditions": ["통원", "입원하지 않고"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "두 문서 모두 통원을 입원하지 않고 치료받는 것으로 정의합니다.", "quotes": [{"insurer": "가보험", "quote": "통원은 입원하지 않고 치료받는 것을 말합니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "반복된 정의에서 통원은 입원하지 않고 치료받는 것을 뜻합니다.", "quotes": [{"insurer": "나보험", "quote": "통원은 입원하지 않고 치료받는 것을 말합니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "통원의 공통 조건은 입원하지 않고 치료받는 것입니다.", "quotes": [{"insurer": "가보험", "quote": "통원은 입원하지 않고 치료받는 것을 말합니다."}, {"insurer": "나보험", "quote": "통원은 입원하지 않고 치료받는 것을 말합니다."}], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-08-different-definitions", "axis": "서로 다른 보험사 정의", "insurer": null,
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [{"insurer": "가보험", "quote": "가보험의 통원은 당일 귀가한 경우입니다."}, {"insurer": "나보험", "quote": "나보험의 통원은 입원하지 않은 경우입니다."}],
+      "required_tokens": [], "required_conditions": ["가보험", "나보험", "다릅니다"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "정의가 다릅니다. 가보험은 당일 귀가, 나보험은 입원하지 않은 경우입니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 통원은 당일 귀가한 경우입니다."}, {"insurer": "나보험", "quote": "나보험의 통원은 입원하지 않은 경우입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "가보험과 나보험의 통원 조건은 다릅니다. 각각 당일 귀가와 입원하지 않은 경우입니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 통원은 당일 귀가한 경우입니다."}, {"insurer": "나보험", "quote": "나보험의 통원은 입원하지 않은 경우입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "가보험은 당일 귀가, 나보험은 입원하지 않은 경우로 정의가 다릅니다.", "quotes": [{"insurer": "가보험", "quote": "가보험의 통원은 당일 귀가한 경우입니다."}, {"insurer": "나보험", "quote": "나보험의 통원은 입원하지 않은 경우입니다."}], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-09-annex-definition", "axis": "붙임 정의표", "insurer": "가보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [{"insurer": "가보험", "kind": "appendix", "quote": "붙임 정의표: 외래란 입원하지 않은 진료를 말합니다."}],
+      "required_tokens": [], "required_conditions": ["외래", "입원하지 않은"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "붙임 정의표에서 외래는 입원하지 않은 진료입니다.", "quotes": [{"insurer": "가보험", "quote": "붙임 정의표: 외래란 입원하지 않은 진료를 말합니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "외래는 붙임에 따라 입원하지 않은 진료를 말합니다.", "quotes": [{"insurer": "가보험", "quote": "붙임 정의표: 외래란 입원하지 않은 진료를 말합니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "가보험 붙임 원문은 외래를 입원하지 않은 진료로 정의합니다.", "quotes": [{"insurer": "가보험", "quote": "붙임 정의표: 외래란 입원하지 않은 진료를 말합니다."}], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-10-ocr-phrase", "axis": "OCR 구절", "insurer": "라보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [{"insurer": "라보험", "kind": "ocr", "quote": "처방조제 자기부담금은 8천원입니다."}],
+      "required_tokens": ["8천원"], "required_conditions": ["처방조제 자기부담금"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "OCR 원문에서 처방조제 자기부담금은 8천원입니다.", "quotes": [{"insurer": "라보험", "quote": "처방조제 자기부담금은 8천원입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "라보험의 처방조제 자기부담금은 8천원으로 읽힙니다.", "quotes": [{"insurer": "라보험", "quote": "처방조제 자기부담금은 8천원입니다."}], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "인용된 처방조제 자기부담금 금액은 8천원입니다.", "quotes": [{"insurer": "라보험", "quote": "처방조제 자기부담금은 8천원입니다."}], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-11-search-failure", "axis": "검색 실패", "insurer": "가보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [], "required_tokens": [], "required_conditions": ["찾지 못했습니다"], "expected_intent": "term",
+      "responses": [
+        {"intent": "term", "message": "가보험 약관에서 해당 용어를 찾지 못했습니다.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "근거 구절을 찾지 못했습니다. 가보험 약관을 다시 확인해 주세요.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "term", "message": "찾지 못했습니다. 가보험에 대한 설명을 만들지 않습니다.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    },
+    {
+      "id": "s7-12-coverage-boundary", "axis": "보장 질문과 용어 질문 경계", "insurer": "가보험",
+      "execution": {"release": {"fingerprint": "37ccfe9e1317da2b8323ecb37eb58ef43cdf1922ef304d0dfd2e22ce10c727de", "occurrence_count": 850}, "llm": {"used": false, "provider": null, "model": null}},
+      "evidence": [], "required_tokens": [], "required_conditions": ["보장 여부", "답하지 않습니다"], "expected_intent": "precheck",
+      "responses": [
+        {"intent": "precheck", "message": "보장 여부는 여기서 답하지 않습니다. 가입 약관 판정으로 안내합니다.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "precheck", "message": "이 대화에서는 보장 여부를 답하지 않습니다. 판정 양식을 이용해 주세요.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}},
+        {"intent": "precheck", "message": "보장 여부 질문에는 답하지 않습니다. 가입 약관 확인이 필요합니다.", "quotes": [], "llm": {"used": false, "provider": null, "model": null}}
+      ]
+    }
+  ]
+}

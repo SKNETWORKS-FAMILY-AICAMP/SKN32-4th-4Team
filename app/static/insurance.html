@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>올바른 보험비서</title>
+<style>
+  /* ────────────────────────────────────────────────────────────────
+     ★이 화면은 팀 `front` 브랜치의 글래스 디자인을 **우리 화면 구조 위에**
+       옮겨 온 것이다. 디자인만 가져오고 기능은 우리 것을 그대로 둔다.
+       색은 `9c8277f0 UI 수정`(2026-08-26)의 **화이트 테마**를 따른다 —
+       팀이 다크에서 화이트로 바꾼 것을 그대로 반영했다. 판단 근거는
+       docs/reports/2026-08-26_1146_front브랜치_UI_비교분석과_반영범위.md
+
+     ★가져오지 않은 것(파티클 배경 셰이더·로그인 배경 영상)과 그 이유는
+       docs/reports/ 의 반영 리포트에 적어 두었다 — 출처·라이선스 미확인.
+     ──────────────────────────────────────────────────────────────── */
+  :root {
+    --accent: #1c1c18;
+    --on-accent: #ffffff;
+    --border: rgba(0, 0, 0, 0.1);
+    --border-strong: rgba(0, 0, 0, 0.28);
+    --background: #ffffff;
+    --surface: rgba(0, 0, 0, 0.035);
+    --surface-soft: rgba(0, 0, 0, 0.02);
+    --surface-solid: #ffffff;
+    --text: #1c1c18;
+    --muted: rgba(0, 0, 0, 0.55);
+    --muted-strong: rgba(0, 0, 0, 0.75);
+
+    --ok: #2f8a5b;
+    --ok-bg: rgba(47, 138, 91, 0.12);
+    --warn: #b5651d;
+    --warn-bg: rgba(181, 101, 29, 0.12);
+    --danger: #c0392b;
+    --danger-bg: rgba(192, 57, 43, 0.12);
+
+    /* ★★포커스 링은 **배경과 대비되는 색**이어야 한다. 그래서 배경색과 함께
+         뒤집히는 자리에 토큰으로 뽑아 뒀다 — 다크일 땐 흰색, 화이트일 땐 먹색.
+         front 브랜치는 다크 테마에서 `outline: 2px solid var(--accent)`(= #1c1c18)
+         를 그대로 둬서 배경 #050505 위에 검정 링이 됐었다. 같은 실수를 막으려고
+         이 파일 어디에도 `outline: none` 을 쓰지 않는다. */
+    --focus: #1c1c18;
+
+    --shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+    --radius-md: 14px;
+    --glass-blur: blur(16px);
+
+    --panel-w: 380px;
+    --topbar-h: 64px;
+  }
+
+  * { box-sizing: border-box; }
+  html { background: var(--background); }
+  body {
+    min-width: 320px;
+    margin: 0;
+    background: var(--background);
+    color: var(--text);
+    font: 15.5px/1.55 Pretendard, Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+      "Noto Sans KR", "Malgun Gothic", sans-serif;
+    letter-spacing: -.01em;
+  }
+  button, input, select { font: inherit; letter-spacing: inherit; color: inherit; }
+  button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
+
+  /* ★★모든 포커스 표시를 **한 곳에서** 정한다. 개별 규칙에서 `outline: none` 을
+       쓰지 않으므로 새 입력 요소를 넣어도 키보드 포커스가 보인다.
+       `tests/test_static_ui.py::test_입력창_포커스가_키보드_사용자에게_보인다` 가 검사한다. */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  [hidden] { display: none !important; }
+  h1, h2, h3 { letter-spacing: -.02em; }
+
+  .icon { width: 17px; height: 17px; flex: none; }
+
+  /* ── 스크롤바 ────────────────────────────────────────────────────
+     ★기본 스크롤바는 이 화면의 유일한 각진 회색 덩어리였다(front 원본도 마찬가지였다).
+     ★**평소엔 보이지 않는다.** 마우스를 올렸을 때와 실제로 굴리는 동안에만 뜬다
+       (`.is-scrolling` 은 `insurance.js` 가 붙였다 뗀다).
+     ★폭은 늘 잡아 둔다 — 나타날 때 폭이 생기면 글이 옆으로 밀린다.
+     ★`background-clip: content-box` + 투명 테두리 = 얇은 알약 모양. 별도 이미지가 필요 없다. */
+  .scroll-soft { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  .scroll-soft::-webkit-scrollbar { width: 10px; height: 10px; }
+  .scroll-soft::-webkit-scrollbar-track { background: transparent; }
+  .scroll-soft::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+    transition: background-color .18s ease;
+  }
+  .scroll-soft:hover, .scroll-soft.is-scrolling { scrollbar-color: rgba(0, 0, 0, .22) transparent; }
+  .scroll-soft:hover::-webkit-scrollbar-thumb,
+  .scroll-soft.is-scrolling::-webkit-scrollbar-thumb { background-color: rgba(0, 0, 0, .22); }
+  .scroll-soft::-webkit-scrollbar-thumb:hover { background-color: rgba(0, 0, 0, .38); }
+  /* 손가락으로 미는 기기에는 스크롤바 자체가 없다 — hover 규칙이 헛돌지 않게 끈다. */
+  @media (hover: none) {
+    .scroll-soft::-webkit-scrollbar { width: 0; height: 0; }
+  }
+  .small { font-size: 12.5px; }
+  .muted { color: var(--muted); }
+
+  /* ── 배경 ────────────────────────────────────────────────────────
+     ★front 브랜치는 여기에 WebGL 파티클 캔버스를 깔았다. 원본 셰이더
+       (React Three Fiber 템플릿)의 라이선스를 확인하지 못해 **가져오지 않았다.**
+     ★★한때 그 자리를 CSS 색조 그라디언트로 채웠는데, 흰 테마에서 화면 위쪽이
+       **회끄무레하게** 깔렸다(실측: 상단 중앙 241,244,242 vs 하단 255,255,255).
+       파티클을 대신하려다 「화면이 어둡다」는 인상만 남겼다.
+       front 화이트판의 바탕은 `#ffffff` 다 — 그대로 **흰색으로 둔다.**
+       비네트도 흰 바탕 위 흰 그라디언트라 하는 일이 없어 뺐다. */
+  .bg-field {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background: var(--background);
+  }
+
+  .app-shell { position: relative; z-index: 1; height: 100dvh; overflow: hidden; }
+  /* ★`inert` 가 걸린 곳은 눌리지도, Tab 으로 잡히지도 않는다.
+     화면 위에 덮개가 떠 있는데 뒤쪽에 커서가 들어가면 사용자는 커서를 잃는다. */
+  [inert] { pointer-events: none; }
+  /* 첫 배치에는 전환을 걸지 않는다 — 초기 상태가 '움직임'으로 보이면 안 된다. */
+  .app-shell.no-anim .side-panel,
+  .app-shell.no-anim .chat-main,
+  .app-shell.no-anim .detail-drawer,
+  .app-shell.no-anim .scrim { transition: none !important; }
+
+  /* ── 왼쪽 보험정보 패널 ──────────────────────────────────────────
+     ★★front 브랜치는 이 패널을 `width: 0` 로 접고 **패널 안에 있는 버튼**만으로
+       열게 했다. 860px 이하에서 그 버튼까지 잘려 나가 실측 결과
+       `elementFromPoint` 가 다른 요소를 잡았다 — 휴대폰에서 보험정보를 입력할
+       방법이 아예 없었다. 그래서 여는 버튼을 **상단바로 옮겼다**(`#sideToggle`). */
+  .side-panel {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 30;
+    width: var(--panel-w);
+    display: flex; flex-direction: column;
+    /* ★★**덮는 판은 불투명해야 한다.** `--surface` 는 `rgba(0,0,0,.035)` — 96.5%가
+       투명이라 뒤에 있는 것이 그대로 비쳐 올라온다. 그래서 어두운 막(0.14)이
+       패널 **위로** 비쳐 패널까지 회색이 됐다(실측: 패널 안쪽 픽셀 205,207,206 —
+       바깥 217 과 거의 같았다). 「화면 전체가 어둡다」의 진짜 원인은 막이 아니라
+       이것이었다. 유리 느낌은 살짝 남기되 흰색이 이기도록 .94 로 세운다. */
+    background: rgba(255, 255, 255, .94);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    border-right: 1px solid var(--border);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, .06);
+    transition: transform .22s ease;
+  }
+  .side-panel-inner {
+    width: var(--panel-w); height: 100%;
+    display: flex; flex-direction: column; overflow-y: auto;
+    padding: 22px 20px 24px;
+  }
+  .app-shell.panel-closed .side-panel { transform: translateX(-100%); }
+
+  .pane-head { position: relative; margin-bottom: 4px; }
+  .panel-close {
+    position: absolute; top: -4px; right: -2px;
+    width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface-soft);
+  }
+  .panel-close:hover { background: rgba(0, 0, 0, .06); }
+  .eyebrow { margin: 0; color: var(--muted); font-size: 12px; font-weight: 650; }
+  .pane-head h1 { margin: 6px 0 4px; font-size: 26px; }
+  .lead { margin: 0; color: var(--muted); font-size: 13.5px; }
+
+  .field { margin-top: 16px; }
+  .field label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 12px; font-weight: 650; }
+  .control {
+    width: 100%;
+    height: 46px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .control::placeholder { color: rgba(0, 0, 0, 0.32); }
+  .control:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px rgba(0, 0, 0, .06); }
+  .control:disabled { opacity: .5; cursor: not-allowed; }
+  select.control {
+    appearance: none;
+    padding-right: 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%231c1c18' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 13px center;
+  }
+
+  /* ── 선택 목록(콤보박스) ────────────────────────────────────────
+     ★★브라우저 기본 `<datalist>` 는 **위치를 우리가 정할 수 없다.** 창 배율·스크롤에
+       따라 엉뚱한 데 뜨고(실측 2026-08-26 화면 위쪽에 떴다), 모양도 못 맞춘다.
+       그래서 입력칸을 기준으로 우리가 직접 그린다 — 이름 그대로 **바로 아래**에 뜬다.
+     ★`<datalist>` 는 지우지 않고 **데이터 그릇으로 남겨 둔다.** 목록을 채우는 기존
+       코드(`loadProducts`·보험사 목록)를 건드리지 않아도 되고, 자바스크립트가
+       죽어도 브라우저 기본 자동완성이 그대로 살아 있다. */
+  .combo { position: relative; }
+  /* 입력칸이 화면 아래쪽이면 목록을 **위로** 연다 — 아래로 열면 잘린다. */
+  .combo[data-combo-up] .combo-list { top: auto; bottom: calc(100% + 6px); }
+  .combo-list {
+    position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 50;
+    max-height: 264px; overflow-y: auto; margin: 0; padding: 6px;
+    list-style: none; border: 1px solid var(--border); border-radius: 12px;
+    background: #ffffff; box-shadow: 0 14px 34px rgba(0, 0, 0, .12);
+  }
+  .combo-opt {
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: 13.5px; line-height: 1.35;
+  }
+  .combo-opt small { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; }
+  /* 마우스로 짚은 것과 키보드로 짚은 것을 **같게** 보여 준다. */
+  .combo-opt:hover, .combo-opt.is-active { background: rgba(0, 0, 0, .06); }
+  .combo-empty { padding: 8px 10px; color: var(--muted); font-size: 12.5px; }
+
+  .precheck-help { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  .precheck-block { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+  .precheck-title { margin: 0 0 2px; font-size: 14.5px; }
+  .precheck-title + .precheck-help { margin-bottom: 10px; }
+
+  .consent {
+    display: flex; align-items: flex-start; gap: 8px;
+    margin-top: 12px; color: var(--muted); font-size: 12.5px; line-height: 1.45;
+  }
+  .consent input { margin: 2px 0 0; accent-color: var(--accent); }
+
+  .form-actions { display: grid; gap: 8px; margin-top: 20px; }
+  .primary-btn, .secondary-btn, .send-btn, .ghost, .chip-btn, .pill-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border-radius: 999px; font-weight: 650; transition: opacity .15s, transform .15s, background .15s;
+  }
+  .primary-btn {
+    height: 48px; border: 1px solid var(--border-strong); background: var(--accent);
+    color: var(--on-accent); font-size: 15px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), inset 0 -1px 0 rgba(0, 0, 0, .3),
+                0 6px 16px rgba(0, 0, 0, .18);
+  }
+  .primary-btn:disabled { opacity: .42; cursor: not-allowed; }
+  .primary-btn:not(:disabled):hover { transform: translateY(-1px); }
+  .secondary-btn {
+    height: 44px; border: 1px solid var(--border); background: var(--surface-soft); font-size: 14px;
+  }
+  .secondary-btn:hover { background: rgba(0, 0, 0, .05); }
+  .chip-btn, .ghost, .pill-btn {
+    height: 34px; padding: 0 14px; border: 1px solid var(--border);
+    background: var(--surface-soft); font-size: 12.5px;
+  }
+
+  /* ── 설명풍선 ────────────────────────────────────────────────────
+     ★★**마우스를 따라다닌다.** 처음엔 요소에 붙여 뒀는데 —
+       ① 입력칸 아래에 뜨는 선택 목록을 덮었고(보험사 이름이 안 보였다)
+       ② 옆·위로 비켜 세웠더니 `.side-panel-inner` 의 스크롤 영역에 잘렸다
+         (한 축이 `auto` 면 다른 축도 클리핑된다).
+       자리를 고정하는 한 무엇과든 부딪힌다. 커서 아래에 띄우면 그 문제가 없다.
+     ★`position: fixed` 라 어떤 스크롤 영역에도 잘리지 않는다.
+     ★키보드에는 커서가 없다 — 그때는 요소 아래에 붙인다(`showTipFor`).
+     ★그리는 것은 `insurance.js` 의 `initTips()` 다. CSS 는 모양만 정한다. */
+  #tipBubble {
+    position: fixed; top: 0; left: 0; z-index: 90;
+    padding: 8px 11px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--accent); color: var(--on-accent);
+    font-size: 11.5px; font-weight: 600; line-height: 1.5; text-align: left;
+    white-space: pre-line; width: max-content;
+    max-width: min(280px, calc(100vw - 24px));
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .18);
+    opacity: 0; pointer-events: none;
+    transition: opacity .12s ease;
+  }
+  #tipBubble.is-on { opacity: 1; }
+
+  #status { display: block; margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+
+  .scope-card {
+    margin-top: 20px; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--surface-soft); font-size: 13px;
+  }
+  .scope-card summary { cursor: pointer; font-weight: 650; }
+  .scope-card #scopeBody { margin-top: 10px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+
+  /* ── 가운데 채팅 ────────────────────────────────────────────────── */
+  .chat-main {
+    height: 100%; margin-left: var(--panel-w);
+    display: flex; flex-direction: column;
+    transition: margin-left .22s ease;
+  }
+  .app-shell.panel-closed .chat-main { margin-left: 0; }
+
+  /* ★★상단바 자체는 **투명**하다. 굵은 경계선과 바탕이 있으면 글 읽는 화면을
+       가로로 잘라 놓아 방해가 된다. 떠 있는 것은 알약 버튼들뿐이고, 바는
+       그것들을 얹어 놓는 자리일 뿐이다. */
+  .chat-topbar {
+    height: var(--topbar-h); flex: none;
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 18px; background: transparent; border-bottom: 0;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .service-status {
+    display: inline-flex; align-items: center; gap: 7px; flex: none;
+    height: 34px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-soft); color: var(--muted); font-size: 12.5px; white-space: nowrap;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+  /* ★못 물어본 것과 준비 안 된 것을 **초록으로 그리지 않는다.** */
+  .service-status.is-down .status-dot { background: var(--danger); }
+  .service-status.is-unknown .status-dot { background: var(--muted); }
+
+  .session-chip {
+    margin-left: auto; display: flex; align-items: center; gap: 10px; min-width: 0;
+    height: 38px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-soft); font-size: 12px; color: var(--muted);
+  }
+  .session-chip > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-chip .session-key { flex: none; color: var(--muted); }
+  .session-chip .session-val { color: var(--text); font-weight: 650; }
+  /* 값이 아직 없을 때는 굵게 쓰지 않는다 — 등록된 것처럼 보이면 안 된다. */
+  .session-chip.is-empty .session-val { color: var(--muted); font-weight: 500; }
+
+  .chat-scroll { flex: 1; overflow-y: auto; padding: 24px 18px 8px; }
+  .chat-scroll > * { max-width: 860px; margin-left: auto; margin-right: auto; }
+
+  .empty-state { padding: 12vh 8px 0; text-align: center; }
+  .empty-mark {
+    width: 64px; height: 64px; margin: 0 auto 18px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 22px; color: var(--on-accent);
+    background: linear-gradient(135deg, #3a3a34, var(--accent));
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .18);
+  }
+  .empty-mark .icon { width: 26px; height: 26px; }
+  .empty-state h2 { margin: 0 0 10px; font-size: 25px; }
+  .empty-state p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+  .msg { margin: 0 0 14px; padding: 13px 16px; border-radius: 16px; line-height: 1.62; }
+  .msg.bot {
+    border-radius: 6px 20px 20px 20px;
+    border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow);
+  }
+  .msg.me {
+    max-width: 76%; margin-left: auto; border-radius: 20px 6px 20px 20px;
+    border: 1px solid var(--border-strong); background: var(--surface); box-shadow: var(--shadow);
+  }
+  .msg h2 { margin: 14px 0 8px; font-size: 15px; }
+
+  .quick-wrap { position: relative; flex: none; padding: 6px 18px 0; }
+  .quick-prompts {
+    display: flex; gap: 7px; overflow-x: auto; padding-bottom: 8px;
+    max-width: 860px; margin: 0 auto; scrollbar-width: none;
+  }
+  .quick-prompts::-webkit-scrollbar { display: none; }
+  /* ★★칩은 **줄지 않는다.** 기본 flex 아이템은 줄어들 수 있어서, 칩이 많으면
+       가로로 스크롤되는 대신 글자가 세로로 뭉개진다(실측 2026-08-26: 「의 료 비」).
+       가로 스크롤을 쓰려고 만든 줄이므로 `flex: none` 으로 못박는다. */
+  .quick-prompts > * { flex: none; white-space: nowrap; }
+  .quick-wrap.is-scrollable::after {
+    content: ''; position: absolute; right: 18px; top: 6px; bottom: 8px; width: 46px;
+    pointer-events: none; background: linear-gradient(90deg, transparent, var(--background));
+  }
+
+  .composer-wrap { flex: none; padding: 10px 18px 20px; }
+  .composer {
+    max-width: 860px; margin: 0 auto;
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 7px 7px 18px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface);
+    -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  }
+  /* ★`outline: none` 을 쓰지 않는다 — 위 `:focus-visible` 규칙이 그대로 살아 있다. */
+  .composer input { flex: 1; min-width: 0; height: 42px; border: 0; background: transparent; }
+  .composer input::placeholder { color: rgba(0, 0, 0, .32); }
+  .send-btn {
+    width: 44px; height: 44px; flex: none; padding: 0;
+    border: 1px solid var(--border-strong); background: var(--accent); color: var(--on-accent);
+  }
+  .send-btn:hover { transform: translateY(-1px); }
+
+  /* ── 오른쪽 「보장 확인 상세」 서랍 ──────────────────────────────
+     ★★front 브랜치는 이걸 **별도 페이지**(coverage-detail.html)로 뺐다.
+       그러면 상세 화면이 판정을 한 번 더 부르고(`rerunPrecheck`) 운영모드에서
+       같은 판정이 원장에 두 건 쌓인다. 또 `trace_id` 가 끊겨 관찰 제보가
+       "그 판정과 이어진 사례"임을 못 밝힌다.
+       그래서 **같은 페이지의 서랍**으로 둔다 — 채팅을 전면에 두는 디자인 목표는
+       지키면서 판정→인용→제보가 한 흐름으로 이어지는 것도 지킨다. */
+  .detail-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 40;
+    width: min(560px, 100vw);
+    display: flex; flex-direction: column;
+    /* ★패널과 같은 이유로 **불투명**하다. `--surface-solid` 는 화이트 테마에서 #ffffff. */
+    background: var(--surface-solid);
+    border-left: 1px solid var(--border);
+    box-shadow: -8px 0 28px rgba(0, 0, 0, .09);
+    transform: translateX(100%);
+    transition: transform .24s ease;
+  }
+  .app-shell.detail-open .detail-drawer { transform: none; }
+  .drawer-head {
+    flex: none; display: flex; align-items: flex-start; gap: 12px;
+    padding: 16px 18px; border-bottom: 1px solid var(--border);
+  }
+  .drawer-head h2 { margin: 0; font-size: 16px; }
+  .drawer-head .detail-copy { margin: 3px 0 0; color: var(--muted); font-size: 12px; }
+  .drawer-close {
+    margin-left: auto; width: 36px; height: 36px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface-soft);
+  }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 18px; }
+
+  /* ★★막은 **색을 칠하지 않는다.** 하는 일은 「바깥을 누르면 닫힌다」뿐이다.
+       처음엔 `rgba(0,0,0,.35)`, 다음엔 `.14` 로 낮췄지만 둘 다 「화면이 어둡다」는
+       말을 들었다. front 원본에도 우리 원본에도 없던 요소를 내가 넣은 것이므로,
+       가리는 기능은 아예 뺀다. 겹쳐 있다는 신호는 패널·서랍의 **그림자와 테두리**가
+       충분히 준다. 닫는 길은 세 가지다 — × 버튼 · Esc · 바깥 누르기. */
+  .scrim {
+    position: fixed; inset: 0; z-index: 25;
+    background: transparent; pointer-events: none;
+  }
+  .app-shell.detail-open .scrim { pointer-events: auto; }
+
+  /* ── 카드·판정 결과(insurance.js 가 만드는 마크업) ──────────────── */
+  .card, .detail-card {
+    padding: 16px 18px; margin-bottom: 14px;
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    background: var(--surface-soft);
+  }
+  .card h2, .detail-card h2 { margin: 0 0 8px; font-size: 15px; }
+  .verdict { font-size: 22px; font-weight: 750; margin-bottom: 10px; }
+
+  .banner {
+    padding: 11px 13px; margin: 8px 0; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--surface-soft); font-size: 13.5px; line-height: 1.6;
+  }
+  .banner.ok { border-color: rgba(47, 138, 91, .35); background: var(--ok-bg); color: var(--ok); }
+  .banner.warn { border-color: rgba(181, 101, 29, .35); background: var(--warn-bg); color: var(--warn); }
+  .banner.danger { border-color: rgba(192, 57, 43, .35); background: var(--danger-bg); color: var(--danger); }
+
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 10px 0 0; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+
+  .cite {
+    padding: 11px 13px; margin-top: 8px;
+    border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
+    border-radius: 10px; background: var(--surface-soft); font-size: 13px;
+  }
+  /* ★★참고 조항은 **판정 근거와 눈으로 달라야 한다.** 색까지 같으면 백엔드가
+       목록을 나눈 것이 화면에서 도로 합쳐진다(CLAUDE.md §0). */
+  .cite.related { border-left-color: var(--warn); background: rgba(181, 101, 29, .06); }
+  .quote { margin-top: 6px; color: var(--muted-strong); line-height: 1.65; }
+
+  /* ── 접히는 인용 ────────────────────────────────────────────────
+     ★약관 원문을 그대로 옮긴 인용은 한 건이 수십 줄이다. 접어 두되,
+       **어디서 온 것인지는 접힌 채로도 보이게** 한다. */
+  .cite-fold > summary {
+    cursor: pointer; list-style: none;
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  }
+  .cite-fold > summary::-webkit-details-marker { display: none; }
+  .cite-fold > summary::before {
+    content: '▸'; flex: none; color: var(--muted); font-size: 11px;
+    transition: transform .15s ease;
+  }
+  .cite-fold[open] > summary::before { content: '▾'; }
+  .cite-fold > summary .loc { margin: 0; margin-left: auto; }
+  .cite-fold > summary:hover { color: var(--text); }
+  .loc { margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+
+  .split { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .row label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 12px; font-weight: 650; }
+  .row input, .row select {
+    width: 100%; height: 44px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 11px;
+    background: var(--surface-soft);
+  }
+  .row input[type="file"] { padding: 10px 12px; height: auto; font-size: 12.5px; }
+  .row select {
+    appearance: none; padding-right: 36px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%231c1c18' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  .footer-note { margin: 6px 0 0; color: var(--muted); font-size: 11.5px; text-align: center; line-height: 1.6; }
+
+  .chat-detail-link {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    height: 32px; padding: 0 13px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--surface-soft); color: inherit; font-size: 12.5px; text-decoration: none;
+  }
+  .chat-detail-link:hover { background: rgba(0, 0, 0, .06); }
+  .precheck-chat-line { margin: 0 0 6px; }
+  .precheck-chat-warning { color: var(--warn); }
+  .precheck-chat-details { margin-top: 8px; color: var(--muted); font-size: 12.5px; }
+  .precheck-chat-details summary { cursor: pointer; }
+
+  /* ── 좁은 화면 ──────────────────────────────────────────────────
+     ★패널은 화면 밖으로 밀되, **여는 버튼은 상단바에 있으므로** 늘 눌린다. */
+  @media (max-width: 860px) {
+    :root { --panel-w: min(88vw, 380px); }
+    .chat-main, .app-shell.panel-closed .chat-main { margin-left: 0; }
+    .side-panel { transform: translateX(-100%); }
+    .app-shell:not(.panel-closed) .side-panel { transform: none; }
+    .app-shell:not(.panel-closed) .scrim { pointer-events: auto; }
+    .chat-topbar { padding: 0 12px; gap: 8px; }
+    /* ★칩이 세 줄로 뭉개지지 않게 좁은 화면에서는 꼭 필요한 것만 남긴다.
+         front 브랜치는 이 처리가 없어 「상담 서 / 비스 이 / 용 가능」으로 깨졌다. */
+    .service-status .label, .session-chip .session-key,
+    .pill-btn span { display: none; }
+    .session-chip { max-width: 42vw; }
+    .service-status, .pill-btn { padding: 0 11px; }
+    .detail-drawer { width: 100vw; }
+    .empty-state { padding-top: 8vh; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-field" aria-hidden="true"></div>
+
+<!-- ★★`panel-closed` 와 `no-anim` 을 **처음부터** 달아 둔다.
+     그러지 않으면 CSS 는 「열림」으로 한 번 그리고, 곧바로 JS 가 닫아서
+     화면이 열렸다 닫히며 시작한다(실측 2026-08-26 — 실제로 그렇게 보였다).
+     `no-anim` 은 첫 배치가 끝난 다음 프레임에 JS 가 떼어 낸다. -->
+<div class="app-shell panel-closed no-anim" id="appShell">
+
+  <aside class="side-panel" id="sidePanel" aria-labelledby="profileTitle">
+    <div class="side-panel-inner scroll-soft">
+      <div class="pane-head">
+        <p class="eyebrow">보험정보 입력</p>
+        <!-- ★어두운 막을 누르는 것 말고 **명시적인 닫기**도 둔다 —
+             스크림은 눌러 봐야 아는 조작이고, 키보드로는 누를 수 없다. -->
+        <button type="button" class="panel-close" id="sideClose"
+                data-tip="닫기" data-tip-align="end" aria-label="보험정보 패널 닫기">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+        <h1 id="profileTitle">환영합니다</h1>
+        <p class="lead">가지고 계신 보험 정보를<br>입력해주세요</p>
+      </div>
+
+      <form class="insurance-form" id="insuranceForm">
+        <div class="field">
+          <label for="productName">상품명</label>
+          <!-- ★설명은 서버가 주는 문장(`GET /v1/catalog/products` 의 `note`)으로 채운다.
+               같은 말을 화면에도 적어 두면 서버가 바뀔 때 둘이 어긋난다. -->
+          <div class="combo tipwrap" id="productNameTip">
+            <input class="control" id="productName" role="combobox" aria-expanded="false"
+                   aria-controls="productNameList" aria-autocomplete="list"
+                   placeholder="보험사를 먼저 고르세요" autocomplete="off" disabled>
+          </div>
+          <datalist id="products"></datalist>
+          <p class="precheck-help" id="productHint">
+            보험사를 고르면 확정된 약관에서 상품명을 찾아 드립니다.
+          </p>
+        </div>
+        <div class="field">
+          <label for="insurer">보험사명</label>
+          <!-- ★보험사 수는 `GET /v1/support-manifest` 에서 세어 넣는다(박아 두지 않는다). -->
+          <div class="combo tipwrap" id="insurerTip">
+            <input class="control" id="insurer" role="combobox" aria-expanded="false"
+                   aria-controls="insurerList" aria-autocomplete="list"
+                   placeholder="보험사 선택 (눌러서 목록 보기)" autocomplete="off" required>
+          </div>
+          <datalist id="insurers"></datalist>
+        </div>
+        <div class="field">
+          <label for="enrolled">보험계약일시</label>
+          <!-- ★`required` 를 붙이면 빈 칸일 때 **submit 이벤트가 아예 안 뜬다** —
+               브라우저 폼 검증이 먼저 막아 기본값을 채울 기회가 없다(실측 2026-08-26).
+               비우면 채우는 칸이므로 뗀다. 형식 검사(`pattern`)는 남긴다. -->
+          <div class="tipwrap" id="enrolledTip">
+            <input class="control" id="enrolled" placeholder="예) 20260801" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" autocomplete="off">
+          </div>
+        </div>
+        <div class="field">
+          <!-- ★★`incident` 를 빼면 안 된다. PostgreSQL 저장 모드에서 이 값이 없으면
+               서버가 422 로 거부한다(app/routers/precheck.py:481). front 브랜치는
+               이 칸이 통째로 없어 운영모드에서 판정이 전부 막혔다. -->
+          <label for="incident">진료(사고)일</label>
+          <div class="tipwrap" id="incidentTip">
+            <input class="control" id="incident" placeholder="예) 20260815" inputmode="numeric" maxlength="8" pattern="[0-9]{8}" autocomplete="off">
+          </div>
+          <p class="precheck-help">진료비 세부내역서에 적힌 실제 진료일을 입력하세요.</p>
+        </div>
+
+        <div class="precheck-block">
+          <p class="precheck-title"><strong>보장 여부 확인</strong></p>
+          <p class="precheck-help">질병코드를 입력하면 가입 약관을 기준으로 확인합니다.</p>
+          <div class="tipwrap" data-tip="진단서·진료비 세부내역서에 적힌 상병코드입니다.
+쉼표로 여러 개를 넣을 수 있습니다.
+C30~C39 같은 범위가 아니라 C34.1 같은 개별 코드를 넣어야 합니다.">
+            <input class="control" id="codes" placeholder="예) F32, S82" autocomplete="off" aria-label="질병코드" required>
+          </div>
+          <button class="chip-btn" type="button" id="codeListOpen" style="margin-top:8px">
+            약관에 등장한 질병코드 보기
+          </button>
+          <div id="codeListPanel" class="detail-card" hidden style="margin:8px 0 0">
+            <p class="precheck-help" style="margin:0 0 6px">
+              진료비 세부내역서·진단서에 적힌 <strong>상병코드</strong>를 그대로 넣는 것이 가장 정확합니다.
+              아래는 약관에 실제로 언급된 코드이며 <strong>목록에 없는 코드도 입력하실 수 있습니다.</strong>
+              <strong>C30~C39 같은 약관 범위는 선택할 수 없고, C34.1 같은 개별 코드를 입력해야 합니다.</strong>
+            </p>
+            <input class="control" id="codeListQuery" placeholder="코드 검색 (예: F0)"
+                   autocomplete="off" aria-label="질병코드 검색" style="margin-bottom:6px">
+            <p class="precheck-help" id="codeListSummary" style="margin:0 0 6px">불러오는 중…</p>
+            <div id="codeListBody" class="scroll-soft" style="max-height:200px;overflow-y:auto"></div>
+            <button class="chip-btn" type="button" id="codeListClose" style="margin-top:6px">닫기</button>
+          </div>
+          <label class="consent tipwrap" for="consent"
+                 data-tip="입력한 코드가 실제 진료 기록과 같은지 확인해 주세요.
+코드가 다르면 판정도 달라집니다.">
+            <input type="checkbox" id="consent">
+            <span>입력한 질병코드가 제 진료 기록과 맞음을 확인했습니다.</span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button class="primary-btn tipwrap" id="go" type="submit" disabled
+                  data-tip="입력한 보험정보로 보장 여부를 확인합니다.
+결과는 오른쪽 「보장 확인 상세」에 나옵니다.">등록</button>
+          <button class="secondary-btn tipwrap" id="skipBtn" type="button"
+                  data-tip="보험정보 없이 채팅만 씁니다.
+용어 설명은 되지만 보장 여부 판정은 할 수 없습니다.">다음에 할게요</button>
+        </div>
+        <span id="status" aria-live="polite"></span>
+      </form>
+
+      <details class="scope-card" id="scope">
+        <summary class="tipwrap" data-tip="지금 판정에 쓸 수 있는 약관이 몇 건인지,
+어떤 보험사가 들어 있는지 보여 줍니다.">현재 확인 가능한 보험 범위</summary>
+        <div id="scopeBody">불러오는 중…</div>
+      </details>
+    </div>
+  </aside>
+
+  <main class="chat-main" aria-labelledby="chatTitle">
+    <header class="chat-topbar">
+      <div class="topbar-left">
+        <!-- ★★패널을 여는 버튼은 **패널 바깥**에 둔다. 패널 안에 두면 접혔을 때
+             같이 잘려 나가 휴대폰에서 입력 폼에 도달할 수 없다(front 브랜치 실측). -->
+        <button type="button" class="pill-btn" id="sideToggle"
+                data-tip="보험사·계약일·질병코드를 넣는 창을 엽니다"
+                data-tip-align="start"
+                aria-controls="sidePanel" aria-expanded="true" aria-label="보험정보 입력 열기/닫기">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/></svg>
+          <span>보험정보</span>
+        </button>
+        <!-- ★★이 배지는 **`GET /api/health/ready` 를 실제로 물어본 결과**를 보인다.
+             전에는 초록 점이 화면에 그냥 박혀 있었다 — 아무것도 확인하지 않으면서
+             「이용 가능」이라고 말하는 것은 거짓 신호다. -->
+        <div class="service-status tipwrap" id="serviceStatus" tabindex="0"
+             data-tip="상태를 확인하는 중입니다.">
+          <span class="status-dot" aria-hidden="true"></span><span class="label" id="serviceStatusLabel">확인 중…</span>
+        </div>
+        <!-- ★★좁은 화면에서 이 버튼을 통째로 숨겨 뒀었다 — 글자만 있어서 접을 수가
+             없었기 때문이다. 그런데 대화가 길어지는 건 오히려 휴대폰 쪽이다.
+             아이콘을 붙여 다른 알약들과 같은 방식으로 **접기만** 한다. -->
+        <button type="button" class="pill-btn" id="resetChatBtn"
+                data-tip="화면의 대화만 지웁니다.
+판정 기록은 남습니다." aria-label="대화 초기화">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <span>대화 초기화</span>
+        </button>
+        <button type="button" class="pill-btn" id="detailOpen"
+                data-tip="판정 결과·약관 근거·비슷한 사례 보기"
+                aria-controls="detailDrawer" aria-expanded="false" aria-label="보장 확인 상세 열기">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span>보장 확인 상세</span>
+        </button>
+      </div>
+      <!-- ★★「미등록 · 미등록 · 미등록」만 떠 있으면 무엇을 말하는 칸인지 알 수 없다.
+           **무엇에 대한 값인지**를 칩 안에 적고, 아무것도 없을 때는 한 문장으로 말한다.
+           자세한 값과 세션 ID 는 설명풍선에 넣는다(화면은 좁고, 세션 ID 는 문의할 때만 쓴다). -->
+      <div class="session-chip" id="sessionChip" data-tip-align="end"
+           aria-label="지금 판정에 쓰이는 보험 정보" tabindex="0">
+        <span class="session-key">지금 보는 보험</span>
+        <span class="session-val" id="sessionSummary">아직 등록 안 함</span>
+        <span id="sessionInsurer" hidden></span>
+        <span id="sessionProduct" hidden></span>
+        <span id="sessionDate" hidden></span>
+        <span id="sessionId" hidden></span>
+      </div>
+    </header>
+
+    <div class="chat-scroll scroll-soft" id="chatScroll">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-mark" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <h2 id="chatTitle">올바른 보험비서</h2>
+        <p>질병코드로 보장여부를 확인할 수 있습니다. 질병코드를 모른다면 병명을 입력해보세요.<br>
+           어려운 보험 용어도 쉽게 설명해드려요.</p>
+      </div>
+      <div id="chatLog" class="chatlog" aria-live="polite"></div>
+    </div>
+
+    <div class="quick-wrap" id="quickWrap">
+      <div class="quick-prompts" id="quickPrompts" aria-label="추천 질문">
+        <!-- ★약관에 정의가 **실제로 있는** 용어로 채운다(GET /v1/chat/terms).
+             하드코딩하면 약관이 바뀌어도 그대로 남아, 눌렀는데 못 찾는 칩이 생긴다. -->
+      </div>
+    </div>
+    <div class="composer-wrap">
+      <div class="composer">
+        <!-- ★입력창이 화면 맨 아래라 목록은 **위로** 연다(`data-combo-up`). -->
+        <div class="combo" data-combo-up style="flex:1;min-width:0">
+          <input id="chatIn" role="combobox" aria-expanded="false" aria-controls="chatInList"
+                 aria-autocomplete="list" placeholder="메시지 입력" autocomplete="off"
+                 aria-label="메시지 입력">
+        </div>
+        <datalist id="chatTerms"></datalist>
+        <button class="send-btn" id="chatGo" type="button" data-tip="보내기 (Enter)" aria-label="보내기">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+  <div id="tipBubble" role="tooltip" aria-hidden="true"></div>
+
+  <aside class="detail-drawer" id="detailDrawer" aria-labelledby="detailTitle">
+    <div class="drawer-head">
+      <div>
+        <h2 id="detailTitle">보장 확인 상세</h2>
+        <p class="detail-copy">판정 결과와 근거, 비슷한 사례를 한곳에서 확인할 수 있습니다.</p>
+      </div>
+      <button type="button" class="drawer-close" id="detailClose"
+              data-tip="닫기" data-tip-align="end" aria-label="상세 닫기">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="drawer-body scroll-soft">
+      <div id="result" tabindex="-1"></div>
+
+      <div class="split">
+        <div class="detail-card tipwrap" id="cohortReal"
+             data-tip="사람이 검증한 실제 청구 사례 통계입니다.
+표본이 적으면 비율을 계산하지 않고 그렇다고 말합니다.">
+          <h2>실제 검증 데이터</h2>
+          <div class="muted small">질병코드를 넣고 판정하면 함께 조회합니다.</div>
+        </div>
+        <div class="detail-card tipwrap" id="cohortDemo"
+             data-tip="화면 시연용으로 만들어 낸 숫자입니다.
+실제 지급 통계가 아니며 판정 근거로 쓰이지 않습니다.">
+          <h2>DEMO · 합성 데이터</h2>
+          <div class="muted small">시연용이며 실제 지급 통계가 아닙니다.</div>
+        </div>
+      </div>
+
+      <section class="detail-card">
+        <h2 class="tipwrap" data-tip="실제로 받은 심사 결과를 알려 주시면 통계가 정확해집니다.
+검증 전까지는 통계나 다른 사람의 판정에 반영되지 않습니다.">실제 청구 결과 알려주기</h2>
+        <p class="small muted">검증 전까지 통계나 다른 사람의 판정 근거에 반영되지 않습니다.</p>
+        <div class="row">
+          <div><label for="obInsurer">보험사</label>
+            <div class="combo"><input id="obInsurer" role="combobox" aria-expanded="false"
+                 aria-controls="obInsurerList" aria-autocomplete="list"
+                 placeholder="눌러서 목록 보기" autocomplete="off"></div>
+          </div>
+          <div><label for="obCodes">질병기호</label><input id="obCodes" placeholder="F32"></div>
+          <div><label for="obOutcome">결과</label>
+            <select id="obOutcome">
+              <option value="paid">지급됨</option>
+              <option value="partial">일부 지급</option>
+              <option value="denied">부지급</option>
+              <option value="pending">심사 중</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div><label for="obReason">보험사가 밝힌 사유 (선택)</label><input id="obReason" placeholder="예: 면책기간 미경과"></div>
+        </div>
+        <!-- ★★청구일·결정일·증거 종류·증거 파일은 **빼지 않는다.** front 브랜치의
+             상세 화면에는 이 네 칸이 없어 제보가 근거 없는 자기신고로 남았다. -->
+        <div class="row" style="margin-top:12px">
+          <div><label for="obClaimed">청구일</label><input id="obClaimed" placeholder="예) 20260810" inputmode="numeric" maxlength="8" pattern="[0-9]{8}"></div>
+          <div><label for="obDecided">결정일</label><input id="obDecided" placeholder="예) 20260818" inputmode="numeric" maxlength="8" pattern="[0-9]{8}"></div>
+          <div><label for="obDocType">증거 종류</label>
+            <select id="obDocType">
+              <option value="claim_statement">진료비 영수증/세부내역서</option>
+              <option value="diagnosis">진단서</option>
+              <option value="other">기타</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <div><label for="obEvidence">증거 파일 (선택, PDF·JPG·PNG)</label><input id="obEvidence" type="file" accept=".pdf,.jpg,.jpeg,.png"></div>
+        </div>
+        <button class="ghost" id="obGo" type="button" style="margin-top:12px">제출하기</button>
+        <div id="obOut" style="margin-top:12px"></div>
+      </section>
+
+      <p class="footer-note">이 서비스는 참고용 사전 안내입니다. 최종 지급 여부는 보험사의 심사로 결정됩니다.</p>
+    </div>
+  </aside>
+</div>
+
+<script src="/static/insurance.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# 모델 레지스트리 (v3.2 §4, REQ-LLM-REG-01)
+# 모델 ID·revision·checksum·검증정보를 소스가 아닌 여기(데이터)에 둔다.
+# 규칙: latest alias 금지, family-only pin 금지(구체 provider_model_id), 미확인 checksum은
+#       verified_at=null로 표기(=verified 아님, 라이브 승인 대상 아님). 비밀은 .env(여기 없음).
+# artifact_sha256/verified_at/memory_peak_mb가 null인 프로필은 '선언됨·미검증'이며, 라이브
+# 승인(TEST-LIVE) 전까지는 결정론 테스트(Fake)로만 사용한다.
+profiles:
+  - profile_id: local_gemma4_e4b
+    provider: local
+    provider_model_id: gemma-4-e4b
+    revision: bb3b92e6f031fa438b409f898dd9f14f499a0cb0
+    artifact_sha256: null        # 로컬 GGUF 해시 미측정 → verified=false
+    runtime: llama-cpp-python
+    quantization: q4_0
+    verified_at: null
+    supported_tasks: [rag_qa, chat]
+    max_tested_context: 1024
+    memory_peak_mb: null
+    tool_call_verified: false
+
+  - profile_id: local_qwen35_4b
+    provider: local
+    provider_model_id: qwen3.5-4b-instruct
+    revision: null
+    artifact_sha256: null
+    runtime: llama-cpp-python
+    quantization: q4
+    verified_at: null
+    supported_tasks: [rag_qa, chat, tool_call]
+    max_tested_context: 1024
+    memory_peak_mb: null
+    tool_call_verified: true

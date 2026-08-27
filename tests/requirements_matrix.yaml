@@ -1,0 +1,235 @@
+# 요구사항 매트릭스 (Phase 10) — Phase 1~9에서 실제로 구현·검증된 MUST 요구사항만 기입한다
+# (계획서의 열망이 아니라 실측). TEST-MATRIX-001(test_requirements_matrix.py)이 각 node가
+# 실제로 존재하고 collect 가능하며 skip/xfail이 아닌지 정적으로 검증한다.
+#
+# basis: 그 테스트의 assertion이 REQ를 "직접" 확인하는지(간접 효과만 보는 게 아닌지) 리뷰용
+# 근거 한 줄. collect 가능 여부만으로는 가짜 매핑을 못 걸러낸다는 지적(Codex)에 대한 보강.
+
+requirements:
+  - id: REQ-QA-BASE-01
+    desc: "원본 프로젝트 결정론 테스트 기준선 재현(Phase 0)"
+    tests:
+      - node: "tests/test_health.py::test_health_ok"
+        basis: "기동 기준선의 최소 스모크(health)를 직접 확인. 182개 전체 재현은 CI 스위트
+          자체가 그 후신(현재 320)이라 이 1개 노드로 대표하지 않는다 — 전체 스위트 합격
+          여부는 test_requirements_matrix.py가 이 매트릭스와 별개로 CI 실행 그 자체로 증명됨"
+    status: DONE
+
+  - id: REQ-CLAUSE-SEARCH-01
+    desc: "보험 조항 검색 — 범위가 고정된 근거 후보와 provenance 반환"
+    tests:
+      - node: "tests/test_clause_search.py::test_재정렬하면_그_사실을_남긴다"
+        basis: "보험 조항 후보와 재정렬 provenance가 함께 반환되는지 직접 확인"
+    status: DONE
+
+  - id: REQ-CITATION-FAIL-CLOSED-01
+    desc: "보험 답변에 인용이 없으면 통과시키지 않음"
+    tests:
+      - node: "tests/test_citation_guard.py::test_인용이_아예_없으면_폐기한다"
+        basis: "근거 조항 인용이 0건인 답변을 citation guard가 직접 거부함"
+    status: DONE
+
+  - id: REQ-LLM-REG-01
+    desc: "모델 ID 하드코딩 금지, registry 검증(latest alias 거부 등)"
+    tests:
+      - node: "tests/test_model_registry.py::test_llm_reg_001_registry_loads_and_validates"
+        basis: "레지스트리 로드·Pydantic 검증을 직접 확인"
+      - node: "tests/test_model_registry.py::test_llm_reg_001_rejects_latest_alias"
+        basis: "'latest' alias 거부를 직접 확인"
+      - node: "tests/test_model_registry.py::test_llm_reg_002_no_hardcoded_model_ids_in_new_code"
+        basis: "application/adapters 신 코드에 리터럴 모델ID가 없는지 정적 스캔으로 직접 확인"
+    status: DONE
+
+  - id: REQ-CLAUSE-SEARCH-SCOPE-01
+    desc: "보험 조항 검색은 약관 범위를 기본으로 요구하고 전역을 명시적으로만 허용"
+    tests:
+      - node: "tests/test_clause_search.py::test_범위를_안_주면_거절한다"
+        basis: "scope_sha256s 없이 기본 검색을 요청하면 ValidationErr로 닫힘"
+      - node: "tests/test_clause_search.py::test_allow_global_을_주면_전역으로_찾는다"
+        basis: "allow_global을 별도로 명시한 경우에만 전역 검색이 열림"
+    status: DONE
+
+  - id: REQ-OPS-01
+    desc: "기동/데이터 분리 — 승인 릴리스·활성 저장소 readiness 보고(자동 폴백 없음)"
+    tests:
+      - node: "tests/test_readiness.py::test_readiness_reports_expected_fields"
+        basis: "readiness가 승인 릴리스·활성 clause store·선택 persistence 준비 필드를 보고하는지 직접 확인"
+      - node: "tests/test_readiness.py::test_insurance_readiness_reports_the_active_clause_index"
+        basis: "현행 보험 clause index 준비 상태가 top-level readiness에 직접 반영됨"
+      - node: "tests/test_readiness.py::test_broken_accepted_release_fails_closed"
+        basis: "승인 릴리스가 깨지면 clause index와 전체 readiness가 모두 false로 닫힘"
+    status: DONE
+
+  - id: REQ-RUNTIME-SURFACE-01
+    desc: "보험 런타임 표면 — role 오타 fail-closed, customer/admin 정확 라우트 격리"
+    tests:
+      - node: "tests/test_app_route_snapshots.py::test_unknown_app_role_is_rejected_before_it_can_open_routes"
+        basis: "허용하지 않은 role이 운영 라우트로 폴백하지 않고 앱 생성 단계에서 거부되는지 직접 확인"
+      - node: "tests/test_app_route_snapshots.py::test_customer_method_path_snapshot"
+        basis: "customer 앱의 전체 HTTP method+path 집합을 정확 snapshot으로 비교"
+      - node: "tests/test_app_route_snapshots.py::test_admin_method_path_snapshot"
+        basis: "admin 앱의 전체 HTTP method+path 집합을 정확 snapshot으로 비교"
+      - node: "tests/test_app_route_snapshots.py::test_legacy_routes_are_absent_from_both_insurance_apps"
+        basis: "구형 RAG·workflow·bounty 경로가 customer/admin 두 보험 앱에서 모두 404인지 직접 확인"
+    status: DONE
+
+  - id: NFR-OBS-01
+    desc: "관측성 — X-Trace-ID 상관 전파"
+    tests:
+      - node: "tests/test_trace.py::test_response_has_trace_header"
+        basis: "응답에 X-Trace-ID 존재를 직접 확인"
+      - node: "tests/test_trace.py::test_incoming_trace_id_is_propagated"
+        basis: "요청 trace_id가 응답까지 전파되는지 직접 확인"
+    status: DONE
+
+  - id: REQ-CLAUSE-INDEX-01
+    desc: "보험 조항 pgvector 검색 결과에 문서·조항 locator를 보존"
+    tests:
+      - node: "tests/test_clause_index.py::test_검색결과는_어느_문서_어디인지를_들고_다닌다"
+        basis: "ClauseHit가 sha256·clause_id·locator를 유지하는지 직접 확인"
+    status: DONE
+
+  - id: REQ-VEC-02
+    desc: "pgvector 백엔드 미준비 시 명시 오류(무폴백)"
+    tests:
+      - node: "tests/test_pgvector.py::test_get_conn_failure_is_infra_error"
+        basis: "연결 실패 시 InfraError를 직접 확인"
+    status: DONE
+
+  - id: REQ-CLAUSE-RERANK-01
+    desc: "보험 조항 리랭커 실패는 원래 벡터 순서로 폴백하지 않음"
+    tests:
+      - node: "tests/test_clause_search.py::test_리랭커가_실패하면_원래_순서로_되돌리지_않는다"
+        basis: "리랭커 예외가 RerankUnavailable로 전파되고 원 순서 반환이 없는지 직접 확인"
+    status: DONE
+
+  - id: REQ-RERANK-CONTRACT-01
+    desc: "보험 조항 CrossEncoder 리랭커 정렬·유한 점수 계약"
+    tests:
+      - node: "tests/test_reranker_contract.py::test_점수_내림차순으로_다시_줄세운다"
+        basis: "고정 점수 모델로 후보가 점수 내림차순으로 재정렬되는지 직접 확인"
+    status: DONE
+
+  - id: REQ-GRAPH-DESIGN-01
+    desc: "GraphRAG 설계 + DB 결정(PostgreSQL 네이티브 재귀 CTE)"
+    tests:
+      - node: "tests/test_pg_graph.py::test_graph_schema_and_policy_queries"
+        basis: "그래프 스키마·정책 질의(집계·비교·k-hop)를 실 PG로 직접 확인(pg 마커)"
+    retired: "구형 환불정책 GraphRAG 학습 트랙을 v16 ZIP으로 격리했고 보험 조항 그래프로 승격하지 않았다."
+    status: DONE
+
+  - id: REQ-GRAPH-01
+    desc: "GraphRAG 구현 — 그래프 사실을 Evidence로 언어화, provenance 유지"
+    tests:
+      - node: "tests/test_graph_retriever.py::test_graph_retriever_surfaces_aggregation_facts"
+        basis: "집계 사실이 provenance(원천+locator) 포함 Evidence로 나오는지 직접 확인"
+    retired: "구형 환불정책 GraphRAG retriever를 v16 ZIP으로 격리했고 현행 보험 검색은 clause index를 쓴다."
+    status: DONE
+
+  - id: REQ-GRAPH-02
+    desc: "그래프+벡터 결합(FusionRetriever)"
+    tests:
+      - node: "tests/test_graph_retriever.py::test_fusion_combines_graph_and_pgvector"
+        basis: "결합 결과에 두 백엔드 근거가 모두 포함되는지 직접 확인"
+    retired: "구형 환불정책 그래프와 범용 벡터 결합을 v16 ZIP으로 격리해 현행 보험 런타임에 없다."
+    status: DONE
+
+  - id: REQ-COM-01
+    desc: "주문 미리보기 — 읽기전용, DB 변경 0"
+    tests:
+      - node: "tests/test_commerce_approval.py::test_api_preview_does_not_mutate_db"
+        basis: "미리보기 호출 전후 재고·주문수 불변을 API 레벨에서 직접 확인"
+    retired: "레거시(v3 커머스)로 격리 — 이 제품에 없는 기능이다. 테스트는 legacy/v3_commerce.zip 안에 보존돼 있다(2026-08-02)"
+    status: DONE
+
+  - id: REQ-COM-02
+    desc: "명시 승인 — 미리보기만으로는 주문 생성 안 됨"
+    tests:
+      - node: "tests/test_commerce_approval.py::test_api_preview_only_creates_no_order"
+        basis: "미리보기 3회 반복 후 주문 0건을 직접 확인"
+    retired: "레거시(v3 커머스)로 격리 — 이 제품에 없는 기능이다. 테스트는 legacy/v3_commerce.zip 안에 보존돼 있다(2026-08-02)"
+    status: DONE
+
+  - id: REQ-COM-03
+    desc: "멱등 — 동일 Idempotency-Key 재요청은 같은 주문 1건(재고 1회만 차감)"
+    tests:
+      - node: "tests/test_commerce_approval.py::test_place_is_idempotent_same_key_same_payload"
+        basis: "같은 키 2회 호출 시 place()가 1회만 실행됨(재생)을 직접 확인"
+      - node: "tests/test_commerce_approval.py::test_api_idempotent_create_decrements_stock_once"
+        basis: "API 레벨에서 같은 order_no·재고 1회 차감을 직접 확인"
+    retired: "레거시(v3 커머스)로 격리 — 이 제품에 없는 기능이다. 테스트는 legacy/v3_commerce.zip 안에 보존돼 있다(2026-08-02)"
+    status: DONE
+
+  - id: NFR-REL-01
+    desc: "원자성 — 주문+재고차감+멱등레코드 단일 트랜잭션, 경합 안전"
+    tests:
+      - node: "tests/test_commerce_approval.py::test_is_unique_violation_discriminates_constraint_kind"
+        basis: "멱등키 unique 위반만 경합 수렴 대상으로 판별(다른 무결성 오류와 구분)함을 직접 확인"
+    retired: "레거시(v3 커머스)로 격리 — 이 제품에 없는 기능이다. 테스트는 legacy/v3_commerce.zip 안에 보존돼 있다(2026-08-02)"
+    status: DONE
+
+  - id: REQ-AGT-01
+    desc: "단일 에이전트 닫힌 루프 — RAG+상품+미리보기 수행"
+    tests:
+      - node: "tests/test_agent_verified.py::test_chat_commerce_pipes_agent_then_verifies"
+        basis: "에이전트 턴(도구사용 포함) → 자기검증까지 파이프라인 동작을 직접 확인"
+    retired: "레거시(v3 커머스)로 격리 — 이 제품에 없는 기능이다. 테스트는 legacy/v3_commerce.zip 안에 보존돼 있다(2026-08-02)"
+    status: DONE
+
+  - id: REQ-COT-01
+    desc: "CoT 자기검증 — 근거 미지지 초안 차단"
+    tests:
+      - node: "tests/test_agent_verified.py::test_unsupported_draft_is_blocked_and_not_leaked"
+        basis: "미지지 판정 시 초안이 차단되고 응답에 유출되지 않음을 직접 확인"
+    retired: "레거시(v3 커머스)로 격리 — 이 제품에 없는 기능이다. 테스트는 legacy/v3_commerce.zip 안에 보존돼 있다(2026-08-02)"
+    status: DONE
+
+  - id: REQ-MCP-01
+    desc: "MCP·REST parity — 같은 라우터 경유, 응답 동일 (보험 도구 3종)"
+    tests:
+      # ★2026-08-04 재작성. 커머스 `rag_qa` 도구가 레거시로 격리되면서
+      #   옛 노드(`test_rest_and_mcp_rag_qa_are_identical`)가 사라졌다.
+      - node: "tests/test_mcp_parity.py::test_precheck_는_rest_와_mcp_가_완전히_같은_응답을_낸다"
+        basis: "고정 Fake 판정 흐름으로 REST/MCP 응답 dict 완전 일치를 직접 확인"
+      - node: "tests/test_mcp_parity.py::test_cohort_도_rest_와_같은_응답을_낸다"
+        basis: "코호트 조회에서 data_source·by_verification 포함 응답 일치를 직접 확인"
+      # ★parity 의 진짜 방어선 — 파생 구현이 생기면 두 경로가 어긋난다.
+      - node: "tests/test_mcp_parity.py::test_mcp_서버는_유스케이스를_직접_부르지_않는다"
+        basis: "MCP 서버 소스에 usecases/adapters 직접 호출이 없음을 토큰 단위로 확인"
+    status: DONE
+
+  - id: REQ-MCP-02
+    desc: "에이전트 안내문(llms.txt) — 기권·합성·검증등급 오해를 문장으로 막는다"
+    tests:
+      - node: "tests/test_mcp_parity.py::test_llms_txt_가_에이전트_주의사항을_담는다"
+        basis: "기권/면책목록/data_source/admin_attested 네 문구가 실제로 실려 나가는지 직접 확인"
+    status: DONE
+
+  - id: REQ-AUTH-01
+    desc: "RBAC — 401(미인증)/403(권한없음)/200(허용)"
+    tests:
+      - node: "tests/test_rbac_admin.py::test_rbac_401_without_token"
+        basis: "미인증 401을 admin 4개 경로에서 직접 확인"
+      - node: "tests/test_rbac_admin.py::test_rbac_403_for_normal_user"
+        basis: "USER 403을 admin 4개 경로에서 직접 확인"
+      - node: "tests/test_rbac_admin.py::test_rbac_200_for_admin"
+        basis: "ADMIN 200을 admin 4개 경로에서 직접 확인"
+      - node: "tests/test_rbac_admin.py::test_demotion_takes_effect_immediately_with_same_token"
+        basis: "role을 토큰에 넣지 않은 설계의 핵심 속성(같은 토큰으로 즉시 강등 반영)을 직접 확인"
+    status: DONE
+
+  - id: REQ-ADMIN-01
+    desc: "관리자 API — 주문/이벤트/인덱스/지식큐 조회(fail-closed)"
+    tests:
+      - node: "tests/test_rbac_admin.py::test_every_admin_route_is_fail_closed"
+        basis: "관리자 라우터 전역 fail-closed 의존성 존재를 정적으로 직접 확인"
+    status: DONE
+
+  - id: REQ-ADMIN-02
+    desc: "관리자 부트스트랩 — 명시 CLI만, 마지막 ADMIN 강등 금지, 감사기록"
+    tests:
+      - node: "tests/test_rbac_admin.py::test_promote_demote_cli_is_explicit_and_idempotent"
+        basis: "promote/demote CLI 동작·멱등을 직접 확인"
+      - node: "tests/test_rbac_admin.py::test_cannot_demote_last_admin"
+        basis: "마지막 ADMIN 강등 거부(lockout 방지)를 직접 확인"
+    status: DONE
