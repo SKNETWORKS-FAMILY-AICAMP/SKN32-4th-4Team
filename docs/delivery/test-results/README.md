@@ -1,6 +1,6 @@
 # 테스트 결과 문서 모음
 
-실제로 실행·측정·검증한 결과 문서 **103개**를 분야별로 모았습니다. 계획서와 단순 진행 메모는 제외했습니다.
+실제로 실행·측정·검증한 결과 문서 **109개**를 분야별로 모았습니다. 계획서와 단순 진행 메모는 제외했습니다.
 
 ## 읽는 방법
 
@@ -11,11 +11,11 @@
 
 ## 분야별 목록
 
-- [수집·문서 식별](01_collection-identification/README.md) — 6개
-- [전처리·OCR·표](02_preprocess-ocr-table/README.md) — 31개
+- [수집·문서 식별](01_collection-identification/README.md) — 8개
+- [전처리·OCR·표](02_preprocess-ocr-table/README.md) — 32개
 - [임베딩·검색·리랭커](03_embedding-search/README.md) — 13개
-- [백엔드·DB·API·에이전트](04_backend-db-api/README.md) — 21개
-- [LLM·파인튜닝·QA](05_llm-finetuning-qa/README.md) — 9개
+- [백엔드·DB·API·에이전트](04_backend-db-api/README.md) — 23개
+- [LLM·파인튜닝·QA](05_llm-finetuning-qa/README.md) — 10개
 - [얼굴 로그인·화면](06_face-ui/README.md) — 3개
 - [판례·금감원·사람 검수](07_legal-human-review/README.md) — 6개
 - [통합·배포·안전성](08_integration-release/README.md) — 14개
@@ -28,4 +28,4 @@
 
 ## 기준일
 
-2026-08-27 KST 기준 `docs/reports/`의 최상위 Markdown 문서를 분류했습니다. `docs/reports/debugs/`는 결함 재현과 내부 경로가 많아 이 공개 묶음에서 제외했습니다.
+2026-08-27 11:45 KST 기준 `docs/reports/`의 최상위 Markdown 문서를 분류했습니다. `docs/reports/debugs/`는 결함 재현과 내부 경로가 많아 이 공개 묶음에서 제외했습니다.
