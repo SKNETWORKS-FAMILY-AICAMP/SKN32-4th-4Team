@@ -140,6 +140,36 @@ def create_app(role: str = "full") -> FastAPI:
 
         app.include_router(metrics_scrape.router)
 
+    #: ★관리자 콘솔 IP 허용목록(app/core/domain/admin_ip_allowlist.py).
+    #:   `role == "admin"` 인 독립 프로세스(port 8081)에만 건다 — `full` 은
+    #:   고객 라우트와 같은 포트를 쓰는 로컬/테스트 조립이라 여기 걸면 일반
+    #:   방문자까지 막힌다. `require_admin`(로그인) 보다 **먼저** 걸러서
+    #:   자격증명 유출과 별개로 네트워크 레벨에서 한 번 더 막는다.
+    #:   `/api/health/ready`·`/metrics-scrape`는 각자 다른 보호(공개/토큰)가
+    #:   있으므로 예외로 둔다 — 안 그러면 헬스체크·모니터링이 조용히 깨진다.
+    if role == "admin":
+        from app.core.domain import admin_ip_allowlist
+
+        _IP_GATE_EXEMPT = {"/api/health/ready", "/metrics-scrape"}
+
+        @app.middleware("http")
+        async def _admin_ip_gate(request, call_next):
+            if request.url.path in _IP_GATE_EXEMPT:
+                return await call_next(request)
+            peer = request.client.host if request.client else ""
+            #: 루프백에서 온 연결만 X-Forwarded-For 를 신뢰한다 — 이 배치에서
+            #: 루프백으로 붙는 것은 같은 호스트의 caddy(리버스프록시)뿐이다.
+            #: 직접 노출된 배치(캐디 없이 0.0.0.0:8081)에서는 peer 자체가 진짜
+            #: 클라이언트이므로 XFF 를 무시한다(스푸핑 방지).
+            if peer in ("127.0.0.1", "::1"):
+                forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+                client_ip = forwarded or peer
+            else:
+                client_ip = peer
+            if not admin_ip_allowlist.is_allowed(client_ip):
+                return PlainTextResponse("Forbidden — IP not allowed.", status_code=403)
+            return await call_next(request)
+
     #: ★벤치 전용 경로(`/_bench/noop`)는 **켰을 때만** 실린다(기본 꺼짐).
     #:   계획: docs/plans/2026-08-25_0955_전달계층_Django분리_계획.md §6.2
     #:   인증도 검증도 없는 경로라 운영 표면에 상시 두지 않는다.

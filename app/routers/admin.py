@@ -11,7 +11,7 @@ import asyncio
 import json
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -404,7 +404,7 @@ def admin_set_precheck_mode(
     precheck_router.invalidate_versions_cache()
 
     #: 감사 기록(DB)과 관측 스트림(화면) 양쪽에 남긴다 — 성격이 다른 두 독자다.
-    record_event(store, "precheck_mode_changed", {"mode": state.mode, "by": actor})
+    audited = _audit(store, "precheck_mode_changed", {"mode": state.mode, "by": actor})
     agent_stream.publish("mode.change", client_ref=actor,
                          detail={"mode": state.mode, "auto_approve": state.auto_approve})
 
@@ -453,13 +453,170 @@ def admin_set_llm_provider(
     effective = body.provider or settings.LLM_PROVIDER
 
     #: 감사 기록(DB)과 관측 스트림(화면) 양쪽에 남긴다 — precheck-mode와 같은 이유.
-    record_event(store, "llm_provider_changed", {"provider": effective, "by": actor})
+    audited = _audit(store, "llm_provider_changed", {"provider": effective, "by": actor})
     agent_stream.publish("mode.change", client_ref=actor,
                          detail={"llm_provider": effective})
 
     return {
         "override": body.provider,
         "default": settings.LLM_PROVIDER,
+        "effective": effective,
+    }
+
+
+# ★관리자 콘솔(admin_app, 포트 8081) 접근을 출발지 IP로도 제한하는 스위치.
+#   app/core/domain/admin_ip_allowlist.py·app/main.py의 _admin_ip_gate 미들웨어와
+#   짝을 이룬다. 빈 목록 = 전체 허용(잠금 방지) — GET 응답에 항상 그 사실과
+#   요청자 자신의 감지된 IP를 같이 실어서 화면이 실수로 자기잠금을 안 만들게 한다.
+
+
+def _audit(store, kind: str, detail: dict) -> bool:
+    """설정 변경을 감사에 남긴다. **실패해도 설정을 되돌리지 않는다.**
+
+    ★★왜 따로 두나 (2026-08-27 실측하고 만들었다)
+
+        관리자 설정 라우트는 전부 이 순서다 —
+
+            state = ...set_xxx(...)          ← 설정은 여기서 **이미 바뀐다**
+            record_event(store, ...)         ← 여기서 터지면 500
+            agent_stream.publish(...)
+
+        실제로 터졌다: `OPS_PERSISTENCE=postgres` 에서
+        `AttributeError: 'PgOpsStore' object has no attribute 'add'`.
+        화면은 **실패로 보이는데 설정은 바뀌어 있었다.** 가장 나쁜 형태다 —
+        관리자가 다시 누르거나, IP 허용목록이라면 자기가 잠긴 줄도 모른다.
+
+    ★그렇다고 **조용히 삼키지 않는다**(CLAUDE.md §0·§3).
+      실패를 로그에 크게 남기고, 응답에 `audit_recorded: false` 로 알린다.
+      「설정은 됐고 감사만 실패했다」가 사실이면 그렇게 말해야 한다.
+
+    ★설정을 되돌리지 않는 이유 — 되돌리는 것도 상태 변경이고, 그게 또 실패하면
+      무엇이 참인지 아무도 모른다. **사실을 말하고 사람이 정하게 한다.**
+    """
+    from app.obs.events import record_event
+
+    try:
+        record_event(store, kind, detail)
+        return True
+    except Exception as exc:  # noqa: BLE001 - 감사 실패가 설정 변경을 되돌리지 않는다
+        import logging
+
+        logging.getLogger("app.admin").error(
+            "★감사 기록 실패 — 설정은 이미 바뀌었다: kind=%s detail=%s · %s: %s",
+            kind, detail, type(exc).__name__, exc,
+        )
+        return False
+
+
+def _detected_client_ip(request: Request) -> str:
+    """미들웨어(_admin_ip_gate)와 같은 규칙 — 루프백(같은 호스트의 caddy)에서만 XFF 신뢰."""
+    peer = request.client.host if request.client else ""
+    if peer in ("127.0.0.1", "::1"):
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        return forwarded or peer
+    return peer
+
+
+class IpAllowlistRequest(BaseModel):
+    ips: list[str] = Field(default_factory=list)
+
+
+@router.get("/ip-allowlist")
+def admin_ip_allowlist_get(request: Request) -> dict:
+    from app.core.domain import admin_ip_allowlist
+
+    ips = admin_ip_allowlist.current()
+    return {
+        "ips": ips,
+        "enforced": bool(ips),
+        "your_ip": _detected_client_ip(request),
+    }
+
+
+@router.put("/ip-allowlist")
+def admin_ip_allowlist_set(
+    body: IpAllowlistRequest,
+    request: Request,
+    store: AuthStore | PgOpsStore = Depends(get_ops_store),
+    user=Depends(require_admin),
+) -> dict:
+    from app.core.domain import admin_ip_allowlist
+    from app.obs import agent_stream
+    from app.obs.events import record_event
+
+    actor = getattr(user, "username", "admin")
+    state = admin_ip_allowlist.set_allowlist(body.ips, actor=actor)
+
+    #: ★자기잠금 경고 — 저장은 막지 않는다(관리자가 다른 사람 IP만 등록하고
+    #:   자기 걸 빼는 것도 정상 운영일 수 있다). 대신 응답에 신호를 남긴다.
+    your_ip = _detected_client_ip(request)
+    locks_out_self = bool(state["ips"]) and not admin_ip_allowlist.is_allowed(your_ip)
+
+    audited = _audit(store, "admin_ip_allowlist_changed",
+                     {"ips": state["ips"], "by": actor})
+    agent_stream.publish("mode.change", client_ref=actor,
+                         detail={"admin_ip_allowlist": state["ips"]})
+
+    return {
+        "ips": state["ips"],
+        "enforced": bool(state["ips"]),
+        "your_ip": your_ip,
+        "locks_out_self": locks_out_self,
+        #: ★감사가 실패했으면 그렇게 말한다 — 설정은 이미 바뀌었다.
+        "audit_recorded": audited,
+    }
+
+
+# ★이 스위치는 `.env`의 `INSURANCE_CLAUSE_RERANK_ENABLED` 기본값을 런타임에 덮어쓴다.
+#   admin·customer가 별도 프로세스라 파일에 남기지 않으면 서로 다른 값을 본다
+#   (llm-provider와 같은 이유). 대상은 `/api/admin/clause-search` 뿐이다 — 판정 경로
+#   (`/v1/prechecks`)에는 켜지 않기로 팀이 이미 결정했다(2026-08-25 §4).
+
+
+class ClauseRerankOverrideRequest(BaseModel):
+    """`enabled=null`이면 `.env` 기본값(`INSURANCE_CLAUSE_RERANK_ENABLED`)으로 되돌린다."""
+
+    enabled: bool | None
+
+
+@router.get("/clause-rerank")
+def admin_clause_rerank() -> dict:
+    from app.core.domain import clause_rerank_override
+
+    settings = get_settings()
+    override = clause_rerank_override.current()
+    effective = override if override is not None else settings.INSURANCE_CLAUSE_RERANK_ENABLED
+    return {
+        "override": override,
+        "default": settings.INSURANCE_CLAUSE_RERANK_ENABLED,
+        "effective": effective,
+    }
+
+
+@router.put("/clause-rerank")
+def admin_set_clause_rerank(
+    body: ClauseRerankOverrideRequest,
+    store: AuthStore | PgOpsStore = Depends(get_ops_store),
+    user=Depends(require_admin),
+) -> dict:
+    from app.core.domain import clause_rerank_override
+    from app.obs import agent_stream
+    from app.obs.events import record_event
+
+    actor = getattr(user, "username", "admin")
+    clause_rerank_override.set_override(body.enabled, actor=actor)
+
+    settings = get_settings()
+    effective = body.enabled if body.enabled is not None else settings.INSURANCE_CLAUSE_RERANK_ENABLED
+
+    #: 감사 기록(DB)과 관측 스트림(화면) 양쪽에 남긴다 — llm-provider와 같은 이유.
+    audited = _audit(store, "clause_rerank_changed", {"enabled": effective, "by": actor})
+    agent_stream.publish("mode.change", client_ref=actor,
+                         detail={"clause_rerank_enabled": effective})
+
+    return {
+        "override": body.enabled,
+        "default": settings.INSURANCE_CLAUSE_RERANK_ENABLED,
         "effective": effective,
     }
 
@@ -759,10 +916,18 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
 
     st = get_settings()
     reranker = None
+
+    #: ★관리자 화면 스위치(`/api/admin/clause-rerank`)가 `.env` 기본값을 덮어쓸 수 있다 —
+    #:   llm-provider와 같은 이유로 오버라이드가 없을 때만 `.env`를 본다.
+    from app.core.domain import clause_rerank_override
+
+    _override = clause_rerank_override.current()
+    rerank_enabled = _override if _override is not None else st.INSURANCE_CLAUSE_RERANK_ENABLED
+
     if body.rerank:
         #: ★꺼져 있는데 요청이 오면 **조용히 무시하지 않는다.** 무시하면 부르는 쪽은
         #:   재정렬된 결과를 받았다고 믿는다(코덱스 지적).
-        if not st.INSURANCE_CLAUSE_RERANK_ENABLED:
+        if not rerank_enabled:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=("조항 리랭킹이 꺼져 있습니다(INSURANCE_CLAUSE_RERANK_ENABLED=false). "
@@ -872,7 +1037,7 @@ async def admin_clause_search(body: ClauseSearchRequest) -> dict:
         "dropped_unscorable": result.dropped_unscorable,
         "settings": {"score_body": st.CLAUSE_RERANK_SCORE_BODY,
                      "max_length": st.CLAUSE_RERANK_MAX_LENGTH,
-                     "rerank_enabled": st.INSURANCE_CLAUSE_RERANK_ENABLED,
+                     "rerank_enabled": rerank_enabled,
                      "timeout_seconds": st.CLAUSE_RERANK_TIMEOUT_SECONDS},
         "hits": [
             {

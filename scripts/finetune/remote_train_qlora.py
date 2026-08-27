@@ -57,24 +57,100 @@ def main():
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
+    def fit_prompt(msgs):
+        """★★**답변 자리를 먼저 확보하고** 남는 만큼만 인용을 넣는다.
+
+        ★2026-08-27 실측 — 뒤에서 자르는 방식이었더니 **학습 234/2,018건(11.6%)의
+          답변 토큰이 하나도 안 남았다**(D축 183/352 = 52% · C축 51/457).
+          그런 샘플은 loss 를 계산할 수 없어 `eval_loss` 가 전부 `nan` 이 됐고,
+          D축이 같은 문장을 반복해 뱉는 원인이 됐다 — **절반이 아무것도 못 배웠다.**
+
+        ★인용을 자르되 **잘랐다고 표시한다.** 표시가 없으면 모델은 뒤가 없는 줄 알고,
+          사람은 인용이 온전한 줄 안다. 둘 다 틀린 상태가 된다.
+        """
+        answer = msgs[-1]["content"]
+        n_ans = len(tok(answer, add_special_tokens=False)["input_ids"]) + 8   # eos·여유
+        prompt = tok.apply_chat_template(msgs[:-1], tokenize=False, add_generation_prompt=True)
+        n_pro = len(tok(prompt, add_special_tokens=False)["input_ids"])
+        if n_pro + n_ans <= MAX_LEN:
+            return prompt, False
+
+        #: 인용 블록만 줄인다 — 질문·판정·가입정보는 짧고 **판단에 필요하다.**
+        user = msgs[1]["content"]
+        head, sep, ev = user.partition("[인용 조항]")
+        if not sep:
+            return prompt, True          # 인용이 없으면 손댈 곳이 없다
+        def build(n_ev_tokens):
+            if n_ev_tokens <= 0:
+                body = head + sep + chr(10) + "…(인용 조항 생략 — 길이 초과)"
+            else:
+                ids = tok(ev, add_special_tokens=False)["input_ids"][:n_ev_tokens]
+                body = head + sep + tok.decode(ids) + chr(10) + "…(인용 조항 일부 생략)"
+            p = tok.apply_chat_template([msgs[0], {"role": "user", "content": body}],
+                                        tokenize=False, add_generation_prompt=True)
+            return p, len(tok(p, add_special_tokens=False)["input_ids"])
+
+        #: ★★**넣어 보고 재서 줄인다.** 예산을 계산만 하고 끝내면 안 된다 —
+        #:   `budget < 64` 를 64 로 **강제하던 판**은 다시 2,048 을 넘길 수 있었다
+        #:   (코덱스 지적 2026-08-27). 계산은 근사이고, 실제 길이는 붙여 봐야 안다.
+        _, n_head = build(0)
+        if n_head + n_ans > MAX_LEN:
+            #: 인용을 전부 빼도 안 들어간다 — **버린다.** 억지로 답변을 잘라
+            #: 학습 신호를 0 으로 만드는 것보다 낫다. 몇 건인지는 위에서 센다.
+            return None, True
+
+        lo, hi = 0, len(tok(ev, add_special_tokens=False)["input_ids"])
+        best = build(0)[0]
+        while lo <= hi:                      # 들어가는 **가장 긴** 인용을 찾는다
+            mid = (lo + hi) // 2
+            p, n = build(mid)
+            if n + n_ans <= MAX_LEN:
+                best, lo = p, mid + 1
+            else:
+                hi = mid - 1
+        return best, True
+
     def encode(rec):
         """★답변 토큰에만 loss 를 건다. 프롬프트까지 학습하면 질문을 외운다."""
         msgs = rec["messages"]
-        prompt = tok.apply_chat_template(msgs[:-1], tokenize=False, add_generation_prompt=True)
+        prompt, trimmed = fit_prompt(msgs)
+        if prompt is None:
+            #: 인용을 다 빼도 안 들어가는 샘플. 위에서 세어 보고하고 버린다.
+            return None
         full = prompt + msgs[-1]["content"] + (tok.eos_token or "")
         pi = tok(prompt, add_special_tokens=False)["input_ids"]
         fi = tok(full, add_special_tokens=False, truncation=True, max_length=MAX_LEN)["input_ids"]
         labels = list(fi)
         for i in range(min(len(pi), len(labels))):
             labels[i] = -100
-        return {"input_ids": fi, "attention_mask": [1] * len(fi), "labels": labels}
+        #: ★답변 토큰이 하나도 안 남으면 **세어서 보고한다.** 조용히 넘기면 학습이 헛돈다.
+        n_learn = sum(1 for x in labels if x != -100)
+        return {"input_ids": fi, "attention_mask": [1] * len(fi), "labels": labels,
+                "_n_learn": n_learn, "_trimmed": trimmed}
 
-    train = [encode(r) for r in load_jsonl(DATA / "train.jsonl")]
-    valid = [encode(r) for r in load_jsonl(DATA / "valid.jsonl")]
-    lens = sorted(len(r["input_ids"]) for r in train)
-    print(f"train {len(train)} · valid {len(valid)}")
-    print(f"토큰 길이 — 중앙 {lens[len(lens)//2]} · 95% {lens[int(len(lens)*0.95)]} · 최대 {lens[-1]}"
-          f" · {MAX_LEN} 초과 잘림 {sum(1 for x in lens if x >= MAX_LEN)}건")
+    def prep(name):
+        raw = load_jsonl(DATA / f"{name}.jsonl")
+        enc = [encode(r) for r in raw]
+        dropped = sum(1 for x in enc if x is None)
+        rows = [x for x in enc if x is not None]
+        dead = sum(1 for r in rows if r["_n_learn"] == 0)
+        trimmed = sum(1 for r in rows if r["_trimmed"])
+        lens = sorted(len(r["input_ids"]) for r in rows)
+        print(f"{name}: {len(raw)} → {len(rows)}건 (버림 {dropped}) · 인용 줄임 {trimmed}"
+              f" · 토큰 중앙 {lens[len(lens)//2]} 최대 {lens[-1]}"
+              f" · ★답변 토큰 0건 = {dead}")
+        #: ★★**train 과 valid 를 **둘 다** 검사한다.** valid 만 0건이 남아도
+        #:   `eval_loss` 가 다시 `nan` 이 된다(코덱스 지적 2026-08-27).
+        if dead:
+            raise SystemExit(f"{name} 에 답변 토큰이 없는 샘플이 {dead}건 있습니다 —"
+                             " fit_prompt 를 다시 보세요")
+        for r in rows:
+            r.pop("_n_learn", None)
+            r.pop("_trimmed", None)
+        return rows
+
+    train = prep("train")
+    valid = prep("valid")
 
     quant = BitsAndBytesConfig(
         load_in_4bit=True, bnb_4bit_quant_type="nf4",

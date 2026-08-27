@@ -79,12 +79,21 @@ class LlmGateway:
             return text
 
         client = get_chat_client(settings)
+        #: 로컬 thinking 모델은 답변 전에 reasoning 토큰을 먼저 써서, 짧은
+        #: max_tokens 예산을 모두 소비하고 본문을 비운 사례가 있었다. OpenAI와
+        #: Gemini에는 알 수 없는 옵션이므로 local 공급자에만 전달한다.
+        local_options = (
+            {"extra_body": {"think": False}}
+            if settings.LLM_PROVIDER == "local"
+            else {}
+        )
         try:
             resp = client.chat.completions.create(
                 model=model_id,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=max_tokens or 256,
+                **local_options,
             )
         except RateLimitError as exc:
             observed("rate_limited")

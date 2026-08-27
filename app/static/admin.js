@@ -17,7 +17,10 @@
     simTimer: null,
     mode: null,
     realQueue: null,
-    users: null
+    users: null,
+    llmProvider: null,
+    clauseRerank: null,
+    ipAllowlist: null
   };
 
   const elements = {};
@@ -31,6 +34,8 @@
     bindSimulationEvents();
     bindModeEvents();
     bindLlmProviderEvents();
+    bindClauseRerankEvents();
+    bindIpAllowlistEvents();
     synchronizeAuthentication();
 
     if (hasToken()) {
@@ -97,6 +102,17 @@
     elements.llmProviderSelect = document.getElementById("llmProviderSelect");
     elements.llmProviderDesc = document.getElementById("llmProviderDesc");
     elements.llmProviderNote = document.getElementById("llmProviderNote");
+
+    elements.ipAllowlistBadge = document.getElementById("ipAllowlistBadge");
+    elements.ipAllowlistYourIp = document.getElementById("ipAllowlistYourIp");
+    elements.ipAllowlistTextarea = document.getElementById("ipAllowlistTextarea");
+    elements.ipAllowlistSaveBtn = document.getElementById("ipAllowlistSaveBtn");
+    elements.ipAllowlistNote = document.getElementById("ipAllowlistNote");
+
+    elements.clauseRerankBadge = document.getElementById("clauseRerankBadge");
+    elements.clauseRerankSelect = document.getElementById("clauseRerankSelect");
+    elements.clauseRerankDesc = document.getElementById("clauseRerankDesc");
+    elements.clauseRerankNote = document.getElementById("clauseRerankNote");
 
     elements.realQueue = document.getElementById("realQueue");
     elements.realQueueCount = document.getElementById("realQueueCount");
@@ -370,7 +386,9 @@
       fetchApi("/api/admin/precheck-mode"),
       fetchApi("/api/admin/verifications/queue"),
       fetchApi("/api/admin/users"),
-      fetchApi("/api/admin/llm-provider")
+      fetchApi("/api/admin/llm-provider"),
+      fetchApi("/api/admin/clause-rerank"),
+      fetchApi("/api/admin/ip-allowlist")
     ]);
 
     const [
@@ -384,7 +402,9 @@
       modeResult,
       realQueueResult,
       usersResult,
-      llmProviderResult
+      llmProviderResult,
+      clauseRerankResult,
+      ipAllowlistResult
     ] = requests;
 
     const failures = [];
@@ -446,6 +466,24 @@
       renderLlmProvider(null);
       failures.push(formatLoadFailure("LLM 프로바이더", llmProviderResult.reason));
       handlePossibleAuthenticationError(llmProviderResult.reason);
+    }
+
+    if (clauseRerankResult.status === "fulfilled") {
+      state.clauseRerank = normalizeObject(clauseRerankResult.value);
+      renderClauseRerank(state.clauseRerank);
+    } else {
+      renderClauseRerank(null);
+      failures.push(formatLoadFailure("조항 리랭커", clauseRerankResult.reason));
+      handlePossibleAuthenticationError(clauseRerankResult.reason);
+    }
+
+    if (ipAllowlistResult.status === "fulfilled") {
+      state.ipAllowlist = normalizeObject(ipAllowlistResult.value);
+      renderIpAllowlist(state.ipAllowlist);
+    } else {
+      renderIpAllowlist(null);
+      failures.push(formatLoadFailure("IP 허용목록", ipAllowlistResult.reason));
+      handlePossibleAuthenticationError(ipAllowlistResult.reason);
     }
 
     if (realQueueResult.status === "fulfilled") {
@@ -651,7 +689,7 @@
 
     elements.componentStatuses.replaceChildren(
       createComponentChip("데이터베이스", null),
-      createComponentChip("벡터 인덱스", null)
+      createComponentChip("보험 조항 인덱스", null)
     );
   }
 
@@ -956,6 +994,132 @@
     if (!elements.llmProviderNote) return;
     elements.llmProviderNote.textContent = text || "";
     elements.llmProviderNote.className = "sim-note" + (tone ? ` is-${tone}` : "");
+  }
+
+  /* ── 관리자 IP 허용목록 ────────────────────────────────────────────────
+   * 빈 목록 = 전체 허용. 저장할 때마다 서버가 알려주는 "현재 접속 IP"를 항상
+   * 같이 보여줘서, 자기 IP를 빼먹고 저장해 스스로를 잠그는 실수를 줄인다.
+   */
+  function bindIpAllowlistEvents() {
+    if (!elements.ipAllowlistSaveBtn) return;
+    elements.ipAllowlistSaveBtn.addEventListener("click", handleIpAllowlistSave);
+  }
+
+  async function handleIpAllowlistSave() {
+    const raw = (elements.ipAllowlistTextarea && elements.ipAllowlistTextarea.value) || "";
+    const ips = raw.split("\n").map((s) => s.trim()).filter(Boolean);
+
+    elements.ipAllowlistSaveBtn.disabled = true;
+    const result = await apiFetch("/api/admin/ip-allowlist", {
+      method: "PUT",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ ips })
+    });
+    elements.ipAllowlistSaveBtn.disabled = false;
+
+    if (!result || !result.ok) {
+      setIpAllowlistNote(simErrorText(result), "error");
+      return;
+    }
+    state.ipAllowlist = result.body;
+    renderIpAllowlist(state.ipAllowlist);
+    if (result.body.locks_out_self) {
+      setIpAllowlistNote(
+        "⚠ 저장했지만 지금 접속 중인 IP가 이 목록에 없습니다 — 다음 요청부터 " +
+          "본인도 차단됩니다. 필요하면 지금 바로 본인 IP를 추가해 다시 저장하세요.",
+        "error"
+      );
+    } else {
+      setIpAllowlistNote(
+        ips.length ? `허용 IP ${ips.length}건 저장했습니다.` : "허용목록을 비웠습니다 — 전체 허용.",
+        "ok"
+      );
+    }
+  }
+
+  function renderIpAllowlist(info) {
+    if (!elements.ipAllowlistBadge) return;
+    if (!info) {
+      elements.ipAllowlistBadge.className = "status-badge status-unknown";
+      elements.ipAllowlistBadge.textContent = "확인 실패";
+      return;
+    }
+    const ips = Array.isArray(info.ips) ? info.ips : [];
+    elements.ipAllowlistBadge.className =
+      "status-badge " + (info.enforced ? "status-pending" : "status-resolved");
+    elements.ipAllowlistBadge.textContent = info.enforced
+      ? `${ips.length}건 제한 중`
+      : "전체 허용";
+    elements.ipAllowlistYourIp.textContent = info.your_ip || "-";
+    if (document.activeElement !== elements.ipAllowlistTextarea) {
+      elements.ipAllowlistTextarea.value = ips.join("\n");
+    }
+  }
+
+  function setIpAllowlistNote(text, tone) {
+    if (!elements.ipAllowlistNote) return;
+    elements.ipAllowlistNote.textContent = text || "";
+    elements.ipAllowlistNote.className = "sim-note" + (tone ? ` is-${tone}` : "");
+  }
+
+  /* ── 조항 리랭커 ───────────────────────────────────────────────────────
+   * `.env`의 INSURANCE_CLAUSE_RERANK_ENABLED 기본값을 런타임에 덮어쓴다.
+   * LLM 프로바이더와 같은 이유로 파일에 남겨 admin·customer 프로세스가
+   * 같은 값을 보게 한다. 대상은 /api/admin/clause-search 뿐 — 판정 경로는
+   * 안 건드린다.
+   */
+  function bindClauseRerankEvents() {
+    if (!elements.clauseRerankSelect) return;
+    elements.clauseRerankSelect.addEventListener("change", handleClauseRerankChange);
+  }
+
+  async function handleClauseRerankChange() {
+    const raw = elements.clauseRerankSelect.value;  // "" → 기본값(null)
+    const want = raw === "" ? null : raw === "true";
+
+    elements.clauseRerankSelect.disabled = true;
+    const result = await apiFetch("/api/admin/clause-rerank", {
+      method: "PUT",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: want })
+    });
+    elements.clauseRerankSelect.disabled = false;
+
+    if (!result || !result.ok) {
+      renderClauseRerank(state.clauseRerank);  // 되돌린다
+      setClauseRerankNote(simErrorText(result), "error");
+      return;
+    }
+    state.clauseRerank = result.body;
+    renderClauseRerank(state.clauseRerank);
+    setClauseRerankNote(
+      `조항 리랭커를 ${result.body.effective ? "켰습니다" : "껐습니다"}.`, "ok"
+    );
+  }
+
+  function renderClauseRerank(info) {
+    if (!elements.clauseRerankBadge) return;
+    if (!info) {
+      elements.clauseRerankBadge.className = "status-badge status-unknown";
+      elements.clauseRerankBadge.textContent = "확인 실패";
+      return;
+    }
+
+    const overridden = info.override !== null && info.override !== undefined;
+    elements.clauseRerankSelect.value = overridden ? String(info.override) : "";
+    elements.clauseRerankBadge.className =
+      "status-badge " + (overridden ? "status-pending" : "status-resolved");
+    elements.clauseRerankBadge.textContent = info.effective ? "켬" : "끔";
+
+    elements.clauseRerankDesc.textContent = overridden
+      ? `.env 기본값(${info.default ? "켬" : "끔"})을 덮어씀 — 현재 ${info.effective ? "켬" : "끔"}.`
+      : `.env 기본값(${info.default ? "켬" : "끔"}) 그대로 사용 중.`;
+  }
+
+  function setClauseRerankNote(text, tone) {
+    if (!elements.clauseRerankNote) return;
+    elements.clauseRerankNote.textContent = text || "";
+    elements.clauseRerankNote.className = "sim-note" + (tone ? ` is-${tone}` : "");
   }
 
   /* ── 실제 트랙 검수 큐 ────────────────────────────────────────────────

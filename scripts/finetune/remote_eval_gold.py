@@ -121,6 +121,16 @@ def score(rows, preds, tag):
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    #: ★baseline 은 **베이스 모델·프롬프트·greedy 가 같으면 결과가 같다.**
+    #:   run1 에서 이미 쟀으므로 다시 돌릴 이유가 없다(28분 절약).
+    #:   ★단 **베이스나 프롬프트를 바꾸면 반드시 다시 재야 한다** — 그때 `--only both`.
+    ap.add_argument("--only", choices=["both", "adapter", "baseline"], default="both")
+    ap.add_argument("--reuse-baseline", default="",
+                    help="run1 predictions.jsonl 경로. baseline 열을 그대로 가져온다")
+    args = ap.parse_args()
+
     base = json.loads((HERE / "base_model.json").read_text(encoding="utf-8"))["model"]
     rows = [json.loads(l) for l in GOLD.read_text(encoding="utf-8").splitlines() if l.strip()]
     print(f"gold {len(rows)}건 · 베이스 {base}")
@@ -135,13 +145,29 @@ def main():
         base, quantization_config=quant, dtype=torch.bfloat16, device_map={"": 0})
     model.eval()
 
-    print("=== baseline (어댑터 없음)")
-    base_preds, base_s = generate(model, tok, rows, "baseline")
+    base_preds, base_s = None, 0.0
+    if args.reuse_baseline:
+        prev = {json.loads(l)["item_id"]: json.loads(l)["baseline"]
+                for l in pathlib.Path(args.reuse_baseline).read_text(encoding="utf-8").splitlines()
+                if l.strip()}
+        missing = [r["item_id"] for r in rows if r["item_id"] not in prev]
+        if missing:
+            #: ★없는 항목을 조용히 건너뛰지 않는다. 하나라도 없으면 비교가 성립하지 않는다.
+            raise SystemExit(f"이전 baseline 에 없는 항목 {len(missing)}건: {missing[:3]}")
+        base_preds = [prev[r["item_id"]] for r in rows]
+        print(f"=== baseline 재사용 ({args.reuse_baseline}) — 다시 돌리지 않음")
+    elif args.only in ("both", "baseline"):
+        print("=== baseline (어댑터 없음)")
+        base_preds, base_s = generate(model, tok, rows, "baseline")
 
-    print("=== 어댑터 적용")
-    model = PeftModel.from_pretrained(model, str(ADAPTER))
-    model.eval()
-    ft_preds, ft_s = generate(model, tok, rows, "adapter")
+    ft_preds, ft_s = None, 0.0
+    if args.only in ("both", "adapter"):
+        print("=== 어댑터 적용")
+        model = PeftModel.from_pretrained(model, str(ADAPTER))
+        model.eval()
+        ft_preds, ft_s = generate(model, tok, rows, "adapter")
+    if base_preds is None or ft_preds is None:
+        raise SystemExit("baseline 과 adapter 가 둘 다 있어야 비교 결과를 쓴다")
 
     res = {
         "base_model": base, "gold": len(rows),

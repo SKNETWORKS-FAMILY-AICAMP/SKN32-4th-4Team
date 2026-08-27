@@ -37,7 +37,10 @@ def explain_term(*, term: str, quotes: Sequence[str], model: ModelGateway) -> st
 
 {evidence}
 """
-    answer = model.complete(prompt, max_tokens=256, temperature=0.0).strip()
+    #: ★256으로는 로컬 thinking 모델(gemma4 등)이 reasoning만 쓰다 잘려 빈 응답을
+    #:   낸 사례를 실측했다(think:false 를 LlmGateway 에서 보내지만, 안전판으로
+    #:   예산도 늘려 둔다). 아래 2000자 상한이 최종 출력 길이는 그대로 지킨다.
+    answer = model.complete(prompt, max_tokens=1024, temperature=0.0).strip()
     if not answer:
         raise LLMOutputError("용어 설명 모델이 빈 응답을 반환했습니다.")
     if len(answer) > 2000:
